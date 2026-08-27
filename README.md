@@ -186,3 +186,5 @@ scripts/seed.ts     carga inicial
 | `npm run db:push` | Sincroniza el esquema con la base |
 | `npm run db:studio` | Explorador de datos de Drizzle |
 | `npm run db:seed` | Datos iniciales |
+| `npm run db:limpiar` | Muestra qué borraría para dejar la base limpia (no toca nada) |
+| `npm run db:limpiar -- --confirmar` | Borra movimientos, secaderos, modelos y usuarios de prueba. Conserva el admin, los motivos y los parámetros |
