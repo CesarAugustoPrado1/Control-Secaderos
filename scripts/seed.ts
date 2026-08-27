@@ -6,7 +6,7 @@
  *
  * Es idempotente: se puede correr varias veces sin duplicar nada.
  */
-import "dotenv/config";
+import { config as cargarEnv } from "dotenv";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import bcrypt from "bcryptjs";
@@ -20,6 +20,9 @@ import {
   type Rol,
 } from "../lib/db/schema";
 import { CONFIG_POR_DEFECTO } from "../lib/configuracion";
+
+// El seed corre fuera de Next, que es quien normalmente lee .env.local.
+cargarEnv({ path: [".env.local", ".env"], quiet: true });
 
 const conEjemplos = !process.argv.includes("--sin-ejemplos");
 

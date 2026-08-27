@@ -55,9 +55,16 @@ combinaciones).
    sobra para este volumen). Elegir la región más cercana — `South America (São
    Paulo)` si estás en Argentina.
 2. Anotar la contraseña de la base que te pide al crear el proyecto.
-3. Ir a **Project Settings → Database → Connection string** y copiar dos cadenas:
-   - **Transaction pooler** (puerto `6543`) → va en `DATABASE_URL`
-   - **Session pooler** o conexión directa (puerto `5432`) → va en `DIRECT_URL`
+3. Botón **Connect** (arriba, junto al nombre del proyecto) → copiar la cadena
+   del **Session pooler**, puerto `5432`. Esa va en `DATABASE_URL`.
+
+> **No uses el Transaction pooler (puerto 6543).** El driver `postgres-js` hace
+> *pipelining*: manda varias consultas por la misma conexión sin esperar la
+> respuesta anterior. Supavisor en modo transacción no lo soporta y las
+> pantallas quedan colgadas —se reprodujo con apenas dos consultas
+> concurrentes—. En modo sesión funciona bien: 10 consultas en paralelo sobre
+> una conexión resuelven en ~36 ms. El detalle está comentado en
+> `lib/db/index.ts`.
 
 ### 2. Configuración local
 
@@ -66,7 +73,7 @@ npm install
 cp .env.example .env.local     # en PowerShell: copy .env.example .env.local
 ```
 
-Completar `.env.local` con las dos cadenas de conexión y generar el secreto de
+Completar `.env.local` con la cadena de conexión y generar el secreto de
 sesión:
 
 ```bash
@@ -107,13 +114,16 @@ npm run dev
 
    | Variable | Valor |
    | --- | --- |
-   | `DATABASE_URL` | Transaction pooler de Supabase (puerto 6543) |
-   | `DIRECT_URL` | Conexión directa de Supabase (puerto 5432) |
+   | `DATABASE_URL` | Session pooler de Supabase (puerto 5432) |
    | `SESSION_SECRET` | La cadena aleatoria que generaste |
 
    `ADMIN_PIN` no hace falta en Vercel: solo lo usa el seed.
 
 4. **Deploy**. Cada push a la rama principal vuelve a desplegar.
+
+El `vercel.json` fija la región de las funciones en `gru1` (São Paulo), la misma
+que la base. Si creaste el proyecto de Supabase en otra región, cambiá ese valor:
+tener las funciones lejos de la base suma más de 100 ms por consulta.
 
 En los celulares conviene abrir la URL y usar *Agregar a pantalla de inicio*:
 la app queda como un ícono y se abre en pantalla completa.
