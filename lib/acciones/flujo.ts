@@ -1,0 +1,395 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { eq, and, count } from "drizzle-orm";
+import { z } from "zod";
+import { db } from "../db";
+import { secaderos, type Estado } from "../db/schema";
+import { autorizar } from "../auth";
+import { leerConfig } from "../consultas";
+import {
+  ejecutar,
+  esquemaItem,
+  esquemaNota,
+  esquemaRotura,
+  fallar,
+  type Resultado,
+} from "./comun";
+import {
+  aplicarMovida,
+  bloquearSecaderos,
+  cargarCatalogo,
+  contenidoActual,
+  descontarRoturas,
+  exigirEstado,
+  validarCarga,
+  validarRoturasContraContenido,
+} from "./motor";
+
+function revalidar() {
+  // La app es chica y todas las pantallas comparten el estado de los secaderos,
+  // asi que invalidar el layout entero es mas simple que enumerar rutas.
+  revalidatePath("/", "layout");
+}
+
+/* -------------------------------------------------------------------------- */
+/* Carrusel: vacio -> humedo                                                  */
+/* -------------------------------------------------------------------------- */
+
+const esquemaCarga = z.object({
+  secaderoId: z.number().int().positive(),
+  items: z.array(esquemaItem).min(1, "Elegí al menos un modelo."),
+  roturas: z.array(esquemaRotura).default([]),
+  nota: esquemaNota,
+});
+
+export async function cargarSecadero(
+  entrada: z.input<typeof esquemaCarga>,
+): Promise<Resultado> {
+  return ejecutar(async () => {
+    const sesion = await autorizar("carrusel", "admin");
+    const datos = esquemaCarga.parse(entrada);
+    const cfg = await leerConfig();
+
+    await db.transaction(async (tx) => {
+      const [secadero] = await bloquearSecaderos(tx, [datos.secaderoId]);
+      exigirEstado(secadero, "vacio");
+
+      const catalogo = await cargarCatalogo(
+        tx,
+        [
+          ...new Set([
+            ...datos.items.map((i) => i.productoId),
+            ...datos.roturas.map((r) => r.productoId),
+          ]),
+        ],
+        [...new Set(datos.roturas.map((r) => r.motivoId))],
+      );
+
+      validarCarga(secadero, datos.items, catalogo, cfg, { exigirActivos: true });
+
+      // Las placas que se rompen al cargar nunca llegaron a entrar al secadero:
+      // se registran como desperdicio pero no ocupan capacidad.
+      const cantidades = new Map(
+        datos.items.filter((i) => i.cantidad > 0).map((i) => [i.productoId, i.cantidad]),
+      );
+
+      await aplicarMovida(tx, sesion, catalogo, {
+        secadero,
+        tipo: "carga",
+        estadoHasta: "humedo",
+        cantidades,
+        contenidoFinal: cantidades,
+        roturas: datos.roturas,
+        nota: datos.nota,
+      });
+    });
+
+    revalidar();
+  });
+}
+
+/* -------------------------------------------------------------------------- */
+/* Ajuste de una carga viva (no cambia de estado)                             */
+/* -------------------------------------------------------------------------- */
+
+const esquemaAjuste = z.object({
+  secaderoId: z.number().int().positive(),
+  items: z.array(esquemaItem).min(1, "Dejá al menos un modelo con cantidad."),
+  roturas: z.array(esquemaRotura).default([]),
+  nota: esquemaNota,
+});
+
+export async function ajustarContenido(
+  entrada: z.input<typeof esquemaAjuste>,
+): Promise<Resultado> {
+  return ejecutar(async () => {
+    const sesion = await autorizar("carrusel", "horno", "paletizado", "admin");
+    const datos = esquemaAjuste.parse(entrada);
+    const cfg = await leerConfig();
+
+    await db.transaction(async (tx) => {
+      const [secadero] = await bloquearSecaderos(tx, [datos.secaderoId]);
+      if (!secadero.activo) fallar(`El secadero ${secadero.numero} está dado de baja.`);
+      if (secadero.estado === "vacio") {
+        fallar(
+          `El secadero ${secadero.numero} está vacío: no hay carga para corregir.`,
+        );
+      }
+
+      const catalogo = await cargarCatalogo(
+        tx,
+        [
+          ...new Set([
+            ...datos.items.map((i) => i.productoId),
+            ...datos.roturas.map((r) => r.productoId),
+          ]),
+        ],
+        [...new Set(datos.roturas.map((r) => r.motivoId))],
+      );
+
+      // En un ajuste se permiten modelos suspendidos: puede ser justamente una
+      // correccion sobre una carga hecha antes de suspenderlos.
+      validarCarga(secadero, datos.items, catalogo, cfg, { exigirActivos: false });
+
+      const cantidades = new Map(
+        datos.items.filter((i) => i.cantidad > 0).map((i) => [i.productoId, i.cantidad]),
+      );
+
+      await aplicarMovida(tx, sesion, catalogo, {
+        secadero,
+        tipo: "ajuste",
+        estadoHasta: secadero.estado,
+        cantidades,
+        contenidoFinal: cantidades,
+        roturas: datos.roturas,
+        nota: datos.nota,
+        conservarInicioDeEstado: true,
+      });
+    });
+
+    revalidar();
+  });
+}
+
+/* -------------------------------------------------------------------------- */
+/* Horno                                                                      */
+/* -------------------------------------------------------------------------- */
+
+const esquemaSeleccion = z.object({
+  secaderoId: z.number().int().positive(),
+  roturas: z.array(esquemaRotura).default([]),
+});
+
+const esquemaLoteHorno = z.object({
+  seleccion: z.array(esquemaSeleccion).min(1, "Elegí al menos un secadero."),
+  nota: esquemaNota,
+});
+
+/** humedo -> horno. Valida que el lote entre en el horno. */
+export async function entrarAHorno(
+  entrada: z.input<typeof esquemaLoteHorno>,
+): Promise<Resultado> {
+  return ejecutar(async () => {
+    const sesion = await autorizar("horno", "admin");
+    const datos = esquemaLoteHorno.parse(entrada);
+    const cfg = await leerConfig();
+
+    await db.transaction(async (tx) => {
+      const ids = datos.seleccion.map((s) => s.secaderoId);
+      const filas = await bloquearSecaderos(tx, ids);
+
+      const [{ dentro }] = await tx
+        .select({ dentro: count() })
+        .from(secaderos)
+        .where(and(eq(secaderos.estado, "horno"), eq(secaderos.activo, true)));
+
+      if (dentro + ids.length > cfg.capacidad_horno) {
+        fallar(
+          `En el horno entran ${cfg.capacidad_horno} secaderos. Ya hay ${dentro} adentro ` +
+            `y estás metiendo ${ids.length}. Sacá los secos primero.`,
+        );
+      }
+
+      for (const secadero of filas) {
+        const seleccion = datos.seleccion.find((s) => s.secaderoId === secadero.id)!;
+        exigirEstado(secadero, "humedo");
+        await procesarTransicion(tx, sesion, {
+          secadero,
+          roturas: seleccion.roturas,
+          tipo: "entrada_horno",
+          estadoHasta: "horno",
+          vaciar: false,
+          nota: datos.nota,
+        });
+      }
+    });
+
+    revalidar();
+  });
+}
+
+/** horno -> seco. El operario elige cuales salen; puede dejar adentro los que no secaron. */
+export async function salirDeHorno(
+  entrada: z.input<typeof esquemaLoteHorno>,
+): Promise<Resultado> {
+  return ejecutar(async () => {
+    const sesion = await autorizar("horno", "admin");
+    const datos = esquemaLoteHorno.parse(entrada);
+
+    await db.transaction(async (tx) => {
+      const ids = datos.seleccion.map((s) => s.secaderoId);
+      const filas = await bloquearSecaderos(tx, ids);
+
+      for (const secadero of filas) {
+        const seleccion = datos.seleccion.find((s) => s.secaderoId === secadero.id)!;
+        exigirEstado(secadero, "horno");
+        await procesarTransicion(tx, sesion, {
+          secadero,
+          roturas: seleccion.roturas,
+          tipo: "salida_horno",
+          estadoHasta: "seco",
+          vaciar: false,
+          nota: datos.nota,
+        });
+      }
+    });
+
+    revalidar();
+  });
+}
+
+/* -------------------------------------------------------------------------- */
+/* Paletizado: seco -> vacio                                                  */
+/* -------------------------------------------------------------------------- */
+
+const esquemaDescarga = z.object({
+  secaderoId: z.number().int().positive(),
+  roturas: z.array(esquemaRotura).default([]),
+  nota: esquemaNota,
+});
+
+export async function descargarSecadero(
+  entrada: z.input<typeof esquemaDescarga>,
+): Promise<Resultado> {
+  return ejecutar(async () => {
+    const sesion = await autorizar("paletizado", "admin");
+    const datos = esquemaDescarga.parse(entrada);
+
+    await db.transaction(async (tx) => {
+      const [secadero] = await bloquearSecaderos(tx, [datos.secaderoId]);
+      exigirEstado(secadero, "seco");
+      await procesarTransicion(tx, sesion, {
+        secadero,
+        roturas: datos.roturas,
+        tipo: "descarga",
+        estadoHasta: "vacio",
+        // El secadero queda vacio, pero el movimiento registra cuantas placas
+        // salieron sanas hacia producto terminado.
+        vaciar: true,
+        nota: datos.nota,
+      });
+    });
+
+    revalidar();
+  });
+}
+
+/* -------------------------------------------------------------------------- */
+/* Correccion del admin                                                       */
+/* -------------------------------------------------------------------------- */
+
+const esquemaCorreccion = z.object({
+  secaderoId: z.number().int().positive(),
+  estadoHasta: z.enum(["vacio", "humedo", "horno", "seco"]),
+  items: z.array(esquemaItem).default([]),
+  nota: z
+    .string()
+    .trim()
+    .min(3, "Escribí por qué estás corrigiendo el secadero.")
+    .max(500),
+});
+
+/**
+ * Valvula de escape: el admin fuerza estado y contenido cuando algo se cargo
+ * mal. Queda registrado como movimiento `correccion` con la nota obligatoria,
+ * asi el historial nunca miente sobre lo que paso.
+ */
+export async function corregirSecadero(
+  entrada: z.input<typeof esquemaCorreccion>,
+): Promise<Resultado> {
+  return ejecutar(async () => {
+    const sesion = await autorizar("admin");
+    const datos = esquemaCorreccion.parse(entrada);
+    const cfg = await leerConfig();
+
+    await db.transaction(async (tx) => {
+      const [secadero] = await bloquearSecaderos(tx, [datos.secaderoId]);
+
+      const items = datos.items.filter((i) => i.cantidad > 0);
+      if (datos.estadoHasta === "vacio" && items.length > 0) {
+        fallar("Un secadero vacío no puede tener placas adentro.");
+      }
+      if (datos.estadoHasta !== "vacio" && items.length === 0) {
+        fallar(`Un secadero ${datos.estadoHasta} necesita al menos un modelo.`);
+      }
+
+      const catalogo = await cargarCatalogo(
+        tx,
+        items.map((i) => i.productoId),
+        [],
+      );
+      if (items.length) {
+        validarCarga(secadero, items, catalogo, cfg, { exigirActivos: false });
+      }
+
+      const cantidades = new Map(items.map((i) => [i.productoId, i.cantidad]));
+
+      await aplicarMovida(tx, sesion, catalogo, {
+        secadero,
+        tipo: "correccion",
+        estadoHasta: datos.estadoHasta,
+        cantidades,
+        contenidoFinal: cantidades,
+        roturas: [],
+        nota: datos.nota,
+        // Si el estado no cambia, no reiniciamos el reloj del tramo.
+        conservarInicioDeEstado: secadero.estado === datos.estadoHasta,
+      });
+    });
+
+    revalidar();
+  });
+}
+
+/* -------------------------------------------------------------------------- */
+/* Interno                                                                    */
+/* -------------------------------------------------------------------------- */
+
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/**
+ * Transicion de un secadero ya cargado: se descuentan las roturas del contenido
+ * y el resto sigue viaje. Comun a horno (entrada y salida) y a paletizado.
+ */
+async function procesarTransicion(
+  tx: Tx,
+  sesion: Awaited<ReturnType<typeof autorizar>>,
+  opciones: {
+    secadero: Awaited<ReturnType<typeof bloquearSecaderos>>[number];
+    roturas: z.infer<typeof esquemaRotura>[];
+    tipo: "entrada_horno" | "salida_horno" | "descarga";
+    estadoHasta: Estado;
+    vaciar: boolean;
+    nota: string | null;
+  },
+) {
+  const { secadero, roturas, tipo, estadoHasta, vaciar, nota } = opciones;
+
+  const contenido = await contenidoActual(tx, secadero.id);
+  if (contenido.size === 0) {
+    fallar(
+      `El secadero ${secadero.numero} figura sin placas. Corregilo desde administración.`,
+    );
+  }
+
+  const catalogo = await cargarCatalogo(
+    tx,
+    [...new Set([...contenido.keys(), ...roturas.map((r) => r.productoId)])],
+    [...new Set(roturas.map((r) => r.motivoId))],
+  );
+
+  validarRoturasContraContenido(secadero, roturas, contenido, catalogo);
+
+  const quedan = descontarRoturas(contenido, roturas);
+
+  await aplicarMovida(tx, sesion, catalogo, {
+    secadero,
+    tipo,
+    estadoHasta,
+    cantidades: quedan,
+    contenidoFinal: vaciar ? new Map() : quedan,
+    roturas,
+    nota,
+  });
+}
