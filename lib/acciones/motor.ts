@@ -252,9 +252,12 @@ export async function aplicarMovida(
     })
     .returning({ id: movimientos.id });
 
-  await tx.insert(movimientoLineas).values(
-    construirLineas(mov.id, cantidades, roturas, catalogo),
-  );
+  // Un movimiento puede no tener lineas: por ejemplo, una correccion que deja
+  // el secadero vacio. Insertar un array vacio seria un error de Drizzle.
+  const lineas = construirLineas(mov.id, cantidades, roturas, catalogo);
+  if (lineas.length > 0) {
+    await tx.insert(movimientoLineas).values(lineas);
+  }
 
   // El contenido vivo se reemplaza entero: es un snapshot, no un historial.
   await tx
