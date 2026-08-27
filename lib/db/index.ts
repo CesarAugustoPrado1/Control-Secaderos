@@ -28,7 +28,10 @@ function conectar(): Db {
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) {
     throw new Error(
-      "Falta la variable DATABASE_URL. Copiá .env.example a .env.local y completala.",
+      "Falta la variable DATABASE_URL. En local: copiá .env.example a .env.local " +
+        "y completala. En Vercel: cargala en Settings > Environment Variables " +
+        "(marcando Production) y volvé a desplegar, porque las variables nuevas " +
+        "no se aplican al deploy que ya estaba hecho.",
     );
   }
 
