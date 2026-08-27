@@ -39,27 +39,48 @@ export function PanelHorno({
 }) {
   const router = useRouter();
 
-  // El caso normal es vaciar el horno completo, asi que arranca todo marcado.
-  const [aSacar, setASacar] = useState<Set<number>>(
-    () => new Set(enHorno.map((s) => s.id)),
-  );
+  /**
+   * El caso normal es vaciar el horno completo, asi que todo arranca marcado.
+   *
+   * Guardamos los DESmarcados, no los marcados: si guardaramos los marcados,
+   * al meter secaderos al horno la lista de arriba se actualizaria pero el
+   * estado no, y los recien entrados quedarian sin marcar hasta recargar la
+   * pagina. Con los excluidos, todo lo que aparece esta marcado por defecto y
+   * ademas se respeta lo que el operario haya destildado.
+   */
+  const [excluidos, setExcluidos] = useState<Set<number>>(new Set());
   const [aMeter, setAMeter] = useState<Set<number>>(new Set());
   const [roturas, setRoturas] = useState<Roturas>({});
 
   const salida = useAccion();
   const entrada = useAccion();
 
+  const aSacar = useMemo(
+    () =>
+      new Set(
+        enHorno.filter((s) => !excluidos.has(s.id)).map((s) => s.id),
+      ),
+    [enHorno, excluidos],
+  );
+
   const lugaresLibres = capacidadHorno - enHorno.length + aSacar.size;
 
-  function alternar(
-    conjunto: Set<number>,
-    setter: (s: Set<number>) => void,
-    id: number,
-  ) {
-    const copia = new Set(conjunto);
-    if (copia.has(id)) copia.delete(id);
-    else copia.add(id);
-    setter(copia);
+  function alternarSacar(id: number) {
+    setExcluidos((prev) => {
+      const copia = new Set(prev);
+      if (copia.has(id)) copia.delete(id);
+      else copia.add(id);
+      return copia;
+    });
+  }
+
+  function alternarMeter(id: number) {
+    setAMeter((prev) => {
+      const copia = new Set(prev);
+      if (copia.has(id)) copia.delete(id);
+      else copia.add(id);
+      return copia;
+    });
   }
 
   function armarSeleccion(ids: Set<number>, lista: SecaderoVista[]) {
@@ -87,6 +108,7 @@ export function PanelHorno({
     await salida.ejecutar(
       () => salirDeHorno({ seleccion: armarSeleccion(aSacar, enHorno) }),
       () => {
+        setExcluidos(new Set());
         setRoturas({});
         router.refresh();
       },
@@ -145,7 +167,7 @@ export function PanelHorno({
                   key={s.id}
                   secadero={s}
                   elegido={aSacar.has(s.id)}
-                  alAlternar={() => alternar(aSacar, setASacar, s.id)}
+                  alAlternar={() => alternarSacar(s.id)}
                   motivos={motivos}
                   roturas={roturas[s.id] ?? {}}
                   alCambiarRoturas={(v) =>
@@ -158,12 +180,12 @@ export function PanelHorno({
             </div>
 
             <div className="mt-3 flex flex-wrap gap-2">
-              <BotonSeleccion
-                onClick={() => setASacar(new Set(enHorno.map((s) => s.id)))}
-              >
+              <BotonSeleccion onClick={() => setExcluidos(new Set())}>
                 Marcar todos
               </BotonSeleccion>
-              <BotonSeleccion onClick={() => setASacar(new Set())}>
+              <BotonSeleccion
+                onClick={() => setExcluidos(new Set(enHorno.map((s) => s.id)))}
+              >
                 Ninguno
               </BotonSeleccion>
             </div>
@@ -212,7 +234,7 @@ export function PanelHorno({
                   key={s.id}
                   secadero={s}
                   elegido={aMeter.has(s.id)}
-                  alAlternar={() => alternar(aMeter, setAMeter, s.id)}
+                  alAlternar={() => alternarMeter(s.id)}
                   motivos={motivos}
                   roturas={roturas[s.id] ?? {}}
                   alCambiarRoturas={(v) =>
