@@ -21,7 +21,13 @@ export default async function PaginaCarrusel({
 
   const [secaderos, cargas] = await Promise.all([
     secaderosConContenido(),
-    listarMovimientos({ tipo: "carga", desde, hasta, porPagina: 200 }),
+    listarMovimientos({
+      tipo: "carga",
+      desde,
+      hasta,
+      porPagina: 200,
+      orden: "asc",
+    }),
   ]);
 
   const sector =

@@ -20,7 +20,13 @@ export default async function PaginaPaletizado({
 
   const [secaderos, descargas] = await Promise.all([
     secaderosConContenido(),
-    listarMovimientos({ tipo: "descarga", desde, hasta, porPagina: 200 }),
+    listarMovimientos({
+      tipo: "descarga",
+      desde,
+      hasta,
+      porPagina: 200,
+      orden: "asc",
+    }),
   ]);
 
   return (

@@ -77,10 +77,9 @@ export function Actividad({
             {movimientos.map((m, i) => {
               const placas = m.lineas.reduce((a, l) => a + l.cantidad, 0);
               const rotas = m.lineas.reduce((a, l) => a + l.desperdicio, 0);
-              // La lista viene del mas nuevo al mas viejo, pero el orden se
-              // cuenta desde el primero del periodo: el ultimo cargado es el
-              // numero mas alto, como salen del carrusel.
-              const orden = movimientos.length - i;
+              // La lista viene del mas viejo al mas nuevo, en el mismo orden en
+              // que fueron saliendo del carrusel.
+              const orden = i + 1;
               return (
                 <li key={m.id} className="tarjeta flex items-start gap-3 p-3">
                   <span className="w-7 shrink-0 pt-2.5 text-right text-sm font-bold tabular-nums text-slate-400">

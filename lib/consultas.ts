@@ -284,6 +284,12 @@ export type FiltroMovimientos = {
   hasta?: Date;
   pagina?: number;
   porPagina?: number;
+  /**
+   * `desc` (por defecto) para el historial, donde interesa lo ultimo que paso.
+   * `asc` para la actividad del dia del operario, que se lee en el orden en que
+   * fueron saliendo del carrusel: primero el primero.
+   */
+  orden?: "asc" | "desc";
 };
 
 export async function listarMovimientos(filtro: FiltroMovimientos = {}) {
@@ -308,11 +314,16 @@ export async function listarMovimientos(filtro: FiltroMovimientos = {}) {
     .from(movimientos)
     .where(where);
 
+  const ordenar =
+    filtro.orden === "asc"
+      ? [asc(movimientos.creadoEn), asc(movimientos.id)]
+      : [desc(movimientos.creadoEn), desc(movimientos.id)];
+
   const filas = await db
     .select()
     .from(movimientos)
     .where(where)
-    .orderBy(desc(movimientos.creadoEn), desc(movimientos.id))
+    .orderBy(...ordenar)
     .limit(porPagina)
     .offset((pagina - 1) * porPagina);
 
