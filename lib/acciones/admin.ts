@@ -7,6 +7,7 @@ import { db } from "../db";
 import {
   config,
   motivosDesperdicio,
+  movimientoLineas,
   movimientos,
   productos,
   secaderoContenido,
@@ -179,9 +180,46 @@ export async function cambiarEstadoProducto(
       .object({ id: z.number().int().positive(), activo: z.boolean() })
       .parse(entrada);
 
-    // Suspender no borra: los modelos suspendidos dejan de ofrecerse en carrusel
-    // pero siguen apareciendo en el historial y en los secaderos ya cargados.
+    // Suspender no borra: los productos suspendidos dejan de ofrecerse al
+    // cargar pero siguen apareciendo en el historial y en los secaderos ya
+    // cargados.
     await db.update(productos).set({ activo }).where(eq(productos.id, id));
+    revalidar();
+  });
+}
+
+export async function eliminarProducto(entrada: {
+  id: number;
+}): Promise<Resultado> {
+  return ejecutar(async () => {
+    await autorizar("admin");
+    const { id } = z.object({ id: z.number().int().positive() }).parse(entrada);
+
+    // Un producto con historial no se puede borrar sin dejar movimientos
+    // apuntando a la nada. Solo desaparece de verdad el que nunca se uso.
+    const [{ enMovimientos }] = await db
+      .select({ enMovimientos: count() })
+      .from(movimientoLineas)
+      .where(eq(movimientoLineas.productoId, id));
+
+    if (enMovimientos > 0) {
+      fallar(
+        "Este producto ya tiene movimientos registrados. Suspendelo en lugar de eliminarlo, así el historial se conserva.",
+      );
+    }
+
+    const [{ enSecaderos }] = await db
+      .select({ enSecaderos: count() })
+      .from(secaderoContenido)
+      .where(eq(secaderoContenido.productoId, id));
+
+    if (enSecaderos > 0) {
+      fallar(
+        "Este producto está cargado en un secadero ahora mismo. Descargalo primero.",
+      );
+    }
+
+    await db.delete(productos).where(eq(productos.id, id));
     revalidar();
   });
 }

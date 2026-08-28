@@ -2,7 +2,11 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { cambiarEstadoProducto, guardarProducto } from "@/lib/acciones/admin";
+import {
+  cambiarEstadoProducto,
+  eliminarProducto,
+  guardarProducto,
+} from "@/lib/acciones/admin";
 import { ChipTipo } from "@/components/ui";
 import {
   BloqueNuevo,
@@ -110,6 +114,13 @@ export function ListaProductos({
                     >
                       {p.activo ? "Suspender" : "Reactivar"}
                     </BotonAccion>
+                    <BotonAccion
+                      variante="peligro"
+                      confirmar={`¿Eliminar "${p.nombre}"? Solo se puede si nunca se usó.`}
+                      accion={() => eliminarProducto({ id: p.id })}
+                    >
+                      Eliminar
+                    </BotonAccion>
                   </div>
                 </>
               )}
@@ -119,9 +130,13 @@ export function ListaProductos({
       )}
 
       <p className="mt-4 text-xs text-slate-500">
-        Los productos no se eliminan: suspenderlos los saca de las pantallas de
-        carga pero mantiene intacto el historial. El tipo determina en qué
-        secaderos se puede cargar cada producto.
+        <strong>Suspender</strong> saca al producto de las pantallas de carga
+        pero conserva el historial: es lo que conviene para un producto que ya
+        se fabricó y hoy no se hace más. <strong>Eliminar</strong> sólo funciona
+        si el producto nunca se usó, por ejemplo si lo cargaste con un error;
+        una vez que tiene movimientos, borrarlo dejaría el historial
+        inconsistente. El tipo determina en qué secaderos se puede cargar cada
+        producto.
       </p>
     </>
   );
