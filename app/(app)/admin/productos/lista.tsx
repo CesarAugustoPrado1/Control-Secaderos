@@ -90,7 +90,7 @@ export function ListaProductos({
                       {p.nombre}
                     </p>
                     <div className="mt-1 flex items-center gap-2">
-                      <ChipTipo nombre={p.tipoNombre} />
+                      <ChipTipo id={p.tipoId} nombre={p.tipoNombre} />
                       {!p.activo && (
                         <span className="chip bg-amber-100 text-amber-900">
                           SUSPENDIDO

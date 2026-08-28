@@ -157,7 +157,7 @@ export function ListaSecaderosAdmin({
 
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
-                        <ChipTipo nombre={s.tipoNombre} />
+                        <ChipTipo id={s.tipoId} nombre={s.tipoNombre} />
                         <ChipEstado estado={s.estado} />
                         {!s.activo && (
                           <span className="chip bg-red-100 text-red-800">

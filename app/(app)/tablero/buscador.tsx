@@ -87,7 +87,7 @@ export function BuscadorTablero({ secaderos }: { secaderos: SecaderoVista[] }) {
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-1.5">
                       <ChipEstado estado={s.estado} />
-                      <ChipTipo nombre={s.tipoNombre} />
+                      <ChipTipo id={s.tipoId} nombre={s.tipoNombre} />
                     </div>
                     <p className="mt-1 text-xs text-slate-600">
                       {s.total > 0

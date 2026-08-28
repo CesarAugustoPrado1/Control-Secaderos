@@ -50,26 +50,30 @@ export const COLOR_ESTADO: Record<
 };
 
 /**
- * Color estable para cada tipo de secadero, derivado del nombre. Como los tipos
- * los carga el usuario, no puede haber un mapa fijo: se elige por hash para que
- * el mismo tipo tenga siempre el mismo color.
+ * Color de cada tipo de secadero.
+ *
+ * Va por id y no por hash del nombre: con hash, dos tipos podian caer en el
+ * mismo color -o en dos tonos parecidos, como pasaba con Grande y Chico, los
+ * dos verdosos-. Yendo por id, los tipos que se cargan primero toman colores
+ * consecutivos de la paleta y quedan siempre distintos entre si.
+ *
+ * El orden de la paleta esta elegido para que los primeros sean matices bien
+ * separados (azul, naranja, verde, rosa), que son los que se van a usar.
  */
 const PALETA_TIPOS = [
   "bg-indigo-100 text-indigo-800",
+  "bg-amber-100 text-amber-900",
   "bg-teal-100 text-teal-800",
   "bg-rose-100 text-rose-800",
-  "bg-amber-100 text-amber-900",
   "bg-cyan-100 text-cyan-800",
-  "bg-lime-100 text-lime-800",
   "bg-fuchsia-100 text-fuchsia-800",
+  "bg-lime-100 text-lime-800",
+  "bg-slate-200 text-slate-700",
 ];
 
-export function colorTipo(nombre: string): string {
-  let hash = 0;
-  for (let i = 0; i < nombre.length; i++) {
-    hash = (hash * 31 + nombre.charCodeAt(i)) >>> 0;
-  }
-  return PALETA_TIPOS[hash % PALETA_TIPOS.length];
+export function colorTipo(tipoId: number): string {
+  const i = Math.max(0, tipoId - 1) % PALETA_TIPOS.length;
+  return PALETA_TIPOS[i];
 }
 
 export const ETIQUETA_MOVIMIENTO: Record<TipoMovimiento, string> = {

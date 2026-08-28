@@ -10,8 +10,8 @@ export function ChipEstado({ estado }: { estado: Estado }) {
   );
 }
 
-export function ChipTipo({ nombre }: { nombre: string }) {
-  return <span className={`chip ${colorTipo(nombre)}`}>{nombre}</span>;
+export function ChipTipo({ id, nombre }: { id: number; nombre: string }) {
+  return <span className={`chip ${colorTipo(id)}`}>{nombre}</span>;
 }
 
 export function Aviso({

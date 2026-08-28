@@ -70,7 +70,7 @@ export function ListaTipos({ tipos }: { tipos: Fila[] }) {
                 <>
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className={`chip ${colorTipo(t.nombre)}`}>
+                      <span className={`chip ${colorTipo(t.id)}`}>
                         {t.nombre}
                       </span>
                       <span className="text-sm font-bold tabular-nums text-slate-700">
