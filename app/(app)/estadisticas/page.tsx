@@ -1,12 +1,17 @@
 import Link from "next/link";
 import { requerirRol } from "@/lib/auth";
 import {
+  adherenciaAlFlujo,
   desperdicioPorEtapa,
   desperdicioPorMotivo,
   desperdicioPorUsuario,
+  movimientoDeHornoDiario,
   produccionDiaria,
   rangoDeDias,
   resumenPorModelo,
+  roturasPorEtapa,
+  roturasPorProducto,
+  roturasPorTipoSecadero,
   tiempoDeHornoPorTipo,
   tiemposPorEtapa,
   totales,
@@ -58,6 +63,15 @@ export default async function PaginaEstadisticas({
     desperdicioPorUsuario(rango),
     produccionDiaria(rango),
   ]);
+
+  const [adherencia, porTipoSec, promEtapa, promProducto, hornoDiario] =
+    await Promise.all([
+      adherenciaAlFlujo(rango),
+      roturasPorTipoSecadero(rango),
+      roturasPorEtapa(rango),
+      roturasPorProducto(rango),
+      movimientoDeHornoDiario(rango),
+    ]);
 
   const hayDatos = tot.cargadas > 0 || tot.terminadas > 0 || tot.rotas > 0;
   const tiempo = (tipo: string) => etapas.find((e) => e.tipo === tipo);
@@ -164,6 +178,158 @@ export default async function PaginaEstadisticas({
               />
             </Panel>
           </div>
+
+          {/* ------------------------- Flujo óptimo --------------------------- */}
+          <Panel
+            titulo="Cargas según el flujo óptimo"
+            detalle="Secadero completo y con un solo producto"
+          >
+            {adherencia.total === 0 ? (
+              <SinDatos />
+            ) : (
+              <>
+                <div className="mb-4 grid gap-3 sm:grid-cols-3">
+                  <Indicador
+                    rotulo="Según la norma"
+                    valor={porcentaje(adherencia.optimas, adherencia.total)}
+                    detalle={`${numero(adherencia.optimas)} de ${numero(adherencia.total)} cargas`}
+                    tono={
+                      adherencia.optimas / adherencia.total >= 0.9
+                        ? "bueno"
+                        : "neutro"
+                    }
+                  />
+                  <Indicador
+                    rotulo="A medio llenar"
+                    valor={numero(adherencia.incompletas)}
+                    detalle="No alcanzaron la capacidad"
+                    tono={adherencia.incompletas > 0 ? "malo" : "neutro"}
+                  />
+                  <Indicador
+                    rotulo="Con varios productos"
+                    valor={numero(adherencia.mezcladas)}
+                    detalle="Más de un producto en el mismo secadero"
+                    tono={adherencia.mezcladas > 0 ? "malo" : "neutro"}
+                  />
+                </div>
+
+                {adherencia.desvios.length > 0 && (
+                  <>
+                    <h3 className="mb-2 text-xs font-semibold tracking-wide text-slate-500 uppercase">
+                      Cargas que se apartaron
+                    </h3>
+                    <Tabla
+                      encabezados={[
+                        "Fecha",
+                        "Secadero",
+                        "Tipo",
+                        "Placas",
+                        "Productos",
+                        "Operario",
+                      ]}
+                      filas={adherencia.desvios.map((d) => [
+                        fechaHora(d.creadoEn),
+                        String(d.secaderoNumero),
+                        d.tipo,
+                        `${numero(d.placas)} / ${numero(d.capacidad)}`,
+                        String(d.productos),
+                        d.usuarioNombre,
+                      ])}
+                    />
+                  </>
+                )}
+              </>
+            )}
+          </Panel>
+
+          {/* ---------------------- Promedios de rotura ----------------------- */}
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Panel
+              titulo="Roturas promedio por secadero"
+              detalle="Según el tipo de secadero, sobre las cargas del período"
+            >
+              {porTipoSec.length === 0 ? (
+                <SinDatos />
+              ) : (
+                <Tabla
+                  encabezados={["Tipo", "Secaderos", "Rotas", "Promedio"]}
+                  filas={porTipoSec.map((f) => [
+                    f.clave,
+                    numero(f.secaderos),
+                    numero(f.rotas),
+                    f.promedio.toLocaleString("es-AR", {
+                      minimumFractionDigits: 1,
+                      maximumFractionDigits: 1,
+                    }),
+                  ])}
+                />
+              )}
+            </Panel>
+
+            <Panel
+              titulo="Roturas promedio por etapa"
+              detalle="Cuántas placas se rompen por secadero en cada paso"
+            >
+              {promEtapa.length === 0 ? (
+                <SinDatos />
+              ) : (
+                <Tabla
+                  encabezados={["Etapa", "Secaderos", "Rotas", "Promedio"]}
+                  filas={promEtapa.map((f) => [
+                    ETIQUETA_MOVIMIENTO[f.clave as keyof typeof ETIQUETA_MOVIMIENTO],
+                    numero(f.secaderos),
+                    numero(f.rotas),
+                    f.promedio.toLocaleString("es-AR", {
+                      minimumFractionDigits: 1,
+                      maximumFractionDigits: 1,
+                    }),
+                  ])}
+                />
+              )}
+            </Panel>
+          </div>
+
+          <Panel
+            titulo="Roturas promedio por producto"
+            detalle="Por secadero en el que aparece el producto"
+          >
+            {promProducto.length === 0 ? (
+              <SinDatos texto="No se registraron roturas. 👏" />
+            ) : (
+              <Tabla
+                encabezados={["Producto", "Secaderos", "Rotas", "Promedio"]}
+                filas={promProducto.map((f) => [
+                  f.clave,
+                  numero(f.secaderos),
+                  numero(f.rotas),
+                  f.promedio.toLocaleString("es-AR", {
+                    minimumFractionDigits: 1,
+                    maximumFractionDigits: 1,
+                  }),
+                ])}
+              />
+            )}
+          </Panel>
+
+          {/* ------------------------- Horno por día -------------------------- */}
+          {hornoDiario.length > 0 && (
+            <Panel
+              titulo="Movimiento del horno por día"
+              detalle="Secaderos que entraron y salieron cada jornada"
+            >
+              <Tabla
+                encabezados={["Día", "Entraron", "Salieron", "Diferencia"]}
+                filas={hornoDiario.map((d) => [
+                  d.dia,
+                  numero(d.entraron),
+                  numero(d.salieron),
+                  d.entraron === d.salieron
+                    ? "—"
+                    : `${d.entraron > d.salieron ? "+" : ""}${d.entraron - d.salieron}`,
+                ])}
+              />
+            </Panel>
+          )}
 
           {/* --------------------------- Desperdicio -------------------------- */}
           <div className="grid gap-4 lg:grid-cols-2">

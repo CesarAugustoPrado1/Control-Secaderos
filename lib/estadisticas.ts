@@ -1,7 +1,26 @@
 import "server-only";
-import { and, avg, count, desc, eq, gte, isNotNull, lte, max, min, sql, sum } from "drizzle-orm";
+import {
+  and,
+  avg,
+  count,
+  desc,
+  eq,
+  gte,
+  inArray,
+  isNotNull,
+  lte,
+  max,
+  min,
+  sql,
+  sum,
+} from "drizzle-orm";
 import { db } from "./db";
-import { movimientoLineas, movimientos, type TipoMovimiento } from "./db/schema";
+import {
+  movimientoLineas,
+  movimientos,
+  tipos,
+  type TipoMovimiento,
+} from "./db/schema";
 
 export type Rango = { desde: Date; hasta: Date };
 
@@ -235,6 +254,209 @@ export async function desperdicioPorUsuario(rango: Rango) {
     usuario: f.usuario,
     placas: aNumero(f.placas),
     movimientos: aNumero(f.movimientos),
+  }));
+}
+
+/* -------------------------------------------------------------------------- */
+/* Adherencia al flujo optimo                                                 */
+/* -------------------------------------------------------------------------- */
+
+export type Adherencia = {
+  total: number;
+  optimas: number;
+  incompletas: number;
+  mezcladas: number;
+  desvios: {
+    id: number;
+    secaderoNumero: number;
+    tipo: string;
+    placas: number;
+    capacidad: number;
+    productos: number;
+    usuarioNombre: string;
+    creadoEn: Date;
+  }[];
+};
+
+/**
+ * El flujo optimo es: secadero completo y con un solo producto.
+ *
+ * Se mide sobre las cargas, comparando lo que entro contra la capacidad del
+ * tipo. Las que se apartan se listan para poder revisarlas: el valor no esta
+ * en el porcentaje sino en ver que carga concreta se salio de la norma.
+ */
+export async function adherenciaAlFlujo(rango: Rango): Promise<Adherencia> {
+  const filas = await db
+    .select({
+      id: movimientos.id,
+      secaderoNumero: movimientos.secaderoNumero,
+      tipoNombre: movimientos.secaderoTipoNombre,
+      capacidad: tipos.capacidad,
+      usuarioNombre: movimientos.usuarioNombre,
+      creadoEn: movimientos.creadoEn,
+      placas: sql<string>`coalesce(sum(${movimientoLineas.cantidad}), 0)`,
+      productos: sql<string>`count(distinct ${movimientoLineas.productoId})
+        filter (where ${movimientoLineas.cantidad} > 0)`,
+    })
+    .from(movimientos)
+    .innerJoin(movimientoLineas, eq(movimientoLineas.movimientoId, movimientos.id))
+    // El tipo puede haberse borrado; en ese caso la carga no se puede evaluar.
+    .innerJoin(tipos, eq(tipos.id, movimientos.secaderoTipoId))
+    .where(and(enRango(rango), eq(movimientos.tipo, "carga")))
+    .groupBy(
+      movimientos.id,
+      movimientos.secaderoNumero,
+      movimientos.secaderoTipoNombre,
+      tipos.capacidad,
+      movimientos.usuarioNombre,
+      movimientos.creadoEn,
+    )
+    .orderBy(desc(movimientos.creadoEn));
+
+  let optimas = 0;
+  let incompletas = 0;
+  let mezcladas = 0;
+  const desvios: Adherencia["desvios"] = [];
+
+  for (const f of filas) {
+    const placas = aNumero(f.placas);
+    const productos = aNumero(f.productos);
+    const completa = placas >= f.capacidad;
+    const simple = productos === 1;
+
+    if (completa && simple) {
+      optimas++;
+      continue;
+    }
+    if (!completa) incompletas++;
+    if (!simple) mezcladas++;
+    if (desvios.length < 50) {
+      desvios.push({
+        id: f.id,
+        secaderoNumero: f.secaderoNumero,
+        tipo: f.tipoNombre,
+        placas,
+        capacidad: f.capacidad,
+        productos,
+        usuarioNombre: f.usuarioNombre,
+        creadoEn: f.creadoEn,
+      });
+    }
+  }
+
+  return { total: filas.length, optimas, incompletas, mezcladas, desvios };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Promedios de rotura                                                        */
+/* -------------------------------------------------------------------------- */
+
+export type PromedioRotura = {
+  clave: string;
+  secaderos: number;
+  rotas: number;
+  promedio: number;
+};
+
+const armarPromedio = (
+  filas: { clave: string; secaderos: string | number; rotas: string | number }[],
+): PromedioRotura[] =>
+  filas.map((f) => {
+    const secaderos = aNumero(f.secaderos);
+    const rotas = aNumero(f.rotas);
+    return {
+      clave: f.clave,
+      secaderos,
+      rotas,
+      // Promedio por secadero movido, no por placa: es la unidad con la que se
+      // trabaja en planta ("cuantas se rompen por secadero").
+      promedio: secaderos > 0 ? rotas / secaderos : 0,
+    };
+  });
+
+/** Roturas promedio por secadero, abiertas por tipo de secadero. */
+export async function roturasPorTipoSecadero(
+  rango: Rango,
+): Promise<PromedioRotura[]> {
+  const filas = await db
+    .select({
+      clave: movimientos.secaderoTipoNombre,
+      secaderos: sql<string>`count(distinct ${movimientos.id})`,
+      rotas: sql<string>`coalesce(sum(${movimientoLineas.desperdicio}), 0)`,
+    })
+    .from(movimientos)
+    .leftJoin(movimientoLineas, eq(movimientoLineas.movimientoId, movimientos.id))
+    .where(and(enRango(rango), eq(movimientos.tipo, "carga")))
+    .groupBy(movimientos.secaderoTipoNombre);
+
+  return armarPromedio(filas).sort((a, b) => b.promedio - a.promedio);
+}
+
+/** Roturas promedio por secadero movido, abiertas por etapa del proceso. */
+export async function roturasPorEtapa(rango: Rango): Promise<PromedioRotura[]> {
+  const filas = await db
+    .select({
+      clave: movimientos.tipo,
+      secaderos: sql<string>`count(distinct ${movimientos.id})`,
+      rotas: sql<string>`coalesce(sum(${movimientoLineas.desperdicio}), 0)`,
+    })
+    .from(movimientos)
+    .leftJoin(movimientoLineas, eq(movimientoLineas.movimientoId, movimientos.id))
+    .where(enRango(rango))
+    .groupBy(movimientos.tipo);
+
+  return armarPromedio(filas).sort((a, b) => b.promedio - a.promedio);
+}
+
+/** Roturas promedio por secadero cargado, abiertas por producto. */
+export async function roturasPorProducto(
+  rango: Rango,
+): Promise<PromedioRotura[]> {
+  const filas = await db
+    .select({
+      clave: movimientoLineas.productoNombre,
+      secaderos: sql<string>`count(distinct ${movimientos.id})`,
+      rotas: sql<string>`coalesce(sum(${movimientoLineas.desperdicio}), 0)`,
+    })
+    .from(movimientoLineas)
+    .innerJoin(movimientos, eq(movimientos.id, movimientoLineas.movimientoId))
+    .where(enRango(rango))
+    .groupBy(movimientoLineas.productoNombre);
+
+  return armarPromedio(filas)
+    .filter((f) => f.rotas > 0)
+    .sort((a, b) => b.promedio - a.promedio);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Horno                                                                      */
+/* -------------------------------------------------------------------------- */
+
+/** Secaderos que entraron y salieron del horno cada dia. */
+export async function movimientoDeHornoDiario(rango: Rango) {
+  const dia = sql`to_char(${movimientos.creadoEn} at time zone 'America/Argentina/Buenos_Aires', 'YYYY-MM-DD')`;
+
+  const filas = await db
+    .select({
+      dia: sql<string>`${dia}`,
+      entraron: sql<string>`count(*) filter (where ${movimientos.tipo} = 'entrada_horno')`,
+      salieron: sql<string>`count(*) filter (where ${movimientos.tipo} = 'salida_horno')`,
+    })
+    .from(movimientos)
+    .where(
+      and(
+        enRango(rango),
+        inArray(movimientos.tipo, ["entrada_horno", "salida_horno"]),
+      ),
+    )
+    .groupBy(dia)
+    .orderBy(desc(dia))
+    .limit(14);
+
+  return filas.map((f) => ({
+    dia: f.dia,
+    entraron: aNumero(f.entraron),
+    salieron: aNumero(f.salieron),
   }));
 }
 

@@ -50,6 +50,7 @@ export function PanelHorno({
   const [excluidos, setExcluidos] = useState<Set<number>>(new Set());
   const [aMeter, setAMeter] = useState<Set<number>>(new Set());
   const [roturas, setRoturas] = useState<Roturas>({});
+  const [productoFiltro, setProductoFiltro] = useState<string | null>(null);
 
   const salida = useAccion();
   const entrada = useAccion();
@@ -63,6 +64,35 @@ export function PanelHorno({
   );
 
   const lugaresLibres = capacidadHorno - enHorno.length + aSacar.size;
+
+  /** Productos que hay esperando, con cuantos secaderos de cada uno. */
+  const productosEnEspera = useMemo(() => {
+    const cuenta = new Map<string, number>();
+    for (const s of humedos) {
+      for (const c of s.contenido) {
+        cuenta.set(c.nombre, (cuenta.get(c.nombre) ?? 0) + 1);
+      }
+    }
+    return [...cuenta.entries()]
+      .map(([nombre, cantidad]) => ({ nombre, cantidad }))
+      .sort((a, b) => b.cantidad - a.cantidad);
+  }, [humedos]);
+
+  const humedosVisibles = useMemo(
+    () =>
+      productoFiltro
+        ? humedos.filter((s) =>
+            s.contenido.some((c) => c.nombre === productoFiltro),
+          )
+        : humedos,
+    [humedos, productoFiltro],
+  );
+
+  /** Marca los N mas viejos de lo que se esta viendo, sin pasarse del horno. */
+  function elegirMasViejos(cuantos: number) {
+    const tope = Math.max(0, Math.min(cuantos, lugaresLibres));
+    setAMeter(new Set(humedosVisibles.slice(0, tope).map((s) => s.id)));
+  }
 
   function alternarSacar(id: number) {
     setExcluidos((prev) => {
@@ -227,8 +257,33 @@ export function PanelHorno({
           </p>
         ) : (
           <>
+            {/* Filtro por producto: el horno rinde mejor con una hornada de un
+                solo producto, asi que se puede acotar la lista antes de elegir.
+                Los secaderos ya vienen del mas viejo al mas nuevo. */}
+            {productosEnEspera.length > 1 && (
+              <div className="-mx-4 mb-3 overflow-x-auto px-4">
+                <div className="flex min-w-max gap-1.5">
+                  <BotonSeleccion
+                    onClick={() => setProductoFiltro(null)}
+                    activo={productoFiltro === null}
+                  >
+                    Todos ({humedos.length})
+                  </BotonSeleccion>
+                  {productosEnEspera.map((p) => (
+                    <BotonSeleccion
+                      key={p.nombre}
+                      onClick={() => setProductoFiltro(p.nombre)}
+                      activo={productoFiltro === p.nombre}
+                    >
+                      {p.nombre} ({p.cantidad})
+                    </BotonSeleccion>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="space-y-2">
-              {humedos.map((s) => (
+              {humedosVisibles.map((s) => (
                 <FilaSecadero
                   key={s.id}
                   secadero={s}
@@ -243,20 +298,27 @@ export function PanelHorno({
                   acento="humedo"
                 />
               ))}
+              {humedosVisibles.length === 0 && (
+                <p className="tarjeta px-4 py-8 text-center text-sm text-slate-500">
+                  No hay secaderos húmedos con ese producto.
+                </p>
+              )}
             </div>
 
             <div className="mt-3 flex flex-wrap gap-2">
-              <BotonSeleccion
-                onClick={() =>
-                  setAMeter(
-                    new Set(
-                      humedos.slice(0, Math.max(0, lugaresLibres)).map((s) => s.id),
-                    ),
-                  )
-                }
-              >
-                Llenar el horno ({Math.min(humedos.length, Math.max(0, lugaresLibres))})
+              <BotonSeleccion onClick={() => elegirMasViejos(lugaresLibres)}>
+                Los {Math.min(humedosVisibles.length, Math.max(0, lugaresLibres))} más
+                viejos
               </BotonSeleccion>
+              {[5, 10].map(
+                (n) =>
+                  humedosVisibles.length > n &&
+                  lugaresLibres > n && (
+                    <BotonSeleccion key={n} onClick={() => elegirMasViejos(n)}>
+                      Los {n} más viejos
+                    </BotonSeleccion>
+                  ),
+              )}
               <BotonSeleccion onClick={() => setAMeter(new Set())}>
                 Ninguno
               </BotonSeleccion>
@@ -307,12 +369,19 @@ function EncabezadoSeccion({
   );
 }
 
-function BotonSeleccion(props: React.ButtonHTMLAttributes<HTMLButtonElement>) {
+function BotonSeleccion({
+  activo,
+  ...props
+}: React.ButtonHTMLAttributes<HTMLButtonElement> & { activo?: boolean }) {
   return (
     <button
       type="button"
       {...props}
-      className="rounded-lg bg-white px-3 py-2 text-xs font-semibold text-slate-600 ring-1 ring-slate-300 hover:bg-slate-50"
+      className={`rounded-lg px-3 py-2 text-xs font-semibold whitespace-nowrap transition ${
+        activo
+          ? "bg-slate-900 text-white"
+          : "bg-white text-slate-600 ring-1 ring-slate-300 hover:bg-slate-50"
+      }`}
     />
   );
 }
