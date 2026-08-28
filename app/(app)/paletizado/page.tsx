@@ -1,43 +1,57 @@
 import { requerirRol } from "@/lib/auth";
-import { secaderosConContenido } from "@/lib/consultas";
-import { numero } from "@/lib/formato";
-import { ListaSecaderos } from "@/components/lista-secaderos";
+import { listarMovimientos, secaderosConContenido } from "@/lib/consultas";
+import { esClaveRango, rangoPorClave, type ClaveRango } from "@/lib/rangos";
+import { Actividad } from "@/components/actividad";
+import { BuscadorAccion } from "@/components/buscador-accion";
 import { Titulo } from "@/components/ui";
 
 export const metadata = { title: "Descargar · Secaderos" };
 export const dynamic = "force-dynamic";
 
-export default async function PaginaPaletizado() {
+export default async function PaginaPaletizado({
+  searchParams,
+}: {
+  searchParams: Promise<{ rango?: string }>;
+}) {
   await requerirRol("paletizado", "llenado_manual", "admin");
+  const { rango: rangoParam } = await searchParams;
+  const rango: ClaveRango = esClaveRango(rangoParam) ? rangoParam : "hoy";
+  const { desde, hasta } = rangoPorClave(rango);
 
-  // Los mas viejos primero: si el operario no busca por numero, el orden ya le
-  // sugiere cual conviene sacar.
-  const secos = (await secaderosConContenido(["seco"])).sort(
-    (a, b) => a.estadoDesde.getTime() - b.estadoDesde.getTime(),
-  );
-
-  const totalPlacas = secos.reduce((a, s) => a + s.total, 0);
+  const [secaderos, descargas] = await Promise.all([
+    secaderosConContenido(),
+    listarMovimientos({ tipo: "descarga", desde, hasta, porPagina: 200 }),
+  ]);
 
   return (
-    <>
-      <Titulo
-        detalle={
-          secos.length
-            ? `${numero(totalPlacas)} placas esperando · los más viejos primero`
-            : undefined
-        }
-      >
+    <div className="space-y-6">
+      <Titulo detalle="Escribí el número del secadero que vas a descargar">
         Descargar
       </Titulo>
 
-      <ListaSecaderos
-        secaderos={secos}
+      <BuscadorAccion
+        secaderos={secaderos.map((s) => ({
+          id: s.id,
+          numero: s.numero,
+          tipoNombre: s.tipoNombre,
+          estado: s.estado,
+          estadoDesde: s.estadoDesde.toISOString(),
+          total: s.total,
+          contenido: s.contenido.map((c) => c.nombre).join(", "),
+        }))}
+        estadoObjetivo="seco"
         hrefBase="/paletizado"
-        vacio={{
-          titulo: "No hay secaderos secos",
-          detalle: "Cuando horno saque alguno, va a aparecer acá.",
-        }}
+        verbo="Descargar"
+        etiquetaDisponibles="secaderos secos esperando"
       />
-    </>
+
+      <Actividad
+        titulo="Descargado"
+        movimientos={descargas.items}
+        rango={rango}
+        rutaBase="/paletizado"
+        vacio="Todavía no se descargó ningún secadero en este período."
+      />
+    </div>
   );
 }

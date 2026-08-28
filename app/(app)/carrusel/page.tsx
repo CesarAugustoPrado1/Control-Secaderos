@@ -1,35 +1,63 @@
 import { requerirRol } from "@/lib/auth";
-import { secaderosConContenido } from "@/lib/consultas";
+import { listarMovimientos, secaderosConContenido } from "@/lib/consultas";
 import { ETIQUETA_ROL } from "@/lib/permisos";
-import { ListaSecaderos } from "@/components/lista-secaderos";
+import { esClaveRango, rangoPorClave, type ClaveRango } from "@/lib/rangos";
+import { Actividad } from "@/components/actividad";
+import { BuscadorAccion } from "@/components/buscador-accion";
 import { Titulo } from "@/components/ui";
 
 export const metadata = { title: "Cargar · Secaderos" };
 export const dynamic = "force-dynamic";
 
-export default async function PaginaCarrusel() {
+export default async function PaginaCarrusel({
+  searchParams,
+}: {
+  searchParams: Promise<{ rango?: string }>;
+}) {
   const sesion = await requerirRol("carrusel", "llenado_manual", "admin");
-  const vacios = await secaderosConContenido(["vacio"]);
+  const { rango: rangoParam } = await searchParams;
+  const rango: ClaveRango = esClaveRango(rangoParam) ? rangoParam : "hoy";
+  const { desde, hasta } = rangoPorClave(rango);
 
-  // El titulo dice el sector de quien esta cargando, asi el operario ve que
-  // esta en su pantalla; los secaderos disponibles son los mismos para todos.
+  const [secaderos, cargas] = await Promise.all([
+    secaderosConContenido(),
+    listarMovimientos({ tipo: "carga", desde, hasta, porPagina: 200 }),
+  ]);
+
   const sector =
     sesion.rol === "llenado_manual" || sesion.rol === "carrusel"
       ? ETIQUETA_ROL[sesion.rol]
       : "Cargar secaderos";
 
   return (
-    <>
-      <Titulo detalle="Buscá el secadero por número y cargalo">{sector}</Titulo>
+    <div className="space-y-6">
+      <Titulo detalle="Escribí el número del secadero que vas a cargar">
+        {sector}
+      </Titulo>
 
-      <ListaSecaderos
-        secaderos={vacios}
+      <BuscadorAccion
+        secaderos={secaderos.map((s) => ({
+          id: s.id,
+          numero: s.numero,
+          tipoNombre: s.tipoNombre,
+          estado: s.estado,
+          estadoDesde: s.estadoDesde.toISOString(),
+          total: s.total,
+          contenido: s.contenido.map((c) => c.nombre).join(", "),
+        }))}
+        estadoObjetivo="vacio"
         hrefBase="/carrusel"
-        vacio={{
-          titulo: "No hay secaderos vacíos",
-          detalle: "Cuando se descargue alguno, va a aparecer acá.",
-        }}
+        verbo="Cargar"
+        etiquetaDisponibles="secaderos vacíos disponibles"
       />
-    </>
+
+      <Actividad
+        titulo="Cargado"
+        movimientos={cargas.items}
+        rango={rango}
+        rutaBase="/carrusel"
+        vacio="Todavía no se cargó ningún secadero en este período."
+      />
+    </div>
   );
 }
