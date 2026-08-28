@@ -1,15 +1,18 @@
 /**
- * Deja la base como recien instalada, para arrancar con los datos reales.
+ * Deja la base lista para arrancar en limpio, con dos alcances posibles.
  *
- *   npm run db:limpiar              -> muestra que se va a borrar, sin tocar nada
- *   npm run db:limpiar -- --confirmar  -> borra de verdad
+ *   npm run db:limpiar                    -> muestra que hay, sin tocar nada
+ *   npm run db:limpiar -- --movimientos   -> borra solo el historial y pone
+ *                                            todos los secaderos en vacio
+ *   npm run db:limpiar -- --todo          -> ademas borra secaderos, productos
+ *                                            y usuarios de prueba
  *
- * Borra: movimientos, contenido de secaderos, secaderos, modelos y usuarios de
- * prueba. Conserva: el usuario admin, los tipos de secadero, los motivos de
- * desperdicio y los parametros de configuracion.
+ * El modo `--movimientos` es el que conviene cuando ya cargaste los secaderos
+ * y los productos reales y solo querés tirar los movimientos de prueba.
+ * El modo `--todo` es para volver a foja cero.
  *
- * Los tipos se conservan a proposito: definirlos con su capacidad es trabajo
- * de configuracion, no dato de prueba.
+ * En los dos casos se conservan los tipos de secadero, los motivos de
+ * desperdicio y los parametros: eso es configuracion, no dato de prueba.
  */
 import { config as cargarEnv } from "dotenv";
 import { drizzle } from "drizzle-orm/postgres-js";
@@ -26,7 +29,8 @@ import {
 
 cargarEnv({ path: [".env.local", ".env"], quiet: true });
 
-const confirmado = process.argv.includes("--confirmar");
+const soloMovimientos = process.argv.includes("--movimientos");
+const todo = process.argv.includes("--todo");
 
 async function main() {
   const url = process.env.DATABASE_URL;
@@ -42,8 +46,7 @@ async function main() {
     return Number(r.n);
   };
 
-  console.log("Estado actual:");
-  for (const t of [
+  const TABLAS = [
     "movimientos",
     "movimiento_lineas",
     "secadero_contenido",
@@ -52,17 +55,34 @@ async function main() {
     "tipos",
     "usuarios",
     "motivos_desperdicio",
-  ]) {
+  ];
+
+  console.log("Estado actual:");
+  for (const t of TABLAS) {
     console.log(`  ${t.padEnd(20)} ${await contar(t)}`);
   }
 
-  if (!confirmado) {
-    console.log(
-      "\nSimulacion: no se borro nada.\n" +
-        "Para borrar de verdad: npm run db:limpiar -- --confirmar",
-    );
+  if (!soloMovimientos && !todo) {
+    console.log(`
+Simulacion: no se borro nada. Elegi un alcance:
+
+  npm run db:limpiar -- --movimientos
+      Borra el historial de movimientos y deja todos los secaderos vacios.
+      CONSERVA los secaderos, los productos y los usuarios que ya cargaste.
+      Es el que conviene si ya tenes los datos reales adentro.
+
+  npm run db:limpiar -- --todo
+      Ademas borra los secaderos, los productos y los usuarios de prueba
+      (menos el admin). Deja la base como recien instalada.
+
+Los tipos de secadero, los motivos de desperdicio y los parametros se
+conservan en los dos casos.`);
     await client.end();
     return;
+  }
+
+  if (soloMovimientos && todo) {
+    throw new Error("Elegi un solo alcance: --movimientos o --todo.");
   }
 
   await db.transaction(async (tx) => {
@@ -70,26 +90,39 @@ async function main() {
     await tx.delete(movimientoLineas);
     await tx.delete(movimientos);
     await tx.delete(secaderoContenido);
-    await tx.delete(secaderos);
-    await tx.delete(productos);
-    // El admin se conserva: si no, quedas sin poder entrar al panel.
-    await tx.delete(usuarios).where(ne(usuarios.usuario, "admin"));
+
+    if (todo) {
+      await tx.delete(secaderos);
+      await tx.delete(productos);
+      // El admin se conserva: si no, quedas sin poder entrar al panel.
+      await tx.delete(usuarios).where(ne(usuarios.usuario, "admin"));
+    } else {
+      /**
+       * Sin movimientos ni contenido, un secadero que quedara en `humedo`
+       * seria una inconsistencia: la app lo mostraria con placas que ya no
+       * existen y fallaria al intentar moverlo. Se los devuelve a vacio.
+       */
+      await tx
+        .update(secaderos)
+        .set({ estado: "vacio", estadoDesde: new Date() });
+    }
   });
 
-  // Los contadores vuelven a empezar de 1, asi el primer secadero real es el 1.
-  await db.execute(
-    raw`alter sequence secaderos_id_seq restart with 1`,
-  );
-  await db.execute(raw`alter sequence productos_id_seq restart with 1`);
+  if (todo) {
+    // Los contadores vuelven a empezar de 1, asi el primer secadero real es el 1.
+    await db.execute(raw`alter sequence secaderos_id_seq restart with 1`);
+    await db.execute(raw`alter sequence productos_id_seq restart with 1`);
+  }
   await db.execute(raw`alter sequence movimientos_id_seq restart with 1`);
 
   console.log("\nListo. Quedaron:");
-  console.log(`  usuarios              ${await contar("usuarios")} (solo admin)`);
-  console.log(`  tipos                 ${await contar("tipos")}`);
-  console.log(`  motivos_desperdicio   ${await contar("motivos_desperdicio")}`);
+  for (const t of TABLAS) {
+    console.log(`  ${t.padEnd(20)} ${await contar(t)}`);
+  }
   console.log(
-    "\nRevisa los tipos y sus capacidades, y despues carga los secaderos" +
-      "\npor rango desde Administracion > Secaderos.",
+    todo
+      ? "\nCarga los tipos, los secaderos y los productos desde Administracion."
+      : "\nTodos los secaderos quedaron vacios, listos para empezar a cargar.",
   );
 
   await client.end();
