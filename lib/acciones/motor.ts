@@ -131,7 +131,7 @@ export async function cargarCatalogo(
   };
 
   for (const id of productoIds) {
-    if (!catalogo.productos.has(id)) fallar("Un modelo seleccionado no existe.");
+    if (!catalogo.productos.has(id)) fallar("Un producto seleccionado no existe.");
   }
   for (const id of motivoIds) {
     if (!catalogo.motivos.has(id)) fallar("Un motivo seleccionado no existe.");
@@ -155,13 +155,13 @@ export function validarCarga(
 ) {
   const conCantidad = items.filter((i) => i.cantidad > 0);
   if (conCantidad.length === 0) {
-    fallar("Cargá al menos un modelo con cantidad mayor a cero.");
+    fallar("Cargá al menos un producto con cantidad mayor a cero.");
   }
 
   const vistos = new Set<number>();
   for (const item of conCantidad) {
     if (vistos.has(item.productoId)) {
-      fallar("Hay un modelo repetido en la carga.");
+      fallar("Hay un producto repetido en la carga.");
     }
     vistos.add(item.productoId);
 
@@ -172,7 +172,7 @@ export function validarCarga(
       );
     }
     if (exigirActivos && !producto.activo) {
-      fallar(`El modelo "${producto.nombre}" está suspendido.`);
+      fallar(`El producto "${producto.nombre}" está suspendido.`);
     }
   }
 
@@ -202,7 +202,7 @@ export function validarRoturasContraContenido(
 
   for (const [productoId, rotas] of porProducto) {
     const disponible = contenido.get(productoId) ?? 0;
-    const nombre = catalogo.productos.get(productoId)?.nombre ?? "ese modelo";
+    const nombre = catalogo.productos.get(productoId)?.nombre ?? "ese producto";
     if (disponible === 0) {
       fallar(
         `El secadero ${secadero.numero} no tiene placas de "${nombre}" para descontar.`,
@@ -341,7 +341,7 @@ function construirLineas(
 
   for (const productoId of productoIds) {
     const producto = catalogo.productos.get(productoId);
-    const productoNombre = producto?.nombre ?? `Modelo #${productoId}`;
+    const productoNombre = producto?.nombre ?? `Producto #${productoId}`;
     const cantidad = cantidades.get(productoId) ?? 0;
     const susRoturas = roturasPorProducto.get(productoId) ?? [];
 

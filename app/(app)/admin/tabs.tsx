@@ -3,6 +3,14 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+/**
+ * Pestañas de administracion.
+ *
+ * Se envuelven en varias filas en vez de scrollear en horizontal: con seis
+ * secciones, en un celular las ultimas quedaban fuera de pantalla y no habia
+ * nada que sugiriera que se podia deslizar. Ocupan un renglon mas, pero se ven
+ * todas de entrada.
+ */
 export function TabsAdmin({
   secciones,
 }: {
@@ -11,8 +19,8 @@ export function TabsAdmin({
   const pathname = usePathname();
 
   return (
-    <nav className="-mx-4 overflow-x-auto px-4">
-      <ul className="flex min-w-max gap-1.5">
+    <nav>
+      <ul className="flex flex-wrap gap-1.5">
         {secciones.map((s) => {
           const activo = pathname.startsWith(s.href);
           return (

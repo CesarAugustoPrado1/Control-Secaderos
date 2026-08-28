@@ -46,8 +46,8 @@ export default async function PaginaCargar({
         </Aviso>
       ) : modelos.length === 0 ? (
         <Aviso tono="info">
-          No hay modelos habilitados para el tipo {secadero.tipoNombre}. Pedile
-          al administrador que cargue alguno.
+          No hay productos habilitados para el tipo {secadero.tipoNombre}.
+          Pedile al administrador que cargue alguno.
         </Aviso>
       ) : (
         <FormularioCarga

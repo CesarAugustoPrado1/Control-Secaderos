@@ -4,7 +4,7 @@ import { TabsAdmin } from "./tabs";
 const SECCIONES = [
   { href: "/admin/secaderos", etiqueta: "Secaderos" },
   { href: "/admin/tipos", etiqueta: "Tipos" },
-  { href: "/admin/productos", etiqueta: "Modelos" },
+  { href: "/admin/productos", etiqueta: "Productos" },
   { href: "/admin/usuarios", etiqueta: "Usuarios" },
   { href: "/admin/motivos", etiqueta: "Motivos" },
   { href: "/admin/config", etiqueta: "Parámetros" },

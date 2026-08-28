@@ -107,7 +107,7 @@ export async function eliminarTipo(entrada: { id: number }): Promise<Resultado> 
 
     if (conSecaderos > 0 || conProductos > 0) {
       fallar(
-        `No se puede eliminar: lo usan ${conSecaderos} secaderos y ${conProductos} modelos. ` +
+        `No se puede eliminar: lo usan ${conSecaderos} secaderos y ${conProductos} productos. ` +
           "Desactivalo en lugar de eliminarlo.",
       );
     }
@@ -123,8 +123,8 @@ export async function eliminarTipo(entrada: { id: number }): Promise<Resultado> 
 
 const esquemaProducto = z.object({
   id: z.number().int().positive().optional(),
-  nombre: z.string().trim().min(1, "El modelo necesita un nombre.").max(80),
-  tipoId: z.number().int().positive("Elegí el tipo de secadero del modelo."),
+  nombre: z.string().trim().min(1, "El producto necesita un nombre.").max(80),
+  tipoId: z.number().int().positive("Elegí el tipo de secadero del producto."),
 });
 
 export async function guardarProducto(
@@ -140,7 +140,7 @@ export async function guardarProducto(
         .from(productos)
         .where(eq(productos.id, datos.id))
         .limit(1);
-      if (!actual) fallar("Ese modelo ya no existe.");
+      if (!actual) fallar("Ese producto ya no existe.");
 
       // Cambiar el tipo de un modelo que ya esta adentro de un secadero
       // volveria invalida esa carga (y su capacidad). Se bloquea.
@@ -151,7 +151,7 @@ export async function guardarProducto(
           .where(eq(secaderoContenido.productoId, datos.id));
         if (enUso > 0) {
           fallar(
-            "No se puede cambiar el tipo: el modelo está cargado en un secadero. Descargalo primero.",
+            "No se puede cambiar el tipo: el producto está cargado en un secadero. Descargalo primero.",
           );
         }
       }

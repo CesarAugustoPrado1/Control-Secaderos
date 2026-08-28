@@ -46,7 +46,7 @@ export function ListaTipos({ tipos }: { tipos: Fila[] }) {
       {tipos.length === 0 ? (
         <p className="tarjeta px-4 py-10 text-center text-sm text-slate-500">
           No hay tipos cargados. Sin al menos uno no vas a poder dar de alta
-          secaderos ni modelos.
+          secaderos ni productos.
         </p>
       ) : (
         <ul className="space-y-2">
@@ -83,7 +83,7 @@ export function ListaTipos({ tipos }: { tipos: Fila[] }) {
                       )}
                     </div>
                     <p className="mt-1 text-xs text-slate-500">
-                      {t.secaderos} secaderos · {t.productos} modelos
+                      {t.secaderos} secaderos · {t.productos} productos
                     </p>
                   </div>
 

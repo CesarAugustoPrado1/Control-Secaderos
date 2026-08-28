@@ -1,7 +1,7 @@
 import { tiposActivos, todosLosProductos } from "@/lib/consultas";
 import { ListaProductos } from "./lista";
 
-export const metadata = { title: "Modelos · Administración" };
+export const metadata = { title: "Productos · Administración" };
 export const dynamic = "force-dynamic";
 
 export default async function PaginaAdminProductos() {

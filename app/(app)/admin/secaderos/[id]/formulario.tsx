@@ -46,7 +46,7 @@ export function FormularioCorreccion({
     }
     if (!vaciando && total === 0) {
       return setError(
-        `Un secadero ${TITULO_ESTADO[estado].toLowerCase()} necesita al menos un modelo con cantidad.`,
+        `Un secadero ${TITULO_ESTADO[estado].toLowerCase()} necesita al menos un producto con cantidad.`,
       );
     }
     if (total > capacidad) {
@@ -152,7 +152,7 @@ export function FormularioCorreccion({
             ))}
             {modelos.length === 0 && (
               <p className="py-4 text-center text-sm text-slate-400">
-                No hay modelos cargados para este tipo de placa.
+                No hay productos cargados para este tipo de secadero.
               </p>
             )}
           </div>

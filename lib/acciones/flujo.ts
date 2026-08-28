@@ -38,7 +38,7 @@ function revalidar() {
 
 const esquemaCarga = z.object({
   secaderoId: z.number().int().positive(),
-  items: z.array(esquemaItem).min(1, "Elegí al menos un modelo."),
+  items: z.array(esquemaItem).min(1, "Elegí al menos un producto."),
   roturas: z.array(esquemaRotura).default([]),
   nota: esquemaNota,
 });
@@ -98,7 +98,7 @@ export async function cargarSecadero(
 
 const esquemaAjuste = z.object({
   secaderoId: z.number().int().positive(),
-  items: z.array(esquemaItem).min(1, "Dejá al menos un modelo con cantidad."),
+  items: z.array(esquemaItem).min(1, "Dejá al menos un producto con cantidad."),
   roturas: z.array(esquemaRotura).default([]),
   nota: esquemaNota,
 });
@@ -322,7 +322,7 @@ export async function corregirSecadero(
         fallar("Un secadero vacío no puede tener placas adentro.");
       }
       if (datos.estadoHasta !== "vacio" && items.length === 0) {
-        fallar(`Un secadero ${datos.estadoHasta} necesita al menos un modelo.`);
+        fallar(`Un secadero ${datos.estadoHasta} necesita al menos un producto.`);
       }
 
       const catalogo = await cargarCatalogo(

@@ -75,7 +75,7 @@ export function FormularioCarga({
   }
 
   async function confirmar() {
-    if (total === 0) return setError("Cargá al menos un modelo con cantidad.");
+    if (total === 0) return setError("Cargá al menos un producto con cantidad.");
     if (total > capacidad) {
       return setError(
         `El secadero admite ${capacidad} placas y estás cargando ${total}.`,
@@ -106,7 +106,7 @@ export function FormularioCarga({
     <div className="space-y-4">
       <div className="tarjeta p-4">
         <div className="mb-3 flex items-baseline justify-between">
-          <span className="etiqueta mb-0">Modelos</span>
+          <span className="etiqueta mb-0">Productos</span>
           <span
             className={`text-sm font-bold tabular-nums ${
               total > capacidad ? "text-red-600" : "text-slate-700"
@@ -128,7 +128,7 @@ export function FormularioCarga({
         {modelos.length > 8 && (
           <input
             className="campo mb-3 py-2.5"
-            placeholder="Buscar modelo…"
+            placeholder="Buscar producto…"
             value={filtro}
             onChange={(e) => setFiltro(e.target.value)}
           />
@@ -179,7 +179,7 @@ export function FormularioCarga({
           })}
           {visibles.length === 0 && (
             <p className="py-4 text-center text-sm text-slate-400">
-              Ningún modelo coincide con “{filtro}”.
+              Ningún producto coincide con “{filtro}”.
             </p>
           )}
         </div>

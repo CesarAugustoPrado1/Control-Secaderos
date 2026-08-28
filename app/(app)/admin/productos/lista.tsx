@@ -45,7 +45,7 @@ export function ListaProductos({
 
   return (
     <>
-      <BloqueNuevo etiqueta="Agregar modelo">
+      <BloqueNuevo etiqueta="Agregar producto">
         {(cerrar) => (
           <FormularioProducto
             inicial={{ nombre: "", tipoId: tipos[0].id }}
@@ -57,7 +57,8 @@ export function ListaProductos({
 
       {productos.length === 0 ? (
         <p className="tarjeta px-4 py-10 text-center text-sm text-slate-500">
-          Todavía no hay modelos de placa cargados.
+          Todavía no hay productos cargados. Agregá el primero con el botón de
+          arriba.
         </p>
       ) : (
         <ul className="space-y-2">
@@ -118,9 +119,9 @@ export function ListaProductos({
       )}
 
       <p className="mt-4 text-xs text-slate-500">
-        Los modelos no se eliminan: suspenderlos los saca de las pantallas de
+        Los productos no se eliminan: suspenderlos los saca de las pantallas de
         carga pero mantiene intacto el historial. El tipo determina en qué
-        secaderos se puede cargar cada modelo.
+        secaderos se puede cargar cada producto.
       </p>
     </>
   );
@@ -144,7 +145,7 @@ function FormularioProducto({
       accion={() => guardarProducto({ id: inicial.id, nombre, tipoId })}
     >
       <div className="grid gap-3 sm:grid-cols-2">
-        <Campo etiqueta="Nombre del modelo">
+        <Campo etiqueta="Nombre del producto">
           <input
             className="campo"
             value={nombre}

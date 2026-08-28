@@ -197,12 +197,12 @@ export default async function PaginaEstadisticas({
           </div>
 
           {/* ----------------------------- Modelos ---------------------------- */}
-          <Panel titulo="Por modelo">
+          <Panel titulo="Por producto">
             {porModelo.length === 0 ? (
               <SinDatos />
             ) : (
               <Tabla
-                encabezados={["Modelo", "Cargadas", "Terminadas", "Rotas", "% rotura"]}
+                encabezados={["Producto", "Cargadas", "Terminadas", "Rotas", "% rotura"]}
                 filas={porModelo.map((m) => [
                   m.modelo,
                   numero(m.cargadas),
