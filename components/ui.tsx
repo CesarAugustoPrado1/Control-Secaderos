@@ -1,10 +1,6 @@
 import type { ReactNode } from "react";
-import type { Estado, Tamano } from "@/lib/db/schema";
-import {
-  COLOR_ESTADO,
-  ETIQUETA_ESTADO,
-  ETIQUETA_TAMANO,
-} from "@/lib/estados";
+import type { Estado } from "@/lib/db/schema";
+import { COLOR_ESTADO, ETIQUETA_ESTADO, colorTipo } from "@/lib/estados";
 
 export function ChipEstado({ estado }: { estado: Estado }) {
   return (
@@ -14,18 +10,8 @@ export function ChipEstado({ estado }: { estado: Estado }) {
   );
 }
 
-export function ChipTamano({ tamano }: { tamano: Tamano }) {
-  return (
-    <span
-      className={`chip ${
-        tamano === "grande"
-          ? "bg-indigo-100 text-indigo-800"
-          : "bg-teal-100 text-teal-800"
-      }`}
-    >
-      {ETIQUETA_TAMANO[tamano]}
-    </span>
-  );
+export function ChipTipo({ nombre }: { nombre: string }) {
+  return <span className={`chip ${colorTipo(nombre)}`}>{nombre}</span>;
 }
 
 export function Aviso({

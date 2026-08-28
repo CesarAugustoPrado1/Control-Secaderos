@@ -2,7 +2,6 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requerirRol } from "@/lib/auth";
 import { motivosActivos, secaderoPorId } from "@/lib/consultas";
-import { ETIQUETA_TAMANO } from "@/lib/estados";
 import { duracion, minutosDesde } from "@/lib/formato";
 import { Aviso } from "@/components/ui";
 import { FormularioDescarga } from "./formulario";
@@ -12,7 +11,7 @@ export default async function PaginaDescargar({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requerirRol("paletizado", "admin");
+  await requerirRol("paletizado", "llenado_manual", "admin");
   const { id } = await params;
 
   const secadero = await secaderoPorId(Number(id));
@@ -34,7 +33,7 @@ export default async function PaginaDescargar({
           Descargar secadero {secadero.numero}
         </h1>
         <p className="text-sm text-slate-500">
-          Placa {ETIQUETA_TAMANO[secadero.tamano].toLowerCase()} · seco hace{" "}
+          {secadero.tipoNombre} · seco hace{" "}
           {duracion(minutosDesde(secadero.estadoDesde))}
         </p>
       </div>

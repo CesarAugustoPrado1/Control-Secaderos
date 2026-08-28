@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { SecaderoVista } from "@/lib/consultas";
-import { COLOR_ESTADO, ETIQUETA_TAMANO } from "@/lib/estados";
+import { COLOR_ESTADO } from "@/lib/estados";
 import { duracion, minutosDesde, numero } from "@/lib/formato";
 
 /** Tarjeta tactil de un secadero. Si recibe `href` es un link; si no, un div. */
@@ -29,7 +29,7 @@ export function TarjetaSecadero({
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <span className="text-sm font-semibold text-slate-800">
-              {ETIQUETA_TAMANO[secadero.tamano]}
+              {secadero.tipoNombre}
             </span>
             {secadero.total > 0 && (
               <span className="text-sm font-bold tabular-nums text-slate-900">

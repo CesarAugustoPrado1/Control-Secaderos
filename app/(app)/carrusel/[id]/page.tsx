@@ -1,14 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requerirRol } from "@/lib/auth";
-import { capacidadDe } from "@/lib/configuracion";
-import {
-  leerConfig,
-  motivosActivos,
-  productosActivos,
-  secaderoPorId,
-} from "@/lib/consultas";
-import { ETIQUETA_TAMANO } from "@/lib/estados";
+import { motivosActivos, productosActivos, secaderoPorId } from "@/lib/consultas";
 import { Aviso } from "@/components/ui";
 import { FormularioCarga } from "./formulario";
 
@@ -17,19 +10,16 @@ export default async function PaginaCargar({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requerirRol("carrusel", "admin");
+  await requerirRol("carrusel", "llenado_manual", "admin");
   const { id } = await params;
 
   const secadero = await secaderoPorId(Number(id));
   if (!secadero) notFound();
 
-  const [cfg, modelos, motivos] = await Promise.all([
-    leerConfig(),
-    productosActivos(secadero.tamano),
+  const [modelos, motivos] = await Promise.all([
+    productosActivos(secadero.tipoId),
     motivosActivos(),
   ]);
-
-  const capacidad = capacidadDe(cfg, secadero.tamano);
 
   return (
     <div className="mx-auto max-w-lg">
@@ -45,8 +35,7 @@ export default async function PaginaCargar({
           Cargar secadero {secadero.numero}
         </h1>
         <p className="text-sm text-slate-500">
-          Placa {ETIQUETA_TAMANO[secadero.tamano].toLowerCase()} · hasta{" "}
-          {capacidad} placas
+          {secadero.tipoNombre} · hasta {secadero.capacidad} placas
         </p>
       </div>
 
@@ -57,14 +46,14 @@ export default async function PaginaCargar({
         </Aviso>
       ) : modelos.length === 0 ? (
         <Aviso tono="info">
-          No hay modelos de placa {ETIQUETA_TAMANO[secadero.tamano].toLowerCase()}{" "}
-          habilitados. Pedile al administrador que cargue alguno.
+          No hay modelos habilitados para el tipo {secadero.tipoNombre}. Pedile
+          al administrador que cargue alguno.
         </Aviso>
       ) : (
         <FormularioCarga
           secaderoId={secadero.id}
           secaderoNumero={secadero.numero}
-          capacidad={capacidad}
+          capacidad={secadero.capacidad}
           modelos={modelos.map((m) => ({ id: m.id, nombre: m.nombre }))}
           motivos={motivos.map((m) => ({ id: m.id, nombre: m.nombre }))}
         />

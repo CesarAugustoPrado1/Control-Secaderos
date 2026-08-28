@@ -47,7 +47,10 @@ export async function cargarSecadero(
   entrada: z.input<typeof esquemaCarga>,
 ): Promise<Resultado> {
   return ejecutar(async () => {
-    const sesion = await autorizar("carrusel", "admin");
+    // Carrusel y llenado manual cargan cualquier tipo de secadero: quien lo
+    // hizo queda registrado en el movimiento, que es lo que despues permite
+    // separar los sectores en las estadisticas.
+    const sesion = await autorizar("carrusel", "llenado_manual", "admin");
     const datos = esquemaCarga.parse(entrada);
     const cfg = await leerConfig();
 
@@ -66,7 +69,7 @@ export async function cargarSecadero(
         [...new Set(datos.roturas.map((r) => r.motivoId))],
       );
 
-      validarCarga(secadero, datos.items, catalogo, cfg, { exigirActivos: true });
+      validarCarga(secadero, datos.items, catalogo, { exigirActivos: true });
 
       // Las placas que se rompen al cargar nunca llegaron a entrar al secadero:
       // se registran como desperdicio pero no ocupan capacidad.
@@ -104,7 +107,13 @@ export async function ajustarContenido(
   entrada: z.input<typeof esquemaAjuste>,
 ): Promise<Resultado> {
   return ejecutar(async () => {
-    const sesion = await autorizar("carrusel", "horno", "paletizado", "admin");
+    const sesion = await autorizar(
+      "carrusel",
+      "llenado_manual",
+      "horno",
+      "paletizado",
+      "admin",
+    );
     const datos = esquemaAjuste.parse(entrada);
     const cfg = await leerConfig();
 
@@ -130,7 +139,7 @@ export async function ajustarContenido(
 
       // En un ajuste se permiten modelos suspendidos: puede ser justamente una
       // correccion sobre una carga hecha antes de suspenderlos.
-      validarCarga(secadero, datos.items, catalogo, cfg, { exigirActivos: false });
+      validarCarga(secadero, datos.items, catalogo, { exigirActivos: false });
 
       const cantidades = new Map(
         datos.items.filter((i) => i.cantidad > 0).map((i) => [i.productoId, i.cantidad]),
@@ -253,7 +262,9 @@ export async function descargarSecadero(
   entrada: z.input<typeof esquemaDescarga>,
 ): Promise<Resultado> {
   return ejecutar(async () => {
-    const sesion = await autorizar("paletizado", "admin");
+    // Las guardas y especiales las puede descargar tanto paletizado como el
+    // sector de llenado manual, sin restriccion por tipo de secadero.
+    const sesion = await autorizar("paletizado", "llenado_manual", "admin");
     const datos = esquemaDescarga.parse(entrada);
 
     await db.transaction(async (tx) => {
@@ -320,7 +331,7 @@ export async function corregirSecadero(
         [],
       );
       if (items.length) {
-        validarCarga(secadero, items, catalogo, cfg, { exigirActivos: false });
+        validarCarga(secadero, items, catalogo, { exigirActivos: false });
       }
 
       const cantidades = new Map(items.map((i) => [i.productoId, i.cantidad]));

@@ -1,8 +1,8 @@
 /**
  * Carga inicial de la base.
  *
- *   npm run db:seed                  -> admin, motivos, parametros y datos de ejemplo
- *   npm run db:seed -- --sin-ejemplos -> solo lo imprescindible
+ *   npm run db:seed                    -> admin, tipos, motivos y datos de ejemplo
+ *   npm run db:seed -- --sin-ejemplos  -> solo lo imprescindible
  *
  * Es idempotente: se puede correr varias veces sin duplicar nada.
  */
@@ -16,15 +16,26 @@ import {
   motivosDesperdicio,
   productos,
   secaderos,
+  tipos,
   usuarios,
   type Rol,
 } from "../lib/db/schema";
 import { CONFIG_POR_DEFECTO } from "../lib/configuracion";
 
-// El seed corre fuera de Next, que es quien normalmente lee .env.local.
 cargarEnv({ path: [".env.local", ".env"], quiet: true });
 
 const conEjemplos = !process.argv.includes("--sin-ejemplos");
+
+/**
+ * Los cuatro tipos que hay hoy en la planta. Son un punto de partida: el admin
+ * los renombra, les cambia la capacidad o agrega otros desde el panel.
+ */
+const TIPOS = [
+  { nombre: "Grande", capacidad: 102, orden: 10 },
+  { nombre: "Chico", capacidad: 204, orden: 20 },
+  { nombre: "Guarda", capacidad: 50, orden: 30 },
+  { nombre: "Especial", capacidad: 50, orden: 40 },
+];
 
 const MOTIVOS = [
   "Rotura en manipuleo",
@@ -36,21 +47,23 @@ const MOTIVOS = [
 
 const USUARIOS_EJEMPLO: { usuario: string; nombre: string; rol: Rol }[] = [
   { usuario: "carrusel", nombre: "Operario Carrusel", rol: "carrusel" },
+  { usuario: "llenado", nombre: "Operario Llenado Manual", rol: "llenado_manual" },
   { usuario: "horno", nombre: "Operario Horno", rol: "horno" },
   { usuario: "paletizado", nombre: "Operario Paletizado", rol: "paletizado" },
   { usuario: "auditor", nombre: "Auditoría", rol: "auditor" },
 ];
 
-const PRODUCTOS_EJEMPLO = [
-  { nombre: "Standard 12,5 mm", tamano: "grande" as const },
-  { nombre: "Resistente a la humedad 12,5 mm", tamano: "grande" as const },
-  { nombre: "Standard 9,5 mm", tamano: "chico" as const },
-  { nombre: "Resistente al fuego 12,5 mm", tamano: "chico" as const },
+const PRODUCTOS_EJEMPLO: { nombre: string; tipo: string }[] = [
+  { nombre: "Standard 12,5 mm", tipo: "Grande" },
+  { nombre: "Resistente a la humedad 12,5 mm", tipo: "Grande" },
+  { nombre: "Standard 9,5 mm", tipo: "Chico" },
+  { nombre: "Resistente al fuego 12,5 mm", tipo: "Chico" },
+  { nombre: "Guarda estándar", tipo: "Guarda" },
 ];
 
 async function main() {
-  const url = process.env.DIRECT_URL ?? process.env.DATABASE_URL;
-  if (!url) throw new Error("Falta DATABASE_URL (o DIRECT_URL) en el entorno.");
+  const url = process.env.DATABASE_URL;
+  if (!url) throw new Error("Falta DATABASE_URL en el entorno.");
 
   const client = postgres(url, { prepare: false, max: 1 });
   const db = drizzle(client);
@@ -61,6 +74,22 @@ async function main() {
       .insert(config)
       .values({ clave, valor: String(valor) })
       .onConflictDoNothing();
+  }
+
+  console.log("→ Tipos de secadero");
+  const idsTipo = new Map<string, number>();
+  for (const t of TIPOS) {
+    const [existe] = await db
+      .select({ id: tipos.id })
+      .from(tipos)
+      .where(eq(tipos.nombre, t.nombre))
+      .limit(1);
+    if (existe) {
+      idsTipo.set(t.nombre, existe.id);
+    } else {
+      const [creado] = await db.insert(tipos).values(t).returning({ id: tipos.id });
+      idsTipo.set(t.nombre, creado.id);
+    }
   }
 
   console.log("→ Motivos de desperdicio");
@@ -117,21 +146,33 @@ async function main() {
         .from(productos)
         .where(eq(productos.nombre, p.nombre))
         .limit(1);
-      if (existe.length === 0) await db.insert(productos).values(p);
+      if (existe.length === 0) {
+        await db
+          .insert(productos)
+          .values({ nombre: p.nombre, tipoId: idsTipo.get(p.tipo)! });
+      }
     }
 
-    // 6 secaderos de muestra: 1 a 4 grandes, 5 y 6 chicos.
-    for (let numero = 1; numero <= 6; numero++) {
+    // Unos pocos secaderos de muestra. Los reales se cargan por rango desde
+    // Administracion, que es lo practico cuando son 250.
+    const muestra = [
+      { numero: 1, tipo: "Grande" },
+      { numero: 2, tipo: "Grande" },
+      { numero: 3, tipo: "Chico" },
+      { numero: 4, tipo: "Chico" },
+      { numero: 5, tipo: "Guarda" },
+      { numero: 6, tipo: "Especial" },
+    ];
+    for (const s of muestra) {
       const existe = await db
         .select({ id: secaderos.id })
         .from(secaderos)
-        .where(eq(secaderos.numero, numero))
+        .where(eq(secaderos.numero, s.numero))
         .limit(1);
       if (existe.length === 0) {
-        await db.insert(secaderos).values({
-          numero,
-          tamano: numero <= 4 ? "grande" : "chico",
-        });
+        await db
+          .insert(secaderos)
+          .values({ numero: s.numero, tipoId: idsTipo.get(s.tipo)! });
       }
     }
 

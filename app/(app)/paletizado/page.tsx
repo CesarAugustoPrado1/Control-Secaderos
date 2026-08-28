@@ -1,14 +1,17 @@
 import { requerirRol } from "@/lib/auth";
 import { secaderosConContenido } from "@/lib/consultas";
 import { numero } from "@/lib/formato";
-import { TarjetaSecadero } from "@/components/tarjeta-secadero";
-import { Titulo, Vacio } from "@/components/ui";
+import { ListaSecaderos } from "@/components/lista-secaderos";
+import { Titulo } from "@/components/ui";
 
-export const metadata = { title: "Paletizado · Secaderos" };
+export const metadata = { title: "Descargar · Secaderos" };
+export const dynamic = "force-dynamic";
 
 export default async function PaginaPaletizado() {
-  await requerirRol("paletizado", "admin");
+  await requerirRol("paletizado", "llenado_manual", "admin");
 
+  // Los mas viejos primero: si el operario no busca por numero, el orden ya le
+  // sugiere cual conviene sacar.
   const secos = (await secaderosConContenido(["seco"])).sort(
     (a, b) => a.estadoDesde.getTime() - b.estadoDesde.getTime(),
   );
@@ -17,32 +20,24 @@ export default async function PaginaPaletizado() {
 
   return (
     <>
-      <Titulo detalle="Elegí un secadero seco para descargarlo">
-        Paletizado
+      <Titulo
+        detalle={
+          secos.length
+            ? `${numero(totalPlacas)} placas esperando · los más viejos primero`
+            : undefined
+        }
+      >
+        Descargar
       </Titulo>
 
-      {secos.length === 0 ? (
-        <Vacio
-          titulo="No hay secaderos secos"
-          detalle="Cuando horno saque alguno, va a aparecer acá."
-        />
-      ) : (
-        <>
-          <p className="mb-3 text-sm text-slate-500">
-            {secos.length} {secos.length === 1 ? "secadero" : "secaderos"} ·{" "}
-            {numero(totalPlacas)} placas esperando
-          </p>
-          <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
-            {secos.map((secadero) => (
-              <TarjetaSecadero
-                key={secadero.id}
-                secadero={secadero}
-                href={`/paletizado/${secadero.id}`}
-              />
-            ))}
-          </div>
-        </>
-      )}
+      <ListaSecaderos
+        secaderos={secos}
+        hrefBase="/paletizado"
+        vacio={{
+          titulo: "No hay secaderos secos",
+          detalle: "Cuando horno saque alguno, va a aparecer acá.",
+        }}
+      />
     </>
   );
 }

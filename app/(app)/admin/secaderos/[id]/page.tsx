@@ -1,9 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { capacidadDe } from "@/lib/configuracion";
 import {
   historialDeSecadero,
-  leerConfig,
   secaderoPorId,
   todosLosProductos,
 } from "@/lib/consultas";
@@ -11,7 +9,6 @@ import {
   COLOR_MOVIMIENTO,
   ETIQUETA_ESTADO,
   ETIQUETA_MOVIMIENTO,
-  ETIQUETA_TAMANO,
 } from "@/lib/estados";
 import { duracion, fechaHora, numero } from "@/lib/formato";
 import { ChipEstado } from "@/components/ui";
@@ -28,13 +25,12 @@ export default async function PaginaCorregir({
   const secadero = await secaderoPorId(Number(id));
   if (!secadero) notFound();
 
-  const [cfg, productos, historial] = await Promise.all([
-    leerConfig(),
+  const [productos, historial] = await Promise.all([
     todosLosProductos(),
     historialDeSecadero(secadero.id, 15),
   ]);
 
-  const delTamano = productos.filter((p) => p.tamano === secadero.tamano);
+  const delTipo = productos.filter((p) => p.tipoId === secadero.tipoId);
 
   return (
     <div className="space-y-6">
@@ -52,8 +48,7 @@ export default async function PaginaCorregir({
           </h2>
           <ChipEstado estado={secadero.estado} />
           <span className="text-sm text-slate-500">
-            {ETIQUETA_TAMANO[secadero.tamano]} · hasta{" "}
-            {capacidadDe(cfg, secadero.tamano)} placas
+            {secadero.tipoNombre} · hasta {secadero.capacidad} placas
           </span>
         </div>
       </div>
@@ -67,9 +62,9 @@ export default async function PaginaCorregir({
       <FormularioCorreccion
         secaderoId={secadero.id}
         estadoActual={secadero.estado}
-        capacidad={capacidadDe(cfg, secadero.tamano)}
+        capacidad={secadero.capacidad}
         contenidoActual={secadero.contenido}
-        modelos={delTamano.map((p) => ({
+        modelos={delTipo.map((p) => ({
           id: p.id,
           nombre: p.nombre,
           activo: p.activo,

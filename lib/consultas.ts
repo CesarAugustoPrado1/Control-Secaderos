@@ -14,9 +14,9 @@ import {
   productos,
   secaderoContenido,
   secaderos,
+  tipos,
   usuarios,
   type Estado,
-  type Tamano,
 } from "./db/schema";
 
 /**
@@ -44,7 +44,9 @@ export type LineaContenido = {
 export type SecaderoVista = {
   id: number;
   numero: number;
-  tamano: Tamano;
+  tipoId: number;
+  tipoNombre: string;
+  capacidad: number;
   estado: Estado;
   activo: boolean;
   estadoDesde: Date;
@@ -64,8 +66,18 @@ export async function secaderosConContenido(
   if (estados?.length) filtros.push(inArray(secaderos.estado, estados));
 
   const filas = await db
-    .select()
+    .select({
+      id: secaderos.id,
+      numero: secaderos.numero,
+      tipoId: secaderos.tipoId,
+      tipoNombre: tipos.nombre,
+      capacidad: tipos.capacidad,
+      estado: secaderos.estado,
+      activo: secaderos.activo,
+      estadoDesde: secaderos.estadoDesde,
+    })
     .from(secaderos)
+    .innerJoin(tipos, eq(tipos.id, secaderos.tipoId))
     .where(and(...filtros))
     .orderBy(asc(secaderos.numero));
 
@@ -102,12 +114,7 @@ export async function secaderosConContenido(
   return filas.map((f) => {
     const contenido = porSecadero.get(f.id) ?? [];
     return {
-      id: f.id,
-      numero: f.numero,
-      tamano: f.tamano,
-      estado: f.estado,
-      activo: f.activo,
-      estadoDesde: f.estadoDesde,
+      ...f,
       contenido,
       total: contenido.reduce((a, c) => a + c.cantidad, 0),
     };
@@ -116,8 +123,18 @@ export async function secaderosConContenido(
 
 export async function secaderoPorId(id: number): Promise<SecaderoVista | null> {
   const [fila] = await db
-    .select()
+    .select({
+      id: secaderos.id,
+      numero: secaderos.numero,
+      tipoId: secaderos.tipoId,
+      tipoNombre: tipos.nombre,
+      capacidad: tipos.capacidad,
+      estado: secaderos.estado,
+      activo: secaderos.activo,
+      estadoDesde: secaderos.estadoDesde,
+    })
     .from(secaderos)
+    .innerJoin(tipos, eq(tipos.id, secaderos.tipoId))
     .where(eq(secaderos.id, id))
     .limit(1);
   if (!fila) return null;
@@ -134,20 +151,15 @@ export async function secaderoPorId(id: number): Promise<SecaderoVista | null> {
     .orderBy(asc(productos.nombre));
 
   return {
-    id: fila.id,
-    numero: fila.numero,
-    tamano: fila.tamano,
-    estado: fila.estado,
-    activo: fila.activo,
-    estadoDesde: fila.estadoDesde,
+    ...fila,
     contenido,
     total: contenido.reduce((a, c) => a + c.cantidad, 0),
   };
 }
 
-export async function productosActivos(tamano?: Tamano) {
+export async function productosActivos(tipoId?: number) {
   const filtros = [eq(productos.activo, true)];
-  if (tamano) filtros.push(eq(productos.tamano, tamano));
+  if (tipoId) filtros.push(eq(productos.tipoId, tipoId));
   return db
     .select()
     .from(productos)
@@ -157,9 +169,49 @@ export async function productosActivos(tamano?: Tamano) {
 
 export async function todosLosProductos() {
   return db
-    .select()
+    .select({
+      id: productos.id,
+      nombre: productos.nombre,
+      tipoId: productos.tipoId,
+      tipoNombre: tipos.nombre,
+      activo: productos.activo,
+    })
     .from(productos)
-    .orderBy(asc(productos.tamano), asc(productos.nombre));
+    .innerJoin(tipos, eq(tipos.id, productos.tipoId))
+    .orderBy(asc(tipos.orden), asc(tipos.nombre), asc(productos.nombre));
+}
+
+export async function tiposActivos() {
+  return db
+    .select()
+    .from(tipos)
+    .where(eq(tipos.activo, true))
+    .orderBy(asc(tipos.orden), asc(tipos.nombre));
+}
+
+export async function todosLosTipos() {
+  return db.select().from(tipos).orderBy(asc(tipos.orden), asc(tipos.nombre));
+}
+
+/** Cuantos secaderos y modelos usa cada tipo, para avisar antes de desactivarlo. */
+export async function usoDeTipos() {
+  const [porSecadero, porProducto] = await Promise.all([
+    db
+      .select({ tipoId: secaderos.tipoId, n: sql<number>`count(*)::int` })
+      .from(secaderos)
+      .groupBy(secaderos.tipoId),
+    db
+      .select({ tipoId: productos.tipoId, n: sql<number>`count(*)::int` })
+      .from(productos)
+      .groupBy(productos.tipoId),
+  ]);
+
+  const uso = new Map<number, { secaderos: number; productos: number }>();
+  const asegurar = (id: number) =>
+    uso.get(id) ?? uso.set(id, { secaderos: 0, productos: 0 }).get(id)!;
+  for (const f of porSecadero) asegurar(f.tipoId).secaderos = f.n;
+  for (const f of porProducto) asegurar(f.tipoId).productos = f.n;
+  return uso;
 }
 
 export async function motivosActivos() {
@@ -178,7 +230,19 @@ export async function todosLosMotivos() {
 }
 
 export async function todosLosSecaderos() {
-  return db.select().from(secaderos).orderBy(asc(secaderos.numero));
+  return db
+    .select({
+      id: secaderos.id,
+      numero: secaderos.numero,
+      tipoId: secaderos.tipoId,
+      tipoNombre: tipos.nombre,
+      capacidad: tipos.capacidad,
+      estado: secaderos.estado,
+      activo: secaderos.activo,
+    })
+    .from(secaderos)
+    .innerJoin(tipos, eq(tipos.id, secaderos.tipoId))
+    .orderBy(asc(secaderos.numero));
 }
 
 export async function todosLosUsuarios() {

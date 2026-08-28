@@ -7,16 +7,22 @@ import {
   productos,
   secaderoContenido,
   secaderos,
+  tipos,
   type Estado,
   type Secadero,
   type TipoMovimiento,
 } from "../db/schema";
-import { capacidadDe, type Configuracion } from "../configuracion";
 import { ETIQUETA_ESTADO } from "../estados";
 import type { Sesion } from "../session";
 import { fallar, type Item, type Rotura } from "./comun";
 
 export { ETIQUETA_ESTADO };
+
+/** Secadero con los datos de su tipo resueltos, que es como lo usa el motor. */
+export type SecaderoConTipo = Secadero & {
+  tipoNombre: string;
+  capacidad: number;
+};
 
 /** Transaccion de Drizzle. Todo el motor trabaja adentro de una. */
 type Tx = Parameters<
@@ -35,18 +41,28 @@ type Tx = Parameters<
 export async function bloquearSecaderos(
   tx: Tx,
   ids: number[],
-): Promise<Secadero[]> {
+): Promise<SecaderoConTipo[]> {
   if (ids.length === 0) fallar("No seleccionaste ningún secadero.");
+  // El bloqueo va sobre `secaderos`; el join con `tipos` es solo de lectura.
   const filas = await tx
-    .select()
+    .select({
+      secadero: secaderos,
+      tipoNombre: tipos.nombre,
+      capacidad: tipos.capacidad,
+    })
     .from(secaderos)
+    .innerJoin(tipos, eq(tipos.id, secaderos.tipoId))
     .where(inArray(secaderos.id, ids))
-    .for("update");
+    .for("update", { of: secaderos });
 
   if (filas.length !== ids.length) {
     fallar("Alguno de los secaderos ya no existe. Actualizá la pantalla.");
   }
-  return filas;
+  return filas.map((f) => ({
+    ...f.secadero,
+    tipoNombre: f.tipoNombre,
+    capacidad: f.capacidad,
+  }));
 }
 
 export function exigirEstado(secadero: Secadero, esperado: Estado) {
@@ -77,7 +93,10 @@ export async function contenidoActual(
 /* -------------------------------------------------------------------------- */
 
 export type Catalogo = {
-  productos: Map<number, { id: number; nombre: string; tamano: string; activo: boolean }>;
+  productos: Map<
+    number,
+    { id: number; nombre: string; tipoId: number; tipoNombre: string; activo: boolean }
+  >;
   motivos: Map<number, { id: number; nombre: string; activo: boolean }>;
 };
 
@@ -87,7 +106,17 @@ export async function cargarCatalogo(
   motivoIds: number[],
 ): Promise<Catalogo> {
   const prods = productoIds.length
-    ? await tx.select().from(productos).where(inArray(productos.id, productoIds))
+    ? await tx
+        .select({
+          id: productos.id,
+          nombre: productos.nombre,
+          tipoId: productos.tipoId,
+          tipoNombre: tipos.nombre,
+          activo: productos.activo,
+        })
+        .from(productos)
+        .innerJoin(tipos, eq(tipos.id, productos.tipoId))
+        .where(inArray(productos.id, productoIds))
     : [];
   const mots = motivoIds.length
     ? await tx
@@ -115,14 +144,13 @@ export async function cargarCatalogo(
 /* -------------------------------------------------------------------------- */
 
 /**
- * Un secadero grande solo lleva placas grandes y uno chico solo chicas, y el
- * total no puede pasar la capacidad de su tipo.
+ * Un secadero solo lleva modelos de su mismo tipo, y el total no puede pasar
+ * la capacidad que ese tipo tiene definida.
  */
 export function validarCarga(
-  secadero: Secadero,
+  secadero: SecaderoConTipo,
   items: Item[],
   catalogo: Catalogo,
-  cfg: Configuracion,
   { exigirActivos }: { exigirActivos: boolean },
 ) {
   const conCantidad = items.filter((i) => i.cantidad > 0);
@@ -138,9 +166,9 @@ export function validarCarga(
     vistos.add(item.productoId);
 
     const producto = catalogo.productos.get(item.productoId)!;
-    if (producto.tamano !== secadero.tamano) {
+    if (producto.tipoId !== secadero.tipoId) {
       fallar(
-        `"${producto.nombre}" es de placa ${producto.tamano} y el secadero ${secadero.numero} es ${secadero.tamano}.`,
+        `"${producto.nombre}" es de tipo ${producto.tipoNombre} y el secadero ${secadero.numero} es ${secadero.tipoNombre}.`,
       );
     }
     if (exigirActivos && !producto.activo) {
@@ -148,11 +176,10 @@ export function validarCarga(
     }
   }
 
-  const capacidad = capacidadDe(cfg, secadero.tamano);
   const total = conCantidad.reduce((a, i) => a + i.cantidad, 0);
-  if (total > capacidad) {
+  if (total > secadero.capacidad) {
     fallar(
-      `El secadero ${secadero.numero} (${secadero.tamano}) admite hasta ${capacidad} placas y estás cargando ${total}.`,
+      `El secadero ${secadero.numero} (${secadero.tipoNombre}) admite hasta ${secadero.capacidad} placas y estás cargando ${total}.`,
     );
   }
 }
@@ -194,7 +221,7 @@ export function validarRoturasContraContenido(
 /* -------------------------------------------------------------------------- */
 
 export type Movida = {
-  secadero: Secadero;
+  secadero: SecaderoConTipo;
   tipo: TipoMovimiento;
   estadoHasta: Estado;
   /** Placas que quedan en circuito por modelo. En una descarga, lo que va a PT. */
@@ -240,7 +267,8 @@ export async function aplicarMovida(
     .values({
       secaderoId: secadero.id,
       secaderoNumero: secadero.numero,
-      secaderoTamano: secadero.tamano,
+      secaderoTipoId: secadero.tipoId,
+      secaderoTipoNombre: secadero.tipoNombre,
       tipo,
       estadoDesde: secadero.estado,
       estadoHasta,

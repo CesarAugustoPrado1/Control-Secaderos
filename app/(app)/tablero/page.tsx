@@ -3,9 +3,10 @@ import { requerirSesion } from "@/lib/auth";
 import { leerConfig, secaderosConContenido } from "@/lib/consultas";
 import type { Estado } from "@/lib/db/schema";
 import { COLOR_ESTADO, ORDEN_ESTADOS, TITULO_ESTADO } from "@/lib/estados";
-import { duracion, minutosDesde, numero } from "@/lib/formato";
+import { numero } from "@/lib/formato";
 import { rutaInicial } from "@/lib/permisos";
 import { Titulo, Vacio } from "@/components/ui";
+import { BuscadorTablero } from "./buscador";
 
 export const metadata = { title: "Tablero · Secaderos" };
 
@@ -19,14 +20,18 @@ export default async function PaginaTablero() {
     leerConfig(),
   ]);
 
-  const porEstado = Object.fromEntries(
-    ORDEN_ESTADOS.map((estado) => [
-      estado,
-      secaderos
-        .filter((s) => s.estado === estado)
-        .sort((a, b) => a.estadoDesde.getTime() - b.estadoDesde.getTime()),
-    ]),
-  ) as Record<Estado, typeof secaderos>;
+  const conteo = { vacio: 0, humedo: 0, horno: 0, seco: 0 } as Record<
+    Estado,
+    number
+  >;
+  const placas = { vacio: 0, humedo: 0, horno: 0, seco: 0 } as Record<
+    Estado,
+    number
+  >;
+  for (const s of secaderos) {
+    conteo[s.estado]++;
+    placas[s.estado] += s.total;
+  }
 
   const placasEnCircuito = secaderos.reduce((a, s) => a + s.total, 0);
 
@@ -51,69 +56,39 @@ export default async function PaginaTablero() {
           detalle="Un administrador tiene que darlos de alta desde Administración."
         />
       ) : (
-        <div className="grid gap-4 lg:grid-cols-4">
-          {ORDEN_ESTADOS.map((estado) => {
-            const lista = porEstado[estado];
-            const color = COLOR_ESTADO[estado];
-            return (
-              <section key={estado}>
-                <div className="mb-2 flex items-center justify-between">
+        <div className="space-y-6">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            {ORDEN_ESTADOS.map((estado) => {
+              const color = COLOR_ESTADO[estado];
+              return (
+                <div key={estado} className={`tarjeta p-4 ${color.borde}`}>
                   <div className="flex items-center gap-2">
                     <span className={`h-2.5 w-2.5 rounded-full ${color.punto}`} />
-                    <h2 className="text-sm font-bold text-slate-800">
+                    <span className="text-xs font-semibold tracking-wide text-slate-500 uppercase">
                       {TITULO_ESTADO[estado]}
-                    </h2>
+                    </span>
                   </div>
-                  <span className="text-sm font-bold tabular-nums text-slate-500">
-                    {lista.length}
+                  <p className="mt-2 text-4xl font-bold tabular-nums text-slate-900">
+                    {conteo[estado]}
                     {estado === "horno" && (
-                      <span className="font-medium text-slate-400">
+                      <span className="text-xl font-medium text-slate-400">
                         /{cfg.capacidad_horno}
                       </span>
                     )}
-                  </span>
+                  </p>
+                  <p className="mt-0.5 text-xs text-slate-500">
+                    {placas[estado] > 0
+                      ? `${numero(placas[estado])} placas`
+                      : "sin placas"}
+                  </p>
                 </div>
+              );
+            })}
+          </div>
 
-                <div className={`space-y-2 rounded-2xl p-2 ${color.fondo}`}>
-                  {lista.length === 0 ? (
-                    <p className="py-6 text-center text-xs text-slate-400">
-                      Ninguno
-                    </p>
-                  ) : (
-                    lista.map((s) => (
-                      <div
-                        key={s.id}
-                        className="rounded-xl bg-white p-2.5 shadow-sm"
-                      >
-                        <div className="flex items-center gap-2">
-                          <span
-                            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-sm font-bold tabular-nums ${color.chip}`}
-                          >
-                            {s.numero}
-                          </span>
-                          <div className="min-w-0 flex-1">
-                            <p className="text-xs font-semibold text-slate-700">
-                              {s.total > 0
-                                ? `${numero(s.total)} placas`
-                                : s.tamano}
-                            </p>
-                            <p className="text-[11px] text-slate-400">
-                              hace {duracion(minutosDesde(s.estadoDesde))}
-                            </p>
-                          </div>
-                        </div>
-                        {s.contenido.length > 0 && (
-                          <p className="mt-1.5 truncate text-[11px] text-slate-500">
-                            {s.contenido.map((c) => c.nombre).join(", ")}
-                          </p>
-                        )}
-                      </div>
-                    ))
-                  )}
-                </div>
-              </section>
-            );
-          })}
+          {/* Con ~250 secaderos, listarlos todos no sirve: se consulta el que
+              interesa. El buscador reemplaza al scroll infinito. */}
+          <BuscadorTablero secaderos={secaderos} />
         </div>
       )}
     </>

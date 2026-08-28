@@ -7,12 +7,12 @@ import {
   produccionDiaria,
   rangoDeDias,
   resumenPorModelo,
-  tiempoDeHornoPorTamano,
+  tiempoDeHornoPorTipo,
   tiemposPorEtapa,
   totales,
   ultimosCiclosDeHorno,
 } from "@/lib/estadisticas";
-import { ETIQUETA_MOVIMIENTO, ETIQUETA_TAMANO } from "@/lib/estados";
+import { ETIQUETA_MOVIMIENTO } from "@/lib/estados";
 import { duracion, fechaHora, numero, porcentaje } from "@/lib/formato";
 import { Titulo, Vacio } from "@/components/ui";
 
@@ -50,7 +50,7 @@ export default async function PaginaEstadisticas({
   ] = await Promise.all([
     totales(rango),
     tiemposPorEtapa(rango),
-    tiempoDeHornoPorTamano(rango),
+    tiempoDeHornoPorTipo(rango),
     ultimosCiclosDeHorno(rango),
     desperdicioPorMotivo(rango),
     desperdicioPorEtapa(rango),
@@ -124,14 +124,14 @@ export default async function PaginaEstadisticas({
 
           {/* ----------------------------- Tiempos ---------------------------- */}
           <div className="grid gap-4 lg:grid-cols-2">
-            <Panel titulo="Tiempo de horno por tipo de placa">
+            <Panel titulo="Tiempo de horno por tipo de secadero">
               {horno.length === 0 ? (
                 <SinDatos />
               ) : (
                 <Tabla
                   encabezados={["Tipo", "Ciclos", "Promedio", "Mínimo", "Máximo"]}
                   filas={horno.map((h) => [
-                    ETIQUETA_TAMANO[h.tamano as "grande" | "chico"],
+                    h.tipo,
                     numero(h.ciclos),
                     duracion(h.promedioMin),
                     duracion(h.minimoMin),
@@ -242,7 +242,7 @@ export default async function PaginaEstadisticas({
                 filas={ciclos.map((c) => [
                   fechaHora(c.creadoEn),
                   String(c.secaderoNumero),
-                  ETIQUETA_TAMANO[c.tamano],
+                  c.tipo,
                   duracion(c.duracionMin),
                   c.usuarioNombre,
                 ])}

@@ -13,16 +13,23 @@ administración y auditoría miren todo desde la PC.
 
 | Estado | Quién lo mueve | Qué pasa |
 | --- | --- | --- |
-| **Vacío** | Carrusel | Elige un secadero vacío, le carga uno o varios modelos con sus cantidades. Pasa a **húmedo**. |
+| **Vacío** | Carrusel o llenado manual | Elige un secadero vacío, le carga uno o varios modelos con sus cantidades. Pasa a **húmedo**. |
 | **Húmedo** | Horno | Selecciona los secaderos que entran al horno (respetando su capacidad). Pasan a **horno**. |
 | **Horno** | Horno | Saca los secaderos —normalmente todos, pero puede dejar adentro el que no secó—. Pasan a **seco**. |
-| **Seco** | Paletizado | Descarga las placas: las sanas van a producto terminado, las rotas a desperdicio. Vuelve a **vacío**. |
+| **Seco** | Paletizado o llenado manual | Descarga las placas: las sanas van a producto terminado, las rotas a desperdicio. Vuelve a **vacío**. |
+
+Todos los tipos de secadero recorren el mismo circuito. **No se restringe por
+tipo quién carga o descarga qué**: en la planta las guardas las puede sacar
+quien las cargó o cualquier otra persona, así que lo que el sistema garantiza
+no es una ruta rígida sino que cada movimiento quede atribuido a quien lo hizo.
+Con eso las estadísticas se pueden abrir por persona y por tipo.
 
 Reglas que el sistema hace cumplir:
 
-- Un secadero **grande** solo lleva modelos de placa grande (hasta 102 por
-  defecto); uno **chico**, solo modelos chicos (hasta 204). Ambos límites son
-  configurables.
+- Cada secadero es de un **tipo** (grande, chico, guarda, especial… los que
+  hagan falta) y solo lleva modelos de ese mismo tipo, hasta la capacidad en
+  placas que el tipo tenga definida. Los tipos se administran desde el panel:
+  agregar uno nuevo no requiere tocar código ni desplegar.
 - En el horno entran 15 secaderos por defecto, también configurable.
 - En **cada** cambio de estado se pueden registrar placas rotas con su motivo.
   El desperdicio se descuenta del contenido y queda asentado en el movimiento.
@@ -34,12 +41,19 @@ Reglas que el sistema hace cumplir:
 
 ## Roles
 
-- **admin** — todo: ABM de secaderos, modelos, usuarios, motivos de desperdicio
-  y parámetros. Puede corregir el estado y el contenido de cualquier secadero.
+- **admin** — todo: ABM de secaderos, tipos, modelos, usuarios, motivos de
+  desperdicio y parámetros. Puede corregir el estado y el contenido de
+  cualquier secadero.
 - **carrusel** — carga secaderos vacíos.
+- **llenado manual** — carga y descarga secaderos. Es el sector donde se arman
+  las guardas, pero puede operar cualquier tipo.
 - **horno** — mete y saca secaderos del horno.
 - **paletizado** — descarga secaderos secos a producto terminado.
 - **auditor** — ve todo, no modifica nada.
+
+Se pueden crear tantos usuarios por rol como haga falta: si dos personas
+distintas paletizan guardas, son dos usuarios con rol *llenado manual*, y cada
+movimiento queda a nombre de quien lo hizo.
 
 Cada usuario entra con **usuario + PIN numérico**. Tras 5 PIN incorrectos
 seguidos queda bloqueado 5 minutos (un PIN de 4 dígitos son solo 10.000
@@ -88,8 +102,15 @@ npm run db:seed     # usuario admin, motivos, parámetros y datos de ejemplo
 ```
 
 El seed crea el usuario **admin** con el PIN de `ADMIN_PIN` (por defecto
-`1234` — cambialo apenas entres). También deja 6 secaderos, 4 modelos y un
-usuario por rol con PIN `1111`, todo de ejemplo y borrable desde el panel.
+`1234` — cambialo apenas entres), los cuatro tipos de secadero y los motivos de
+desperdicio. También deja 6 secaderos, 5 modelos y un usuario por rol con PIN
+`1111`, todo de ejemplo y borrable desde el panel.
+
+Para cargar los secaderos reales —que son unos 250— no los des de alta de a
+uno: en **Administración → Secaderos** hay un **alta por rango** que crea del N
+al M con un tipo, salteando los números que ya existan. Así podés hacer el
+grueso en dos o tres operaciones y después corregir a mano los que sean de otro
+tipo.
 
 Si preferís arrancar sin nada de eso:
 

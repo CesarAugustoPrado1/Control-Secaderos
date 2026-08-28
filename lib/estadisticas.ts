@@ -58,20 +58,20 @@ export async function tiemposPorEtapa(rango: Rango): Promise<TiempoPorEtapa[]> {
 }
 
 export type TiempoHorno = {
-  tamano: string;
+  tipo: string;
   ciclos: number;
   promedioMin: number;
   minimoMin: number;
   maximoMin: number;
 };
 
-/** Tiempo de horno abierto por tipo de placa: es la comparacion que importa. */
-export async function tiempoDeHornoPorTamano(
+/** Tiempo de horno abierto por tipo de secadero: es la comparacion que importa. */
+export async function tiempoDeHornoPorTipo(
   rango: Rango,
 ): Promise<TiempoHorno[]> {
   const filas = await db
     .select({
-      tamano: movimientos.secaderoTamano,
+      tipo: movimientos.secaderoTipoNombre,
       ciclos: count(),
       promedio: avg(movimientos.duracionMin),
       minimo: min(movimientos.duracionMin),
@@ -85,10 +85,10 @@ export async function tiempoDeHornoPorTamano(
         isNotNull(movimientos.duracionMin),
       ),
     )
-    .groupBy(movimientos.secaderoTamano);
+    .groupBy(movimientos.secaderoTipoNombre);
 
   return filas.map((f) => ({
-    tamano: f.tamano,
+    tipo: f.tipo,
     ciclos: f.ciclos,
     promedioMin: Math.round(aNumero(f.promedio)),
     minimoMin: aNumero(f.minimo),
@@ -102,7 +102,7 @@ export async function ultimosCiclosDeHorno(rango: Rango, limite = 30) {
     .select({
       id: movimientos.id,
       secaderoNumero: movimientos.secaderoNumero,
-      tamano: movimientos.secaderoTamano,
+      tipo: movimientos.secaderoTipoNombre,
       duracionMin: movimientos.duracionMin,
       creadoEn: movimientos.creadoEn,
       usuarioNombre: movimientos.usuarioNombre,

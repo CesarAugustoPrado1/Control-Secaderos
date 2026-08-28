@@ -7,7 +7,7 @@ import {
   guardarUsuario,
 } from "@/lib/acciones/admin";
 import type { Rol } from "@/lib/db/schema";
-import { ETIQUETA_ROL } from "@/lib/permisos";
+import { ETIQUETA_ROL, ROLES } from "@/lib/permisos";
 import {
   BloqueNuevo,
   BotonAccion,
@@ -25,14 +25,23 @@ type Fila = {
   bloqueado: boolean;
 };
 
-const ROLES: Rol[] = ["admin", "carrusel", "horno", "paletizado", "auditor"];
-
 const COLOR_ROL: Record<Rol, string> = {
   admin: "bg-slate-900 text-white",
   carrusel: "bg-blue-100 text-blue-800",
+  llenado_manual: "bg-sky-100 text-sky-800",
   horno: "bg-orange-100 text-orange-800",
   paletizado: "bg-violet-100 text-violet-800",
   auditor: "bg-teal-100 text-teal-800",
+};
+
+/** Que hace cada rol, para no tener que acordarse al crear un usuario. */
+const QUE_HACE: Record<Rol, string> = {
+  admin: "Administra todo y corrige errores",
+  carrusel: "Carga secaderos vacíos",
+  llenado_manual: "Carga y descarga secaderos (guardas y especiales)",
+  horno: "Mete y saca secaderos del horno",
+  paletizado: "Descarga secaderos secos",
+  auditor: "Ve todo, no modifica nada",
 };
 
 export function ListaUsuarios({
@@ -200,6 +209,9 @@ function FormularioUsuario({
               </option>
             ))}
           </select>
+          <span className="mt-1 block text-xs text-slate-500">
+            {QUE_HACE[rol]}
+          </span>
         </Campo>
 
         <Campo etiqueta={esNuevo ? "PIN (4 a 8 números)" : "Nuevo PIN (opcional)"}>

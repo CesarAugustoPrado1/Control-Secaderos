@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, count, eq, ne } from "drizzle-orm";
+import { and, count, eq, inArray, ne } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db";
 import {
@@ -11,6 +11,7 @@ import {
   productos,
   secaderoContenido,
   secaderos,
+  tipos,
   usuarios,
 } from "../db/schema";
 import { autorizar, hashPin } from "../auth";
@@ -23,13 +24,107 @@ function revalidar() {
 }
 
 /* -------------------------------------------------------------------------- */
+/* Tipos de secadero                                                          */
+/* -------------------------------------------------------------------------- */
+
+const esquemaTipo = z.object({
+  id: z.number().int().positive().optional(),
+  nombre: z.string().trim().min(1, "El tipo necesita un nombre.").max(40),
+  capacidad: z
+    .number()
+    .int()
+    .positive("La capacidad tiene que ser mayor a cero.")
+    .max(100000),
+  orden: z.number().int().min(0).max(999).default(0),
+});
+
+export async function guardarTipo(
+  entrada: z.input<typeof esquemaTipo>,
+): Promise<Resultado> {
+  return ejecutar(async () => {
+    await autorizar("admin");
+    const datos = esquemaTipo.parse(entrada);
+
+    const repetido = await db
+      .select({ id: tipos.id })
+      .from(tipos)
+      .where(
+        datos.id
+          ? and(eq(tipos.nombre, datos.nombre), ne(tipos.id, datos.id))
+          : eq(tipos.nombre, datos.nombre),
+      )
+      .limit(1);
+    if (repetido.length) fallar(`Ya existe un tipo llamado "${datos.nombre}".`);
+
+    if (datos.id) {
+      // Bajar la capacidad no invalida las cargas que ya estan adentro: se
+      // avisa, pero se permite, porque puede ser justamente una correccion.
+      await db
+        .update(tipos)
+        .set({
+          nombre: datos.nombre,
+          capacidad: datos.capacidad,
+          orden: datos.orden,
+        })
+        .where(eq(tipos.id, datos.id));
+    } else {
+      await db.insert(tipos).values(datos);
+    }
+
+    revalidar();
+  });
+}
+
+export async function cambiarEstadoTipo(
+  entrada: { id: number; activo: boolean },
+): Promise<Resultado> {
+  return ejecutar(async () => {
+    await autorizar("admin");
+    const { id, activo } = z
+      .object({ id: z.number().int().positive(), activo: z.boolean() })
+      .parse(entrada);
+
+    // Desactivar un tipo lo saca de los selectores, pero los secaderos y modelos
+    // que ya lo usan siguen funcionando: no se rompe nada de lo que esta en curso.
+    await db.update(tipos).set({ activo }).where(eq(tipos.id, id));
+    revalidar();
+  });
+}
+
+export async function eliminarTipo(entrada: { id: number }): Promise<Resultado> {
+  return ejecutar(async () => {
+    await autorizar("admin");
+    const { id } = z.object({ id: z.number().int().positive() }).parse(entrada);
+
+    const [{ conSecaderos }] = await db
+      .select({ conSecaderos: count() })
+      .from(secaderos)
+      .where(eq(secaderos.tipoId, id));
+    const [{ conProductos }] = await db
+      .select({ conProductos: count() })
+      .from(productos)
+      .where(eq(productos.tipoId, id));
+
+    if (conSecaderos > 0 || conProductos > 0) {
+      fallar(
+        `No se puede eliminar: lo usan ${conSecaderos} secaderos y ${conProductos} modelos. ` +
+          "Desactivalo en lugar de eliminarlo.",
+      );
+    }
+
+    await db.delete(tipos).where(eq(tipos.id, id));
+    revalidar();
+  });
+}
+
+/* -------------------------------------------------------------------------- */
 /* Productos                                                                  */
 /* -------------------------------------------------------------------------- */
 
 const esquemaProducto = z.object({
   id: z.number().int().positive().optional(),
   nombre: z.string().trim().min(1, "El modelo necesita un nombre.").max(80),
-  tamano: z.enum(["grande", "chico"]),
+  tipoId: z.number().int().positive("Elegí el tipo de secadero del modelo."),
 });
 
 export async function guardarProducto(
@@ -47,28 +142,28 @@ export async function guardarProducto(
         .limit(1);
       if (!actual) fallar("Ese modelo ya no existe.");
 
-      // Cambiar el tamano de un modelo que ya esta adentro de un secadero
+      // Cambiar el tipo de un modelo que ya esta adentro de un secadero
       // volveria invalida esa carga (y su capacidad). Se bloquea.
-      if (actual.tamano !== datos.tamano) {
+      if (actual.tipoId !== datos.tipoId) {
         const [{ enUso }] = await db
           .select({ enUso: count() })
           .from(secaderoContenido)
           .where(eq(secaderoContenido.productoId, datos.id));
         if (enUso > 0) {
           fallar(
-            "No se puede cambiar el tamaño: el modelo está cargado en un secadero. Descargalo primero.",
+            "No se puede cambiar el tipo: el modelo está cargado en un secadero. Descargalo primero.",
           );
         }
       }
 
       await db
         .update(productos)
-        .set({ nombre: datos.nombre, tamano: datos.tamano })
+        .set({ nombre: datos.nombre, tipoId: datos.tipoId })
         .where(eq(productos.id, datos.id));
     } else {
       await db
         .insert(productos)
-        .values({ nombre: datos.nombre, tamano: datos.tamano });
+        .values({ nombre: datos.nombre, tipoId: datos.tipoId });
     }
 
     revalidar();
@@ -101,7 +196,7 @@ const esquemaSecadero = z.object({
     .number()
     .int()
     .positive("El número de secadero tiene que ser mayor a cero."),
-  tamano: z.enum(["grande", "chico"]),
+  tipoId: z.number().int().positive("Elegí el tipo de secadero."),
 });
 
 export async function guardarSecadero(
@@ -130,24 +225,77 @@ export async function guardarSecadero(
         .limit(1);
       if (!actual) fallar("Ese secadero ya no existe.");
 
-      if (actual.tamano !== datos.tamano && actual.estado !== "vacio") {
+      if (actual.tipoId !== datos.tipoId && actual.estado !== "vacio") {
         fallar(
           `El secadero ${actual.numero} está ${ETIQUETA_ESTADO[actual.estado]}. ` +
-            "Para cambiarle el tamaño tiene que estar vacío.",
+            "Para cambiarle el tipo tiene que estar vacío.",
         );
       }
 
       await db
         .update(secaderos)
-        .set({ numero: datos.numero, tamano: datos.tamano })
+        .set({ numero: datos.numero, tipoId: datos.tipoId })
         .where(eq(secaderos.id, datos.id));
     } else {
       await db
         .insert(secaderos)
-        .values({ numero: datos.numero, tamano: datos.tamano });
+        .values({ numero: datos.numero, tipoId: datos.tipoId });
     }
 
     revalidar();
+  });
+}
+
+const esquemaRango = z.object({
+  desde: z.number().int().positive("El número inicial tiene que ser mayor a cero."),
+  hasta: z.number().int().positive("El número final tiene que ser mayor a cero."),
+  tipoId: z.number().int().positive("Elegí el tipo de secadero."),
+});
+
+/**
+ * Alta masiva por rango. Con 250 secaderos, cargarlos de a uno no es una
+ * opcion. Los numeros que ya existen se saltean en vez de fallar, asi se puede
+ * correr de nuevo para completar huecos sin tocar lo que ya estaba.
+ */
+export async function crearSecaderosPorRango(
+  entrada: z.input<typeof esquemaRango>,
+): Promise<Resultado<{ creados: number; salteados: number[] }>> {
+  return ejecutar(async () => {
+    await autorizar("admin");
+    const datos = esquemaRango.parse(entrada);
+
+    if (datos.hasta < datos.desde) {
+      fallar("El número final tiene que ser mayor o igual al inicial.");
+    }
+    const cantidad = datos.hasta - datos.desde + 1;
+    if (cantidad > 1000) {
+      fallar("El rango es demasiado grande: probá de a 1000 como máximo.");
+    }
+
+    const [tipo] = await db
+      .select()
+      .from(tipos)
+      .where(eq(tipos.id, datos.tipoId))
+      .limit(1);
+    if (!tipo) fallar("Ese tipo de secadero ya no existe.");
+
+    const pedidos = Array.from({ length: cantidad }, (_, i) => datos.desde + i);
+    const existentes = await db
+      .select({ numero: secaderos.numero })
+      .from(secaderos)
+      .where(inArray(secaderos.numero, pedidos));
+
+    const ocupados = new Set(existentes.map((e) => e.numero));
+    const aCrear = pedidos.filter((n) => !ocupados.has(n));
+
+    if (aCrear.length > 0) {
+      await db
+        .insert(secaderos)
+        .values(aCrear.map((numero) => ({ numero, tipoId: datos.tipoId })));
+    }
+
+    revalidar();
+    return { creados: aCrear.length, salteados: [...ocupados].sort((a, b) => a - b) };
   });
 }
 
@@ -221,7 +369,14 @@ const esquemaUsuario = z.object({
       "El usuario va sin espacios ni acentos, entre 3 y 20 caracteres.",
     ),
   nombre: z.string().trim().min(1, "Escribí el nombre de la persona.").max(80),
-  rol: z.enum(["admin", "carrusel", "horno", "paletizado", "auditor"]),
+  rol: z.enum([
+    "admin",
+    "carrusel",
+    "llenado_manual",
+    "horno",
+    "paletizado",
+    "auditor",
+  ]),
   pin: z
     .string()
     .regex(/^\d{4,8}$/, "El PIN son entre 4 y 8 números.")
@@ -401,8 +556,6 @@ export async function cambiarEstadoMotivo(
 /* -------------------------------------------------------------------------- */
 
 const esquemaConfig = z.object({
-  capacidad_grande: z.number().int().min(1).max(10000),
-  capacidad_chico: z.number().int().min(1).max(10000),
   capacidad_horno: z.number().int().min(1).max(1000),
 });
 

@@ -5,8 +5,11 @@
  *   npm run db:limpiar -- --confirmar  -> borra de verdad
  *
  * Borra: movimientos, contenido de secaderos, secaderos, modelos y usuarios de
- * prueba. Conserva: el usuario admin, los motivos de desperdicio y los
- * parametros de configuracion.
+ * prueba. Conserva: el usuario admin, los tipos de secadero, los motivos de
+ * desperdicio y los parametros de configuracion.
+ *
+ * Los tipos se conservan a proposito: definirlos con su capacidad es trabajo
+ * de configuracion, no dato de prueba.
  */
 import { config as cargarEnv } from "dotenv";
 import { drizzle } from "drizzle-orm/postgres-js";
@@ -46,6 +49,7 @@ async function main() {
     "secadero_contenido",
     "secaderos",
     "productos",
+    "tipos",
     "usuarios",
     "motivos_desperdicio",
   ]) {
@@ -81,8 +85,12 @@ async function main() {
 
   console.log("\nListo. Quedaron:");
   console.log(`  usuarios              ${await contar("usuarios")} (solo admin)`);
+  console.log(`  tipos                 ${await contar("tipos")}`);
   console.log(`  motivos_desperdicio   ${await contar("motivos_desperdicio")}`);
-  console.log("\nCarga tus secaderos y modelos reales desde Administracion.");
+  console.log(
+    "\nRevisa los tipos y sus capacidades, y despues carga los secaderos" +
+      "\npor rango desde Administracion > Secaderos.",
+  );
 
   await client.end();
 }

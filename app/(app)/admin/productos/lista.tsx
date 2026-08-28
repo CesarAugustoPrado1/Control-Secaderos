@@ -1,10 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { cambiarEstadoProducto, guardarProducto } from "@/lib/acciones/admin";
-import type { Tamano } from "@/lib/db/schema";
-import { ETIQUETA_TAMANO } from "@/lib/estados";
-import { ChipTamano } from "@/components/ui";
+import { ChipTipo } from "@/components/ui";
 import {
   BloqueNuevo,
   BotonAccion,
@@ -13,17 +12,44 @@ import {
   FormularioAbm,
 } from "@/components/admin/comunes";
 
-type Fila = { id: number; nombre: string; tamano: Tamano; activo: boolean };
+type TipoOpcion = { id: number; nombre: string };
 
-export function ListaProductos({ productos }: { productos: Fila[] }) {
+type Fila = {
+  id: number;
+  nombre: string;
+  tipoId: number;
+  tipoNombre: string;
+  activo: boolean;
+};
+
+export function ListaProductos({
+  productos,
+  tipos,
+}: {
+  productos: Fila[];
+  tipos: TipoOpcion[];
+}) {
   const [editando, setEditando] = useState<number | null>(null);
+
+  if (tipos.length === 0) {
+    return (
+      <p className="tarjeta px-4 py-10 text-center text-sm text-slate-500">
+        Primero cargá al menos un tipo de secadero en la pestaña{" "}
+        <Link href="/admin/tipos" className="font-semibold underline">
+          Tipos
+        </Link>
+        .
+      </p>
+    );
+  }
 
   return (
     <>
       <BloqueNuevo etiqueta="Agregar modelo">
         {(cerrar) => (
           <FormularioProducto
-            inicial={{ nombre: "", tamano: "grande" }}
+            inicial={{ nombre: "", tipoId: tipos[0].id }}
+            tipos={tipos}
             alGuardar={cerrar}
           />
         )}
@@ -41,6 +67,7 @@ export function ListaProductos({ productos }: { productos: Fila[] }) {
                 <div className="w-full">
                   <FormularioProducto
                     inicial={p}
+                    tipos={tipos}
                     alGuardar={() => setEditando(null)}
                   />
                   <button
@@ -58,7 +85,7 @@ export function ListaProductos({ productos }: { productos: Fila[] }) {
                       {p.nombre}
                     </p>
                     <div className="mt-1 flex items-center gap-2">
-                      <ChipTamano tamano={p.tamano} />
+                      <ChipTipo nombre={p.tipoNombre} />
                       {!p.activo && (
                         <span className="chip bg-amber-100 text-amber-900">
                           SUSPENDIDO
@@ -91,8 +118,9 @@ export function ListaProductos({ productos }: { productos: Fila[] }) {
       )}
 
       <p className="mt-4 text-xs text-slate-500">
-        Los modelos no se eliminan: suspenderlos los saca de la pantalla de
-        carrusel pero mantiene intacto el historial.
+        Los modelos no se eliminan: suspenderlos los saca de las pantallas de
+        carga pero mantiene intacto el historial. El tipo determina en qué
+        secaderos se puede cargar cada modelo.
       </p>
     </>
   );
@@ -100,18 +128,20 @@ export function ListaProductos({ productos }: { productos: Fila[] }) {
 
 function FormularioProducto({
   inicial,
+  tipos,
   alGuardar,
 }: {
-  inicial: { id?: number; nombre: string; tamano: Tamano };
+  inicial: { id?: number; nombre: string; tipoId: number };
+  tipos: TipoOpcion[];
   alGuardar: () => void;
 }) {
   const [nombre, setNombre] = useState(inicial.nombre);
-  const [tamano, setTamano] = useState<Tamano>(inicial.tamano);
+  const [tipoId, setTipoId] = useState(inicial.tipoId);
 
   return (
     <FormularioAbm
       alGuardar={alGuardar}
-      accion={() => guardarProducto({ id: inicial.id, nombre, tamano })}
+      accion={() => guardarProducto({ id: inicial.id, nombre, tipoId })}
     >
       <div className="grid gap-3 sm:grid-cols-2">
         <Campo etiqueta="Nombre del modelo">
@@ -125,15 +155,15 @@ function FormularioProducto({
           />
         </Campo>
 
-        <Campo etiqueta="Tamaño de placa">
+        <Campo etiqueta="Tipo de secadero">
           <select
             className="campo"
-            value={tamano}
-            onChange={(e) => setTamano(e.target.value as Tamano)}
+            value={tipoId}
+            onChange={(e) => setTipoId(Number(e.target.value))}
           >
-            {(["grande", "chico"] as const).map((t) => (
-              <option key={t} value={t}>
-                {ETIQUETA_TAMANO[t]}
+            {tipos.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.nombre}
               </option>
             ))}
           </select>

@@ -18,12 +18,11 @@ import { relations } from "drizzle-orm";
 export const rolEnum = pgEnum("rol", [
   "admin",
   "carrusel",
+  "llenado_manual",
   "horno",
   "paletizado",
   "auditor",
 ]);
-
-export const tamanoEnum = pgEnum("tamano", ["grande", "chico"]);
 
 export const estadoEnum = pgEnum("estado_secadero", [
   "vacio",
@@ -72,10 +71,32 @@ export const usuarios = pgTable(
   (t) => [uniqueIndex("usuarios_usuario_idx").on(t.usuario)],
 );
 
+/**
+ * Tipos de secadero: grande, chico, guarda, especial... y los que vengan.
+ *
+ * Empezo siendo un enum de dos valores y en la practica ya aparecieron dos
+ * tipos mas, asi que vive en una tabla: agregar uno nuevo es cargarlo desde
+ * el panel, sin migracion ni deploy. La capacidad en placas es propia de cada
+ * tipo, por eso vive aca y no en la configuracion general.
+ */
+export const tipos = pgTable("tipos", {
+  id: serial("id").primaryKey(),
+  nombre: text("nombre").notNull(),
+  capacidad: integer("capacidad").notNull(),
+  activo: boolean("activo").notNull().default(true),
+  /** Para controlar en que orden aparecen en los selectores. */
+  orden: integer("orden").notNull().default(0),
+  creadoEn: timestamp("creado_en", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
 export const productos = pgTable("productos", {
   id: serial("id").primaryKey(),
   nombre: text("nombre").notNull(),
-  tamano: tamanoEnum("tamano").notNull(),
+  tipoId: integer("tipo_id")
+    .notNull()
+    .references(() => tipos.id),
   activo: boolean("activo").notNull().default(true),
   creadoEn: timestamp("creado_en", { withTimezone: true })
     .notNull()
@@ -93,7 +114,9 @@ export const secaderos = pgTable(
   {
     id: serial("id").primaryKey(),
     numero: integer("numero").notNull(),
-    tamano: tamanoEnum("tamano").notNull(),
+    tipoId: integer("tipo_id")
+      .notNull()
+      .references(() => tipos.id),
     estado: estadoEnum("estado").notNull().default("vacio"),
     activo: boolean("activo").notNull().default(true),
     /**
@@ -138,9 +161,10 @@ export const movimientos = pgTable(
     secaderoId: integer("secadero_id")
       .notNull()
       .references(() => secaderos.id),
-    /** Snapshot: el numero de secadero al momento del movimiento. */
+    /** Snapshot: numero y tipo del secadero al momento del movimiento. */
     secaderoNumero: integer("secadero_numero").notNull(),
-    secaderoTamano: tamanoEnum("secadero_tamano").notNull(),
+    secaderoTipoId: integer("secadero_tipo_id").references(() => tipos.id),
+    secaderoTipoNombre: text("secadero_tipo_nombre").notNull(),
     tipo: tipoMovimientoEnum("tipo").notNull(),
     estadoDesde: estadoEnum("estado_desde").notNull(),
     estadoHasta: estadoEnum("estado_hasta").notNull(),
@@ -205,9 +229,25 @@ export const config = pgTable("config", {
 /* Relaciones                                                                 */
 /* -------------------------------------------------------------------------- */
 
-export const secaderosRelations = relations(secaderos, ({ many }) => ({
+export const tiposRelations = relations(tipos, ({ many }) => ({
+  secaderos: many(secaderos),
+  productos: many(productos),
+}));
+
+export const secaderosRelations = relations(secaderos, ({ one, many }) => ({
+  tipo: one(tipos, {
+    fields: [secaderos.tipoId],
+    references: [tipos.id],
+  }),
   contenido: many(secaderoContenido),
   movimientos: many(movimientos),
+}));
+
+export const productosRelations = relations(productos, ({ one }) => ({
+  tipo: one(tipos, {
+    fields: [productos.tipoId],
+    references: [tipos.id],
+  }),
 }));
 
 export const secaderoContenidoRelations = relations(
@@ -255,10 +295,10 @@ export const movimientoLineasRelations = relations(
 /* -------------------------------------------------------------------------- */
 
 export type Rol = (typeof rolEnum.enumValues)[number];
-export type Tamano = (typeof tamanoEnum.enumValues)[number];
 export type Estado = (typeof estadoEnum.enumValues)[number];
 export type TipoMovimiento = (typeof tipoMovimientoEnum.enumValues)[number];
 
+export type Tipo = typeof tipos.$inferSelect;
 export type Usuario = typeof usuarios.$inferSelect;
 export type Producto = typeof productos.$inferSelect;
 export type Secadero = typeof secaderos.$inferSelect;

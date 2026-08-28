@@ -4,7 +4,6 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { entrarAHorno, salirDeHorno } from "@/lib/acciones/flujo";
 import type { SecaderoVista } from "@/lib/consultas";
-import { ETIQUETA_TAMANO } from "@/lib/estados";
 import { duracion, minutosDesde, numero } from "@/lib/formato";
 import { useAccion } from "@/components/usar-accion";
 import { Aviso, Titulo } from "@/components/ui";
@@ -378,8 +377,7 @@ function FilaSecadero({
 
         <span className="min-w-0 flex-1">
           <span className="block text-sm font-semibold text-slate-800">
-            {numero(secadero.total)} placas ·{" "}
-            {ETIQUETA_TAMANO[secadero.tamano].toLowerCase()}
+            {numero(secadero.total)} placas · {secadero.tipoNombre}
           </span>
           <span className="block truncate text-xs text-slate-500">
             {secadero.contenido.map((c) => c.nombre).join(", ") || "sin placas"}
