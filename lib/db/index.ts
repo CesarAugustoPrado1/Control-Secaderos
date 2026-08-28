@@ -55,9 +55,17 @@ function conectar(): Db {
       prepare: false,
       // Con pipelining andando, una conexion alcanza y sobra para este volumen.
       max: 1,
-      // En serverless cada instancia ociosa retiene una conexion del pooler;
-      // cerrarla al minuto libera el cupo sin penalizar el uso normal.
-      idle_timeout: 60,
+      /**
+       * En modo sesion cada conexion ocupa un lugar del pool de Supabase
+       * mientras viva, y en serverless cada instancia de Vercel abre la suya.
+       * Con el pool en 15, una rafaga de 25 requests llega al techo y las
+       * ultimas fallan (medido: 22 de 25).
+       *
+       * Cerrar las ociosas a los 20 segundos devuelve el cupo rapido entre
+       * picos. Para el volumen de la planta alcanza de sobra; si alguna vez
+       * hiciera falta mas, se sube el pool size en Supabase.
+       */
+      idle_timeout: 20,
       // Que un pooler caido falle rapido en vez de colgar la pantalla.
       connect_timeout: 15,
     });
