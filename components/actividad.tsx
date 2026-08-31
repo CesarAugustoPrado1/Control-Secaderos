@@ -3,6 +3,7 @@ import type { MovimientoVista } from "@/lib/consultas";
 import { CLAVES_RANGO, ETIQUETA_RANGO, type ClaveRango } from "@/lib/rangos";
 import { hora, numero } from "@/lib/formato";
 import { MarcasSecadero } from "@/components/marcas-secadero";
+import { ChipTipo } from "@/components/ui";
 
 /**
  * Lo hecho en el periodo, en la propia pantalla del operario.
@@ -91,13 +92,22 @@ export function Actividad({
                   </span>
 
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold text-slate-800">
-                      {numero(placas)} placas
-                      {rotas > 0 && (
-                        <span className="ml-2 text-xs font-bold text-red-600">
-                          −{numero(rotas)}
-                        </span>
-                      )}
+                    <p className="flex flex-wrap items-center gap-2 text-sm font-semibold text-slate-800">
+                      <span>
+                        {numero(placas)} placas
+                        {rotas > 0 && (
+                          <span className="ml-2 text-xs font-bold text-red-600">
+                            −{numero(rotas)}
+                          </span>
+                        )}
+                      </span>
+                      {/* Snapshot del tipo al momento del movimiento, no el
+                          actual: si al secadero le cambiaron el tipo despues,
+                          el historial tiene que seguir diciendo la verdad. */}
+                      <ChipTipo
+                        id={m.secaderoTipoId ?? 0}
+                        nombre={m.secaderoTipoNombre}
+                      />
                     </p>
                     <p className="truncate text-xs text-slate-500">
                       {m.lineas
