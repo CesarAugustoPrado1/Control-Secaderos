@@ -15,6 +15,7 @@ import {
   config,
   motivosDesperdicio,
   productos,
+  motivosDesvio,
   secaderos,
   tipos,
   usuarios,
@@ -35,6 +36,20 @@ const TIPOS = [
   { nombre: "Chico", capacidad: 204, orden: 20 },
   { nombre: "Guarda", capacidad: 50, orden: 30 },
   { nombre: "Especial", capacidad: 50, orden: 40 },
+];
+
+/**
+ * Motivos por los que un sector no llega a la orden del dia. Son un punto de
+ * partida: el admin los cambia desde el panel una vez que los consensue con la
+ * gente, que es lo que hace que despues se usen de verdad.
+ */
+const MOTIVOS_DESVIO = [
+  "Falta de personal",
+  "Corte de luz",
+  "Desperfecto técnico",
+  "Placas en mal estado",
+  "No secó el horno",
+  "Cambio de prioridad",
 ];
 
 const MOTIVOS = [
@@ -101,6 +116,18 @@ async function main() {
       .limit(1);
     if (existe.length === 0) {
       await db.insert(motivosDesperdicio).values({ nombre });
+    }
+  }
+
+  console.log("→ Motivos de desvío del plan");
+  for (const nombre of MOTIVOS_DESVIO) {
+    const existe = await db
+      .select({ id: motivosDesvio.id })
+      .from(motivosDesvio)
+      .where(eq(motivosDesvio.nombre, nombre))
+      .limit(1);
+    if (existe.length === 0) {
+      await db.insert(motivosDesvio).values({ nombre });
     }
   }
 

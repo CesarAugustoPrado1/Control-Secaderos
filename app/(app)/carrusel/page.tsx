@@ -1,8 +1,15 @@
 import { requerirRol } from "@/lib/auth";
 import { listarMovimientos, secaderosConContenido } from "@/lib/consultas";
 import { ETIQUETA_ROL } from "@/lib/permisos";
-import { esClaveRango, rangoPorClave, type ClaveRango } from "@/lib/rangos";
+import { compararPlan, motivosDesvioActivos } from "@/lib/plan";
+import {
+  esClaveRango,
+  fechaLocal,
+  rangoPorClave,
+  type ClaveRango,
+} from "@/lib/rangos";
 import { Actividad } from "@/components/actividad";
+import { PlanDelDia } from "@/components/plan-del-dia";
 import { BuscadorAccion } from "@/components/buscador-accion";
 import { Titulo } from "@/components/ui";
 
@@ -19,7 +26,8 @@ export default async function PaginaCarrusel({
   const rango: ClaveRango = esClaveRango(rangoParam) ? rangoParam : "hoy";
   const { desde, hasta } = rangoPorClave(rango);
 
-  const [secaderos, cargas] = await Promise.all([
+  const hoy = fechaLocal();
+  const [secaderos, cargas, plan, motivosDesvio] = await Promise.all([
     secaderosConContenido(),
     listarMovimientos({
       tipo: "carga",
@@ -28,6 +36,8 @@ export default async function PaginaCarrusel({
       porPagina: 200,
       orden: "asc",
     }),
+    compararPlan(hoy, "carrusel"),
+    motivosDesvioActivos(),
   ]);
 
   const sector =
@@ -40,6 +50,12 @@ export default async function PaginaCarrusel({
       <Titulo detalle="Escribí el número del secadero que vas a cargar">
         {sector}
       </Titulo>
+
+      <PlanDelDia
+        comparacion={plan}
+        motivos={motivosDesvio.map((m) => ({ id: m.id, nombre: m.nombre }))}
+        puedeExplicar={sesion.rol !== "auditor"}
+      />
 
       <BuscadorAccion
         secaderos={secaderos.map((s) => ({

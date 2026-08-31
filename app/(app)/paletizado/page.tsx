@@ -1,7 +1,18 @@
 import { requerirRol } from "@/lib/auth";
 import { listarMovimientos, secaderosConContenido } from "@/lib/consultas";
-import { esClaveRango, rangoPorClave, type ClaveRango } from "@/lib/rangos";
+import {
+  compararPlan,
+  entregadosPorElHorno,
+  motivosDesvioActivos,
+} from "@/lib/plan";
+import {
+  esClaveRango,
+  fechaLocal,
+  rangoPorClave,
+  type ClaveRango,
+} from "@/lib/rangos";
 import { Actividad } from "@/components/actividad";
+import { PlanDelDia } from "@/components/plan-del-dia";
 import { BuscadorAccion } from "@/components/buscador-accion";
 import { Titulo } from "@/components/ui";
 
@@ -13,27 +24,39 @@ export default async function PaginaPaletizado({
 }: {
   searchParams: Promise<{ rango?: string }>;
 }) {
-  await requerirRol("paletizado", "llenado_manual", "admin");
+  const sesion = await requerirRol("paletizado", "llenado_manual", "admin");
   const { rango: rangoParam } = await searchParams;
   const rango: ClaveRango = esClaveRango(rangoParam) ? rangoParam : "hoy";
   const { desde, hasta } = rangoPorClave(rango);
 
-  const [secaderos, descargas] = await Promise.all([
-    secaderosConContenido(),
-    listarMovimientos({
-      tipo: "descarga",
-      desde,
-      hasta,
-      porPagina: 200,
-      orden: "asc",
-    }),
-  ]);
+  const hoy = fechaLocal();
+  const [secaderos, descargas, plan, motivosDesvio, entregados] =
+    await Promise.all([
+      secaderosConContenido(),
+      listarMovimientos({
+        tipo: "descarga",
+        desde,
+        hasta,
+        porPagina: 200,
+        orden: "asc",
+      }),
+      compararPlan(hoy, "paletizado"),
+      motivosDesvioActivos(),
+      entregadosPorElHorno(hoy),
+    ]);
 
   return (
     <div className="space-y-6">
       <Titulo detalle="Escribí el número del secadero que vas a descargar">
         Descargar
       </Titulo>
+
+      <PlanDelDia
+        comparacion={plan}
+        motivos={motivosDesvio.map((m) => ({ id: m.id, nombre: m.nombre }))}
+        entregadosPorHorno={entregados}
+        puedeExplicar={sesion.rol !== "auditor"}
+      />
 
       <BuscadorAccion
         secaderos={secaderos.map((s) => ({

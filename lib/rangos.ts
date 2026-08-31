@@ -46,3 +46,40 @@ export function rangoPorClave(clave: ClaveRango): { desde: Date; hasta: Date } {
       return { desde: inicioDelDia(0), hasta: new Date() };
   }
 }
+
+/* -------------------------------------------------------------------------- */
+/* Fechas de plan                                                             */
+/* -------------------------------------------------------------------------- */
+
+/** Fecha local argentina en formato YYYY-MM-DD, que es como se guarda el plan. */
+export function fechaLocal(d: Date = new Date()): string {
+  return soloFecha.format(d);
+}
+
+/** Convierte una fecha YYYY-MM-DD en el tramo de tiempo real de ese dia. */
+export function rangoDeFecha(fecha: string): { desde: Date; hasta: Date } {
+  return {
+    desde: new Date(`${fecha}T00:00:00-03:00`),
+    hasta: new Date(`${fecha}T23:59:59.999-03:00`),
+  };
+}
+
+/** Los siete dias que arrancan en `desde` (YYYY-MM-DD), para la vista semanal. */
+export function semanaDesde(desde: string): string[] {
+  const base = new Date(`${desde}T12:00:00-03:00`);
+  return Array.from({ length: 7 }, (_, i) =>
+    soloFecha.format(new Date(base.getTime() + i * 24 * 60 * 60 * 1000)),
+  );
+}
+
+const nombresDia = new Intl.DateTimeFormat("es-AR", {
+  timeZone: ZONA,
+  weekday: "short",
+  day: "2-digit",
+  month: "2-digit",
+});
+
+/** "lun 01/09", para encabezar cada dia de la semana. */
+export function etiquetaDia(fecha: string): string {
+  return nombresDia.format(new Date(`${fecha}T12:00:00-03:00`));
+}

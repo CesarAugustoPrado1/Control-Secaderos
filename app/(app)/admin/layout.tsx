@@ -2,6 +2,7 @@ import { requerirRol } from "@/lib/auth";
 import { TabsAdmin } from "./tabs";
 
 const SECCIONES = [
+  { href: "/admin/plan", etiqueta: "Plan" },
   { href: "/admin/secaderos", etiqueta: "Secaderos" },
   { href: "/admin/tipos", etiqueta: "Tipos" },
   { href: "/admin/productos", etiqueta: "Productos" },

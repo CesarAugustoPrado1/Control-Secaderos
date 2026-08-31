@@ -1,5 +1,6 @@
 import {
   boolean,
+  date,
   index,
   integer,
   pgEnum,
@@ -23,6 +24,13 @@ export const rolEnum = pgEnum("rol", [
   "paletizado",
   "auditor",
 ]);
+
+/**
+ * Sectores a los que se les puede dictar una orden de produccion. No es lo
+ * mismo que el rol: horno no recibe orden porque no decide que secar, procesa
+ * lo que le llega.
+ */
+export const sectorEnum = pgEnum("sector", ["carrusel", "paletizado"]);
 
 export const estadoEnum = pgEnum("estado_secadero", [
   "vacio",
@@ -225,6 +233,66 @@ export const movimientoLineas = pgTable(
   (t) => [index("movimiento_lineas_movimiento_idx").on(t.movimientoId)],
 );
 
+export const motivosDesvio = pgTable("motivos_desvio", {
+  id: serial("id").primaryKey(),
+  nombre: text("nombre").notNull(),
+  activo: boolean("activo").notNull().default(true),
+});
+
+/**
+ * Orden de produccion de un dia para un sector.
+ *
+ * La fecha es un `date` y no un timestamp: el plan es "el lunes", no "el lunes
+ * a las 00:00 de tal huso". Se guarda como la fecha local argentina y asi no
+ * hay que corregir husos al compararla.
+ *
+ * Un dia sin plan no es un plan de cero: es "sin plan", y se mide distinto.
+ * Por eso la ausencia de fila significa algo y no se rellena con nada.
+ */
+export const planes = pgTable(
+  "planes",
+  {
+    id: serial("id").primaryKey(),
+    fecha: date("fecha").notNull(),
+    sector: sectorEnum("sector").notNull(),
+    nota: text("nota"),
+    creadoPor: integer("creado_por").references(() => usuarios.id),
+    creadoEn: timestamp("creado_en", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [uniqueIndex("planes_fecha_sector_idx").on(t.fecha, t.sector)],
+);
+
+/**
+ * Cuantos secaderos de cada producto se piden ese dia.
+ *
+ * El motivo del desvio vive aca y no en una tabla aparte: el desvio no se
+ * carga, se calcula comparando con los movimientos reales. Lo unico que hace
+ * falta guardar es la explicacion, y es una por linea.
+ */
+export const planLineas = pgTable(
+  "plan_lineas",
+  {
+    id: serial("id").primaryKey(),
+    planId: integer("plan_id")
+      .notNull()
+      .references(() => planes.id, { onDelete: "cascade" }),
+    productoId: integer("producto_id")
+      .notNull()
+      .references(() => productos.id),
+    secaderos: integer("secaderos").notNull(),
+    motivoDesvioId: integer("motivo_desvio_id").references(
+      () => motivosDesvio.id,
+    ),
+    notaDesvio: text("nota_desvio"),
+    explicadoPor: integer("explicado_por").references(() => usuarios.id),
+    explicadoPorNombre: text("explicado_por_nombre"),
+    explicadoEn: timestamp("explicado_en", { withTimezone: true }),
+  },
+  (t) => [index("plan_lineas_plan_idx").on(t.planId)],
+);
+
 /** Parametros editables por el admin. Valores guardados como texto. */
 export const config = pgTable("config", {
   clave: text("clave").primaryKey(),
@@ -311,3 +379,7 @@ export type Secadero = typeof secaderos.$inferSelect;
 export type Movimiento = typeof movimientos.$inferSelect;
 export type MovimientoLinea = typeof movimientoLineas.$inferSelect;
 export type MotivoDesperdicio = typeof motivosDesperdicio.$inferSelect;
+export type MotivoDesvio = typeof motivosDesvio.$inferSelect;
+export type Plan = typeof planes.$inferSelect;
+export type PlanLinea = typeof planLineas.$inferSelect;
+export type Sector = (typeof sectorEnum.enumValues)[number];
