@@ -287,6 +287,51 @@ export async function descargarSecadero(
 }
 
 /* -------------------------------------------------------------------------- */
+/* Devolucion al horno: seco -> humedo                                        */
+/* -------------------------------------------------------------------------- */
+
+const esquemaDevolucion = z.object({
+  secaderoId: z.number().int().positive(),
+  roturas: z.array(esquemaRotura).default([]),
+  nota: esquemaNota,
+});
+
+/**
+ * El secadero salio del horno pero no seco bien, asi que vuelve a la cola.
+ *
+ * Va a `humedo` y no directo a `horno` porque quien lo detecta es paletizado,
+ * que no lo mete fisicamente al horno: eso lo hace el hornero, con el flujo
+ * normal. Si lo pusieramos en `horno`, la app diria que esta adentro cuando
+ * todavia esta afuera, y ademas ocuparia un lugar del horno que esta libre.
+ *
+ * Tiene tipo propio, separado de `correccion`: esto no es un error de carga
+ * sino un hecho productivo, y mezclarlos arruinaria las dos metricas.
+ */
+export async function devolverAlHorno(
+  entrada: z.input<typeof esquemaDevolucion>,
+): Promise<Resultado> {
+  return ejecutar(async () => {
+    const sesion = await autorizar("paletizado", "llenado_manual", "admin");
+    const datos = esquemaDevolucion.parse(entrada);
+
+    await db.transaction(async (tx) => {
+      const [secadero] = await bloquearSecaderos(tx, [datos.secaderoId]);
+      exigirEstado(secadero, "seco");
+      await procesarTransicion(tx, sesion, {
+        secadero,
+        roturas: datos.roturas,
+        tipo: "devolucion_horno",
+        estadoHasta: "humedo",
+        vaciar: false,
+        nota: datos.nota,
+      });
+    });
+
+    revalidar();
+  });
+}
+
+/* -------------------------------------------------------------------------- */
 /* Correccion del admin                                                       */
 /* -------------------------------------------------------------------------- */
 
@@ -369,7 +414,7 @@ async function procesarTransicion(
   opciones: {
     secadero: Awaited<ReturnType<typeof bloquearSecaderos>>[number];
     roturas: z.infer<typeof esquemaRotura>[];
-    tipo: "entrada_horno" | "salida_horno" | "descarga";
+    tipo: "entrada_horno" | "salida_horno" | "descarga" | "devolucion_horno";
     estadoHasta: Estado;
     vaciar: boolean;
     nota: string | null;

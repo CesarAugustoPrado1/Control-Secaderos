@@ -460,6 +460,87 @@ export async function movimientoDeHornoDiario(rango: Rango) {
   }));
 }
 
+/* -------------------------------------------------------------------------- */
+/* Devoluciones al horno                                                      */
+/* -------------------------------------------------------------------------- */
+
+export type ResumenDevoluciones = {
+  devoluciones: number;
+  ciclosDevueltos: number;
+  ciclosBuenos: number;
+  promedioDevueltosMin: number;
+  promedioBuenosMin: number;
+  porProducto: { producto: string; veces: number }[];
+};
+
+/**
+ * Devoluciones al horno y, sobre todo, cuanto duro el horneado que NO alcanzo.
+ *
+ * Para cada salida del horno se mira cual fue el movimiento siguiente de ese
+ * secadero: si fue una devolucion, ese ciclo se quedo corto. Comparar el
+ * promedio de los ciclos que fallaron contra el de los que salieron bien es lo
+ * que da el tiempo minimo real de horno, que es el dato accionable.
+ */
+export async function resumenDevoluciones(
+  rango: Rango,
+): Promise<ResumenDevoluciones> {
+  // Las fechas van como ISO con cast explicito: en una consulta cruda el driver
+  // no serializa objetos Date y falla con ERR_INVALID_ARG_TYPE.
+  const comparacion = await db.execute<{
+    ciclos_devueltos: string;
+    ciclos_buenos: string;
+    prom_devueltos: string | null;
+    prom_buenos: string | null;
+  }>(sql`
+    with secuencia as (
+      select id, secadero_id, tipo, duracion_min, creado_en,
+             lead(tipo) over (partition by secadero_id order by id) as siguiente
+      from movimientos
+    )
+    select
+      count(*) filter (where siguiente = 'devolucion_horno')::text as ciclos_devueltos,
+      count(*) filter (where siguiente is distinct from 'devolucion_horno')::text as ciclos_buenos,
+      avg(duracion_min) filter (where siguiente = 'devolucion_horno')::text as prom_devueltos,
+      avg(duracion_min) filter (where siguiente is distinct from 'devolucion_horno')::text as prom_buenos
+    from secuencia
+    where tipo = 'salida_horno'
+      and duracion_min is not null
+      and creado_en >= ${rango.desde.toISOString()}::timestamptz
+      and creado_en <= ${rango.hasta.toISOString()}::timestamptz
+  `);
+
+  const c = [...comparacion][0];
+
+  const [{ total }] = await db
+    .select({ total: sql<number>`count(*)::int` })
+    .from(movimientos)
+    .where(and(enRango(rango), eq(movimientos.tipo, "devolucion_horno")));
+
+  const productos = await db
+    .select({
+      producto: movimientoLineas.productoNombre,
+      veces: sql<string>`count(distinct ${movimientos.id})`,
+    })
+    .from(movimientos)
+    .innerJoin(movimientoLineas, eq(movimientoLineas.movimientoId, movimientos.id))
+    .where(and(enRango(rango), eq(movimientos.tipo, "devolucion_horno")))
+    .groupBy(movimientoLineas.productoNombre)
+    .orderBy(desc(sql`count(distinct ${movimientos.id})`))
+    .limit(10);
+
+  return {
+    devoluciones: total,
+    ciclosDevueltos: aNumero(c?.ciclos_devueltos ?? 0),
+    ciclosBuenos: aNumero(c?.ciclos_buenos ?? 0),
+    promedioDevueltosMin: Math.round(aNumero(c?.prom_devueltos ?? 0)),
+    promedioBuenosMin: Math.round(aNumero(c?.prom_buenos ?? 0)),
+    porProducto: productos.map((p) => ({
+      producto: p.producto,
+      veces: aNumero(p.veces),
+    })),
+  };
+}
+
 /** Placas terminadas por dia, para el grafico de barras. */
 export async function produccionDiaria(rango: Rango) {
   const filas = await db

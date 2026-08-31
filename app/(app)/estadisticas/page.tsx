@@ -8,6 +8,7 @@ import {
   movimientoDeHornoDiario,
   produccionDiaria,
   rangoDeDias,
+  resumenDevoluciones,
   resumenPorModelo,
   roturasPorEtapa,
   roturasPorProducto,
@@ -72,6 +73,8 @@ export default async function PaginaEstadisticas({
       roturasPorProducto(rango),
       movimientoDeHornoDiario(rango),
     ]);
+
+  const devoluciones = await resumenDevoluciones(rango);
 
   const hayDatos = tot.cargadas > 0 || tot.terminadas > 0 || tot.rotas > 0;
   const tiempo = (tipo: string) => etapas.find((e) => e.tipo === tipo);
@@ -310,6 +313,65 @@ export default async function PaginaEstadisticas({
               />
             )}
           </Panel>
+
+          {/* ---------------------- Devoluciones al horno --------------------- */}
+          {devoluciones.devoluciones > 0 && (
+            <Panel
+              titulo="Secaderos devueltos al horno"
+              detalle="Salieron del horno sin secar bien y volvieron a la cola"
+            >
+              <div className="grid gap-3 sm:grid-cols-3">
+                <Indicador
+                  rotulo="Devoluciones"
+                  valor={numero(devoluciones.devoluciones)}
+                  detalle="en el período"
+                  tono="malo"
+                />
+                <Indicador
+                  rotulo="Horno del que se devolvió"
+                  valor={duracion(devoluciones.promedioDevueltosMin)}
+                  detalle={`${numero(devoluciones.ciclosDevueltos)} ciclos que no alcanzaron`}
+                  tono="malo"
+                />
+                <Indicador
+                  rotulo="Horno del que salió bien"
+                  valor={duracion(devoluciones.promedioBuenosMin)}
+                  detalle={`${numero(devoluciones.ciclosBuenos)} ciclos`}
+                  tono="bueno"
+                />
+              </div>
+
+              {/* La comparacion es el dato accionable: dice cual es el tiempo
+                  minimo real de horno, medido y no estimado. */}
+              {devoluciones.ciclosDevueltos > 0 &&
+                devoluciones.promedioBuenosMin >
+                  devoluciones.promedioDevueltosMin && (
+                  <p className="mt-3 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-900 ring-1 ring-amber-200">
+                    Los ciclos que hubo que devolver duraron en promedio{" "}
+                    <strong>
+                      {duracion(
+                        devoluciones.promedioBuenosMin -
+                          devoluciones.promedioDevueltosMin,
+                      )}
+                    </strong>{" "}
+                    menos que los que salieron bien. Es una señal de cuál es el
+                    tiempo mínimo de horno para estas placas.
+                  </p>
+                )}
+
+              {devoluciones.porProducto.length > 0 && (
+                <div className="mt-4">
+                  <Tabla
+                    encabezados={["Producto", "Veces devuelto"]}
+                    filas={devoluciones.porProducto.map((p) => [
+                      p.producto,
+                      numero(p.veces),
+                    ])}
+                  />
+                </div>
+              )}
+            </Panel>
+          )}
 
           {/* ------------------------- Horno por día -------------------------- */}
           {hornoDiario.length > 0 && (

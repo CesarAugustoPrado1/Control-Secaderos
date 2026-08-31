@@ -33,14 +33,20 @@ export const estadoEnum = pgEnum("estado_secadero", [
 
 /**
  * Los tipos de movimiento describen QUE paso, no solo la transicion de estado.
+ *
  * `ajuste` no cambia de estado: corrige cantidades o modelos de una carga viva.
  * `correccion` es la valvula de escape del admin para arreglar un error operativo.
+ * `devolucion_horno` es un secadero que salio del horno sin secar bien y vuelve
+ *   a la cola: es un hecho productivo, no un error de carga, y por eso tiene su
+ *   propio tipo. Mezclarlo con `correccion` haria imposible distinguir un error
+ *   humano de un problema de secado.
  */
 export const tipoMovimientoEnum = pgEnum("tipo_movimiento", [
   "carga",
   "ajuste",
   "entrada_horno",
   "salida_horno",
+  "devolucion_horno",
   "descarga",
   "correccion",
 ]);

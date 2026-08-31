@@ -18,6 +18,14 @@ administración y auditoría miren todo desde la PC.
 | **Horno** | Horno | Saca los secaderos —normalmente todos, pero puede dejar adentro el que no secó—. Pasan a **seco**. |
 | **Seco** | Paletizado o llenado manual | Descarga las placas: las sanas van a producto terminado, las rotas a desperdicio. Vuelve a **vacío**. |
 
+Si al descargar se detecta que un secadero **no secó bien**, paletizado lo
+devuelve a la cola del horno desde la misma pantalla. Vuelve a *húmedo* —no
+directo a *horno*, porque quien lo mete físicamente es el hornero— y aparece
+primero en la cola, marcado. Queda registrado como un movimiento propio,
+`devolución al horno`, y no como una corrección: una corrección señala un error
+de carga y esto es un hecho productivo. Mezclarlos haría imposible distinguir
+un error humano de un problema de secado.
+
 Todos los tipos de secadero recorren el mismo circuito. **No se restringe por
 tipo quién carga o descarga qué**: en la planta las guardas las puede sacar
 quien las cargó o cualquier otra persona, así que lo que el sistema garantiza
@@ -158,6 +166,9 @@ o un año:
 
 - Tiempo de horno promedio, mínimo y máximo, abierto por tipo de placa, más el
   detalle de los últimos ciclos uno por uno.
+- Devoluciones al horno, comparando cuánto duró el horneado de los ciclos que
+  hubo que devolver contra el de los que salieron bien. Esa diferencia es la que
+  indica el tiempo mínimo real de horno, medido y no estimado.
 - Tiempo promedio en cada etapa del circuito, que sirve para ver dónde se hacen
   colas.
 - Desperdicio por motivo, por etapa del proceso, por modelo y por operario.

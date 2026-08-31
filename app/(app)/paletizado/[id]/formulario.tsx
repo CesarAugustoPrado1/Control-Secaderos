@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import { descargarSecadero } from "@/lib/acciones/flujo";
+import { descargarSecadero, devolverAlHorno } from "@/lib/acciones/flujo";
 import type { LineaContenido } from "@/lib/consultas";
 import { numero } from "@/lib/formato";
 import { useAccion } from "@/components/usar-accion";
@@ -31,6 +31,8 @@ export function FormularioDescarga({
 
   const [roturas, setRoturas] = useState<MapaRoturas>({});
   const [nota, setNota] = useState("");
+  const [verDevolucion, setVerDevolucion] = useState(false);
+  const [notaDevolucion, setNotaDevolucion] = useState("");
 
   const opciones = useMemo(
     () =>
@@ -59,6 +61,24 @@ export function FormularioDescarga({
           secaderoId,
           roturas: convertirRoturas(roturas),
           nota: nota.trim() || undefined,
+        }),
+      () => {
+        router.push("/paletizado");
+        router.refresh();
+      },
+    );
+  }
+
+  async function devolver() {
+    const problema = validarRoturas(roturas, opciones);
+    if (problema) return setError(problema);
+
+    await ejecutar(
+      () =>
+        devolverAlHorno({
+          secaderoId,
+          roturas: convertirRoturas(roturas),
+          nota: notaDevolucion.trim() || undefined,
         }),
       () => {
         router.push("/paletizado");
@@ -159,6 +179,62 @@ export function FormularioDescarga({
           ? "Guardando…"
           : `Descargar secadero ${secaderoNumero} y vaciarlo`}
       </button>
+
+      {/* Salida alternativa: el secadero no seco bien y vuelve a la cola del
+          horno. Va separada y en tono de advertencia para que no se toque por
+          error en lugar de descargar, que es la accion habitual. */}
+      <div className="tarjeta border-t-4 border-red-200 p-4">
+        {!verDevolucion ? (
+          <button
+            type="button"
+            onClick={() => setVerDevolucion(true)}
+            disabled={enviando}
+            className="text-sm font-semibold text-red-700 underline underline-offset-4"
+          >
+            El secadero no secó bien
+          </button>
+        ) : (
+          <div className="space-y-3">
+            <p className="text-sm text-slate-600">
+              Vuelve a la cola del horno con sus{" "}
+              <strong>{numero(aProductoTerminado)} placas</strong> y queda
+              primero para la próxima hornada. Si marcaste roturas arriba, se
+              descuentan igual.
+            </p>
+
+            <label className="block">
+              <span className="etiqueta">¿Por qué? (opcional)</span>
+              <input
+                className="campo"
+                value={notaDevolucion}
+                maxLength={500}
+                disabled={enviando}
+                onChange={(e) => setNotaDevolucion(e.target.value)}
+                placeholder="ej: húmedo en el centro"
+              />
+            </label>
+
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => void devolver()}
+                disabled={enviando}
+                className="boton bg-red-600 text-white hover:bg-red-700"
+              >
+                {enviando ? "Guardando…" : "Devolver al horno"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setVerDevolucion(false)}
+                disabled={enviando}
+                className="boton-secundario"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

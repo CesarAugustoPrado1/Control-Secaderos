@@ -272,6 +272,27 @@ export async function conteoPorEstado(): Promise<Record<Estado, number>> {
   return base;
 }
 
+/**
+ * Secaderos cuyo ultimo movimiento fue una devolucion al horno, o sea que estan
+ * en la cola porque no secaron bien y no porque se acaben de cargar.
+ *
+ * Se resuelve mirando el ultimo movimiento de cada secadero. Como los ids son
+ * seriales, el id mas alto es el mas reciente y alcanza con un max(id).
+ */
+export async function secaderosDevueltosAlHorno(): Promise<Set<number>> {
+  const filas = await db.execute<{ secadero_id: number }>(sql`
+    select m.secadero_id
+    from movimientos m
+    join (
+      select secadero_id, max(id) as ultimo
+      from movimientos
+      group by secadero_id
+    ) u on u.ultimo = m.id
+    where m.tipo = 'devolucion_horno'
+  `);
+  return new Set([...filas].map((f) => Number(f.secadero_id)));
+}
+
 export type MovimientoVista = Awaited<
   ReturnType<typeof listarMovimientos>
 >["items"][number];
