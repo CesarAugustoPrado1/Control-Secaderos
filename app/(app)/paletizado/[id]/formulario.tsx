@@ -196,10 +196,11 @@ export function FormularioDescarga({
         ) : (
           <div className="space-y-3">
             <p className="text-sm text-slate-600">
-              Vuelve a la cola del horno con sus{" "}
-              <strong>{numero(aProductoTerminado)} placas</strong> y queda
-              primero para la próxima hornada. Si marcaste roturas arriba, se
-              descuentan igual.
+              Dejá el secadero en el patio con sus{" "}
+              <strong>{numero(aProductoTerminado)} placas</strong>. Vuelve a la
+              lista de <strong>húmedos</strong> y queda primero, para que el
+              operario de horno lo meta cuando abra el horno. Si marcaste
+              roturas arriba, se descuentan igual.
             </p>
 
             <label className="block">
@@ -221,7 +222,7 @@ export function FormularioDescarga({
                 disabled={enviando}
                 className="boton bg-red-600 text-white hover:bg-red-700"
               >
-                {enviando ? "Guardando…" : "Devolver al horno"}
+                {enviando ? "Guardando…" : "Devolver a húmedos"}
               </button>
               <button
                 type="button"

@@ -81,7 +81,7 @@ export const ETIQUETA_MOVIMIENTO: Record<TipoMovimiento, string> = {
   ajuste: "Ajuste",
   entrada_horno: "Entrada a horno",
   salida_horno: "Salida de horno",
-  devolucion_horno: "Devuelto al horno",
+  devolucion_horno: "No secó: vuelve a húmedos",
   descarga: "Descarga a producto terminado",
   correccion: "Corrección",
 };
@@ -91,7 +91,7 @@ export const ETIQUETA_MOVIMIENTO_CORTA: Record<TipoMovimiento, string> = {
   ajuste: "Ajuste",
   entrada_horno: "A horno",
   salida_horno: "De horno",
-  devolucion_horno: "Devuelto",
+  devolucion_horno: "No secó",
   descarga: "Descarga",
   correccion: "Corrección",
 };

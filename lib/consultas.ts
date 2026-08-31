@@ -273,22 +273,26 @@ export async function conteoPorEstado(): Promise<Record<Estado, number>> {
 }
 
 /**
- * Secaderos cuyo ultimo movimiento fue una devolucion al horno, o sea que estan
- * en la cola porque no secaron bien y no porque se acaben de cargar.
+ * Secaderos en reproceso: los que no secaron bien y volvieron a la cola.
  *
- * Se resuelve mirando el ultimo movimiento de cada secadero. Como los ids son
- * seriales, el id mas alto es el mas reciente y alcanza con un max(id).
+ * La marca dura desde la devolucion hasta que el secadero se descargue y se
+ * vuelva a cargar, no solo mientras espera. Eso importa porque el hornero
+ * necesita saber que ese secadero es un rehorneado TAMBIEN cuando ya esta
+ * adentro: lo ubica donde pueda sacarlo rapido, porque si se pasa se quema.
+ *
+ * Se resuelve preguntando si hubo una devolucion posterior a la ultima carga.
+ * Como los ids son seriales, comparar ids alcanza para ordenar en el tiempo.
  */
-export async function secaderosDevueltosAlHorno(): Promise<Set<number>> {
+export async function secaderosEnReproceso(): Promise<Set<number>> {
   const filas = await db.execute<{ secadero_id: number }>(sql`
-    select m.secadero_id
-    from movimientos m
-    join (
-      select secadero_id, max(id) as ultimo
-      from movimientos
-      group by secadero_id
-    ) u on u.ultimo = m.id
-    where m.tipo = 'devolucion_horno'
+    select d.secadero_id
+    from movimientos d
+    where d.tipo = 'devolucion_horno'
+      and d.id > coalesce((
+        select max(c.id) from movimientos c
+        where c.secadero_id = d.secadero_id and c.tipo = 'carga'
+      ), 0)
+    group by d.secadero_id
   `);
   return new Set([...filas].map((f) => Number(f.secadero_id)));
 }

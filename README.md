@@ -18,13 +18,22 @@ administración y auditoría miren todo desde la PC.
 | **Horno** | Horno | Saca los secaderos —normalmente todos, pero puede dejar adentro el que no secó—. Pasan a **seco**. |
 | **Seco** | Paletizado o llenado manual | Descarga las placas: las sanas van a producto terminado, las rotas a desperdicio. Vuelve a **vacío**. |
 
-Si al descargar se detecta que un secadero **no secó bien**, paletizado lo
-devuelve a la cola del horno desde la misma pantalla. Vuelve a *húmedo* —no
-directo a *horno*, porque quien lo mete físicamente es el hornero— y aparece
-primero en la cola, marcado. Queda registrado como un movimiento propio,
-`devolución al horno`, y no como una corrección: una corrección señala un error
-de carga y esto es un hecho productivo. Mezclarlos haría imposible distinguir
-un error humano de un problema de secado.
+Si al descargar se detecta que un secadero **no secó bien**, paletizado lo deja
+en el patio y lo informa desde la misma pantalla. El secadero vuelve a
+**húmedo** y aparece primero en la cola, marcado.
+
+Paletizado nunca mete ni saca secaderos del horno: eso es responsabilidad del
+hornero, y la app lo hace cumplir —la pantalla de horno no está disponible para
+ese rol y la operación se rechaza en el servidor—. Lo que informa paletizado es
+un hecho, no una acción sobre el horno.
+
+La marca de rehorneado **sigue visible mientras el secadero está adentro del
+horno**, no sólo en la cola: el hornero lo ubica donde pueda sacarlo rápido,
+porque si se pasa se quema.
+
+Queda registrado como un movimiento propio y no como una corrección: una
+corrección señala un error de carga y esto es un hecho productivo. Mezclarlos
+haría imposible distinguir un error humano de un problema de secado.
 
 Todos los tipos de secadero recorren el mismo circuito. **No se restringe por
 tipo quién carga o descarga qué**: en la planta las guardas las puede sacar
@@ -166,8 +175,8 @@ o un año:
 
 - Tiempo de horno promedio, mínimo y máximo, abierto por tipo de placa, más el
   detalle de los últimos ciclos uno por uno.
-- Devoluciones al horno, comparando cuánto duró el horneado de los ciclos que
-  hubo que devolver contra el de los que salieron bien. Esa diferencia es la que
+- Secaderos que no secaron bien, comparando cuánto duró el horneado de los
+  ciclos que no alcanzaron contra el de los que sí. Esa diferencia es la que
   indica el tiempo mínimo real de horno, medido y no estimado.
 - Tiempo promedio en cada etapa del circuito, que sirve para ver dónde se hacen
   colas.

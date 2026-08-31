@@ -317,24 +317,24 @@ export default async function PaginaEstadisticas({
           {/* ---------------------- Devoluciones al horno --------------------- */}
           {devoluciones.devoluciones > 0 && (
             <Panel
-              titulo="Secaderos devueltos al horno"
-              detalle="Salieron del horno sin secar bien y volvieron a la cola"
+              titulo="Secaderos que no secaron bien"
+              detalle="Volvieron a la cola de húmedos para rehornear"
             >
               <div className="grid gap-3 sm:grid-cols-3">
                 <Indicador
-                  rotulo="Devoluciones"
+                  rotulo="Rehorneados"
                   valor={numero(devoluciones.devoluciones)}
                   detalle="en el período"
                   tono="malo"
                 />
                 <Indicador
-                  rotulo="Horno del que se devolvió"
+                  rotulo="Horno que no alcanzó"
                   valor={duracion(devoluciones.promedioDevueltosMin)}
                   detalle={`${numero(devoluciones.ciclosDevueltos)} ciclos que no alcanzaron`}
                   tono="malo"
                 />
                 <Indicador
-                  rotulo="Horno del que salió bien"
+                  rotulo="Horno que sí alcanzó"
                   valor={duracion(devoluciones.promedioBuenosMin)}
                   detalle={`${numero(devoluciones.ciclosBuenos)} ciclos`}
                   tono="bueno"
@@ -347,7 +347,7 @@ export default async function PaginaEstadisticas({
                 devoluciones.promedioBuenosMin >
                   devoluciones.promedioDevueltosMin && (
                   <p className="mt-3 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-900 ring-1 ring-amber-200">
-                    Los ciclos que hubo que devolver duraron en promedio{" "}
+                    Los ciclos que no alcanzaron duraron en promedio{" "}
                     <strong>
                       {duracion(
                         devoluciones.promedioBuenosMin -
@@ -362,7 +362,7 @@ export default async function PaginaEstadisticas({
               {devoluciones.porProducto.length > 0 && (
                 <div className="mt-4">
                   <Tabla
-                    encabezados={["Producto", "Veces devuelto"]}
+                    encabezados={["Producto", "Veces rehorneado"]}
                     filas={devoluciones.porProducto.map((p) => [
                       p.producto,
                       numero(p.veces),

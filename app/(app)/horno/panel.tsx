@@ -30,16 +30,16 @@ export function PanelHorno({
   humedos,
   motivos,
   capacidadHorno,
-  devueltos,
+  reproceso,
 }: {
   enHorno: SecaderoVista[];
   humedos: SecaderoVista[];
   motivos: Motivo[];
   capacidadHorno: number;
-  /** Ids de los que volvieron del horno por no secar bien. */
-  devueltos: number[];
+  /** Ids de los secaderos que no secaron bien y estan siendo rehorneados. */
+  reproceso: number[];
 }) {
-  const esDevuelto = useMemo(() => new Set(devueltos), [devueltos]);
+  const enReproceso = useMemo(() => new Set(reproceso), [reproceso]);
   const router = useRouter();
 
   /**
@@ -208,6 +208,7 @@ export function PanelHorno({
                   }
                   deshabilitado={salida.enviando}
                   acento="horno"
+                  reproceso={enReproceso.has(s.id)}
                 />
               ))}
             </div>
@@ -300,7 +301,7 @@ export function PanelHorno({
                   }
                   deshabilitado={entrada.enviando}
                   acento="humedo"
-                  devuelto={esDevuelto.has(s.id)}
+                  reproceso={enReproceso.has(s.id)}
                 />
               ))}
               {humedosVisibles.length === 0 && (
@@ -400,7 +401,7 @@ function FilaSecadero({
   alCambiarRoturas,
   deshabilitado,
   acento,
-  devuelto,
+  reproceso,
 }: {
   secadero: SecaderoVista;
   elegido: boolean;
@@ -410,7 +411,7 @@ function FilaSecadero({
   alCambiarRoturas: (v: MapaRoturas) => void;
   deshabilitado?: boolean;
   acento: "horno" | "humedo";
-  devuelto?: boolean;
+  reproceso?: boolean;
 }) {
   const [abierto, setAbierto] = useState(false);
 
@@ -458,9 +459,13 @@ function FilaSecadero({
           <span className="block truncate text-xs text-slate-500">
             {secadero.contenido.map((c) => c.nombre).join(", ") || "sin placas"}
           </span>
-          {devuelto && (
+          {reproceso && (
+            // Visible tambien mientras esta adentro: el hornero tiene que
+            // acordarse de sacarlo antes que el resto para que no se queme.
             <span className="mt-1 inline-block rounded-md bg-red-100 px-2 py-0.5 text-[11px] font-bold text-red-800">
-              VUELVE DEL HORNO · no secó bien
+              {acento === "horno"
+                ? "REHORNEADO · sacarlo antes"
+                : "NO SECÓ · va de nuevo al horno"}
             </span>
           )}
           <span className="block text-xs font-medium text-slate-500">
