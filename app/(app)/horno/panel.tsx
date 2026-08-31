@@ -7,6 +7,7 @@ import type { SecaderoVista } from "@/lib/consultas";
 import { duracion, minutosDesde, numero } from "@/lib/formato";
 import { useAccion } from "@/components/usar-accion";
 import { Aviso, Titulo } from "@/components/ui";
+import { MarcasSecadero } from "@/components/marcas-secadero";
 import {
   EditorRoturas,
   convertirRoturas,
@@ -459,6 +460,11 @@ function FilaSecadero({
           <span className="block truncate text-xs text-slate-500">
             {secadero.contenido.map((c) => c.nombre).join(", ") || "sin placas"}
           </span>
+          <MarcasSecadero
+            total={secadero.total}
+            capacidad={secadero.capacidad}
+            productos={secadero.contenido.length}
+          />
           {reproceso && (
             // Visible tambien mientras esta adentro: el hornero tiene que
             // acordarse de sacarlo antes que el resto para que no se queme.

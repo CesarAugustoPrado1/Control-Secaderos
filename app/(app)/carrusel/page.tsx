@@ -46,10 +46,12 @@ export default async function PaginaCarrusel({
           id: s.id,
           numero: s.numero,
           tipoNombre: s.tipoNombre,
+          capacidad: s.capacidad,
           estado: s.estado,
           estadoDesde: s.estadoDesde.toISOString(),
           total: s.total,
           contenido: s.contenido.map((c) => c.nombre).join(", "),
+          productos: s.contenido.length,
         }))}
         estadoObjetivo="vacio"
         hrefBase="/carrusel"

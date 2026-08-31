@@ -5,15 +5,19 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { Estado } from "@/lib/db/schema";
 import { COLOR_ESTADO, ETIQUETA_ESTADO } from "@/lib/estados";
 import { duracion, minutosDesde, numero } from "@/lib/formato";
+import { MarcasSecadero } from "@/components/marcas-secadero";
 
 export type SecaderoBuscable = {
   id: number;
   numero: number;
   tipoNombre: string;
+  capacidad: number;
   estado: Estado;
   estadoDesde: string;
   total: number;
   contenido: string;
+  /** Cuantos productos distintos tiene adentro. */
+  productos: number;
 };
 
 /**
@@ -140,6 +144,11 @@ export function BuscadorAccion({
                         {s.contenido}
                       </span>
                     )}
+                    <MarcasSecadero
+                      total={s.total}
+                      capacidad={s.capacidad}
+                      productos={s.productos}
+                    />
                   </span>
                   {disponible && (
                     <span className="shrink-0 rounded-lg bg-slate-900 px-3 py-2 text-xs font-bold text-white">

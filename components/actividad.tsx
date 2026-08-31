@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { MovimientoVista } from "@/lib/consultas";
 import { CLAVES_RANGO, ETIQUETA_RANGO, type ClaveRango } from "@/lib/rangos";
 import { hora, numero } from "@/lib/formato";
+import { MarcasSecadero } from "@/components/marcas-secadero";
 
 /**
  * Lo hecho en el periodo, en la propia pantalla del operario.
@@ -104,6 +105,15 @@ export function Actividad({
                         .map((l) => `${l.productoNombre} (${numero(l.cantidad)})`)
                         .join(", ")}
                     </p>
+                    {m.capacidad != null && (
+                      <MarcasSecadero
+                        total={placas}
+                        capacidad={m.capacidad}
+                        productos={
+                          m.lineas.filter((l) => l.cantidad > 0).length
+                        }
+                      />
+                    )}
                     <p className="text-xs text-slate-400">{m.usuarioNombre}</p>
                   </div>
 

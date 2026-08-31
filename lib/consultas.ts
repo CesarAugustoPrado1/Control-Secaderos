@@ -344,13 +344,18 @@ export async function listarMovimientos(filtro: FiltroMovimientos = {}) {
       ? [asc(movimientos.creadoEn), asc(movimientos.id)]
       : [desc(movimientos.creadoEn), desc(movimientos.id)];
 
-  const filas = await db
-    .select()
+  // Se trae la capacidad del tipo para poder marcar en las listas si la carga
+  // quedo incompleta. Es leftJoin porque el tipo puede haberse borrado.
+  const crudas = await db
+    .select({ m: movimientos, capacidad: tipos.capacidad })
     .from(movimientos)
+    .leftJoin(tipos, eq(tipos.id, movimientos.secaderoTipoId))
     .where(where)
     .orderBy(...ordenar)
     .limit(porPagina)
     .offset((pagina - 1) * porPagina);
+
+  const filas = crudas.map((f) => ({ ...f.m, capacidad: f.capacidad }));
 
   const lineas = filas.length
     ? await db

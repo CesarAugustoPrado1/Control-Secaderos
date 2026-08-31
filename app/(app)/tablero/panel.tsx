@@ -6,6 +6,7 @@ import type { Estado } from "@/lib/db/schema";
 import { COLOR_ESTADO, ORDEN_ESTADOS, TITULO_ESTADO } from "@/lib/estados";
 import { duracion, minutosDesde, numero } from "@/lib/formato";
 import { ChipEstado, ChipTipo } from "@/components/ui";
+import { MarcasSecadero } from "@/components/marcas-secadero";
 
 /**
  * Tablero: contadores por estado y, al tocar uno, la lista de los secaderos que
@@ -157,6 +158,11 @@ export function PanelTablero({
                             .join(", ")}
                         </p>
                       )}
+                      <MarcasSecadero
+                        total={s.total}
+                        capacidad={s.capacidad}
+                        productos={s.contenido.length}
+                      />
                     </div>
                   </div>
                 </li>
