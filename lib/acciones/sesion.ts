@@ -54,7 +54,17 @@ export async function iniciarSesion(
     }
 
     if (!(await verificarPin(datos.pin, usuario.pinHash))) {
-      const intentos = usuario.intentosFallidos + 1;
+      /**
+       * Si el bloqueo anterior ya vencio, el contador arranca de nuevo.
+       *
+       * Sin esto quedaba pegado en 5: cumplido el bloqueo, el siguiente error
+       * de tipeo daba 6 y volvia a bloquear cinco minutos, y asi para siempre.
+       * Un operario que se olvida el PIN quedaba con un intento cada cinco
+       * minutos hasta que el admin lo destrabara a mano.
+       */
+      const venciaEl = usuario.bloqueadoHasta;
+      const arrancaDeCero = venciaEl != null && venciaEl <= new Date();
+      const intentos = (arrancaDeCero ? 0 : usuario.intentosFallidos) + 1;
       await db
         .update(usuarios)
         .set({

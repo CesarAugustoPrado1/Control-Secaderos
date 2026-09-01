@@ -11,6 +11,7 @@ import {
   ETIQUETA_MOVIMIENTO,
 } from "@/lib/estados";
 import { duracion, fechaHora, numero } from "@/lib/formato";
+import { rangoDeFecha } from "@/lib/rangos";
 import { Titulo, Vacio } from "@/components/ui";
 import { Paginador } from "./paginador";
 
@@ -26,10 +27,19 @@ type Busqueda = {
   pagina?: string;
 };
 
-/** Interpreta una fecha `YYYY-MM-DD` del filtro como dia completo local. */
+/**
+ * Interpreta una fecha `YYYY-MM-DD` del filtro como el dia completo ARGENTINO.
+ *
+ * Antes se parseaba sin huso, o sea en la hora del servidor: en Vercel eso es
+ * UTC, asi que un filtro por el 1 de septiembre traia desde las 21 h del 31 de
+ * agosto hasta las 21 h del 1, y el turno noche caia siempre en el dia
+ * equivocado. En local no se notaba porque la maquina ya esta en hora de
+ * Argentina.
+ */
 function comoFecha(valor: string | undefined, finDelDia: boolean) {
-  if (!valor) return undefined;
-  const fecha = new Date(`${valor}T${finDelDia ? "23:59:59" : "00:00:00"}`);
+  if (!valor || !/^\d{4}-\d{2}-\d{2}$/.test(valor)) return undefined;
+  const { desde, hasta } = rangoDeFecha(valor);
+  const fecha = finDelDia ? hasta : desde;
   return Number.isNaN(fecha.getTime()) ? undefined : fecha;
 }
 

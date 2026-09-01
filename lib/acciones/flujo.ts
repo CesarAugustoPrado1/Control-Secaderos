@@ -52,7 +52,6 @@ export async function cargarSecadero(
     // separar los sectores en las estadisticas.
     const sesion = await autorizar("carrusel", "llenado_manual", "admin");
     const datos = esquemaCarga.parse(entrada);
-    const cfg = await leerConfig();
 
     await db.transaction(async (tx) => {
       const [secadero] = await bloquearSecaderos(tx, [datos.secaderoId]);
@@ -115,7 +114,6 @@ export async function ajustarContenido(
       "admin",
     );
     const datos = esquemaAjuste.parse(entrada);
-    const cfg = await leerConfig();
 
     await db.transaction(async (tx) => {
       const [secadero] = await bloquearSecaderos(tx, [datos.secaderoId]);
@@ -357,7 +355,6 @@ export async function corregirSecadero(
   return ejecutar(async () => {
     const sesion = await autorizar("admin");
     const datos = esquemaCorreccion.parse(entrada);
-    const cfg = await leerConfig();
 
     await db.transaction(async (tx) => {
       const [secadero] = await bloquearSecaderos(tx, [datos.secaderoId]);

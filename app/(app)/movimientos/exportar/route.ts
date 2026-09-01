@@ -3,6 +3,7 @@ import { sesionActual } from "@/lib/auth";
 import { listarMovimientos } from "@/lib/consultas";
 import { ETIQUETA_ESTADO, ETIQUETA_MOVIMIENTO } from "@/lib/estados";
 import { ZONA } from "@/lib/formato";
+import { rangoDeFecha } from "@/lib/rangos";
 
 const MAXIMO_FILAS = 20000;
 
@@ -23,9 +24,11 @@ const COLUMNAS = [
   "Nota",
 ];
 
+/** Mismo criterio que la pantalla: el dia completo en hora de Argentina. */
 function comoFecha(valor: string | null, finDelDia: boolean) {
-  if (!valor) return undefined;
-  const fecha = new Date(`${valor}T${finDelDia ? "23:59:59" : "00:00:00"}`);
+  if (!valor || !/^\d{4}-\d{2}-\d{2}$/.test(valor)) return undefined;
+  const { desde, hasta } = rangoDeFecha(valor);
+  const fecha = finDelDia ? hasta : desde;
   return Number.isNaN(fecha.getTime()) ? undefined : fecha;
 }
 

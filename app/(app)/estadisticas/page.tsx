@@ -48,6 +48,13 @@ export default async function PaginaEstadisticas({
   const periodo = PERIODOS.find((p) => String(p.dias) === dias) ?? PERIODOS[1];
   const rango = rangoDeDias(periodo.dias);
 
+  // Los parametros van solos y primero porque los dos ultimos paneles los
+  // necesitan como argumento. Todo lo demas entra en una sola tanda: sobre una
+  // conexion con pipelining, veinte consultas en paralelo cuestan casi lo mismo
+  // que una, mientras que encadenarlas de a grupos paga una ida y vuelta por
+  // grupo. Antes eran seis tandas.
+  const cfg = await leerConfig();
+
   const [
     tot,
     etapas,
@@ -58,6 +65,16 @@ export default async function PaginaEstadisticas({
     porModelo,
     porUsuario,
     diaria,
+    adherencia,
+    porTipoSec,
+    promEtapa,
+    promProducto,
+    hornoDiario,
+    carruselProducto,
+    carruselMotivo,
+    devoluciones,
+    horno2,
+    ciclos2,
   ] = await Promise.all([
     totales(rango),
     tiemposPorEtapa(rango),
@@ -68,29 +85,19 @@ export default async function PaginaEstadisticas({
     resumenPorModelo(rango),
     desperdicioPorUsuario(rango),
     produccionDiaria(rango),
-  ]);
-
-  const [adherencia, porTipoSec, promEtapa, promProducto, hornoDiario] =
-    await Promise.all([
-      adherenciaAlFlujo(rango),
-      roturasPorTipoSecadero(rango),
-      roturasPorEtapa(rango),
-      roturasPorProducto(rango),
-      movimientoDeHornoDiario(rango),
-    ]);
-
-  const [carruselProducto, carruselMotivo] = await Promise.all([
+    adherenciaAlFlujo(rango),
+    roturasPorTipoSecadero(rango),
+    roturasPorEtapa(rango),
+    roturasPorProducto(rango),
+    movimientoDeHornoDiario(rango),
     roturasCarruselPorProducto(rango),
     roturasCarruselPorMotivo(rango),
-  ]);
-  const rotasEnCarrusel = carruselProducto.reduce((a, r) => a + r.placas, 0);
-
-  const devoluciones = await resumenDevoluciones(rango);
-  const cfg = await leerConfig();
-  const [horno2, ciclos2] = await Promise.all([
+    resumenDevoluciones(rango),
     usoDelHorno(rango, cfg.capacidad_horno),
     ciclosContraObjetivo(rango, cfg.minutos_horno_objetivo),
   ]);
+
+  const rotasEnCarrusel = carruselProducto.reduce((a, r) => a + r.placas, 0);
 
   const hayDatos = tot.cargadas > 0 || tot.terminadas > 0 || tot.rotas > 0;
   const tiempo = (tipo: string) => etapas.find((e) => e.tipo === tipo);

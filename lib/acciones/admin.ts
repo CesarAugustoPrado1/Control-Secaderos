@@ -9,7 +9,9 @@ import {
   motivosDesperdicio,
   movimientoLineas,
   movimientos,
+  planLineas,
   productos,
+  roturasCarrusel,
   secaderoContenido,
   secaderos,
   tipos,
@@ -110,6 +112,22 @@ export async function eliminarTipo(entrada: { id: number }): Promise<Resultado> 
       fallar(
         `No se puede eliminar: lo usan ${conSecaderos} secaderos y ${conProductos} productos. ` +
           "Desactivalo en lugar de eliminarlo.",
+      );
+    }
+
+    // Los movimientos guardan el tipo del secadero al momento en que pasaron.
+    // Sin este chequeo, borrar un tipo con historial lo rechaza igual -por la
+    // clave foranea- pero con un error de base que en pantalla sale como
+    // "revisá la conexión", que no ayuda a nadie.
+    const [{ enHistorial }] = await db
+      .select({ enHistorial: count() })
+      .from(movimientos)
+      .where(eq(movimientos.secaderoTipoId, id));
+
+    if (enHistorial > 0) {
+      fallar(
+        `No se puede eliminar: hay ${enHistorial} movimientos registrados con este tipo. ` +
+          "Desactivalo en lugar de eliminarlo, así el historial se conserva.",
       );
     }
 
@@ -216,6 +234,32 @@ export async function eliminarProducto(entrada: {
     if (enSecaderos > 0) {
       fallar(
         "Este producto está cargado en un secadero ahora mismo. Descargalo primero.",
+      );
+    }
+
+    // Roturas del carrusel y lineas de plan tambien apuntan al producto. Si no
+    // se chequean, la clave foranea rechaza el borrado con un error de base que
+    // llega a la pantalla como "no se pudo guardar, revisá la conexión".
+    const [{ enRoturas }] = await db
+      .select({ enRoturas: count() })
+      .from(roturasCarrusel)
+      .where(eq(roturasCarrusel.productoId, id));
+
+    if (enRoturas > 0) {
+      fallar(
+        "Este producto tiene roturas de carrusel registradas. Suspendelo en lugar de eliminarlo.",
+      );
+    }
+
+    const [{ enPlanes }] = await db
+      .select({ enPlanes: count() })
+      .from(planLineas)
+      .where(eq(planLineas.productoId, id));
+
+    if (enPlanes > 0) {
+      fallar(
+        `Este producto figura en ${enPlanes} ${enPlanes === 1 ? "línea" : "líneas"} de órdenes de producción. ` +
+          "Sacalo de esos planes o suspendelo en lugar de eliminarlo.",
       );
     }
 
