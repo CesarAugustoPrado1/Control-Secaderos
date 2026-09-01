@@ -595,6 +595,7 @@ export async function cambiarEstadoMotivo(
 
 const esquemaConfig = z.object({
   capacidad_horno: z.number().int().min(1).max(1000),
+  minutos_horno_objetivo: z.number().int().min(1).max(100000),
 });
 
 export async function guardarConfig(

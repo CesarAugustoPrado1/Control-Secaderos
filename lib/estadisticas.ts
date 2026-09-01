@@ -461,6 +461,162 @@ export async function movimientoDeHornoDiario(rango: Rango) {
 }
 
 /* -------------------------------------------------------------------------- */
+/* Aprovechamiento del horno                                                  */
+/* -------------------------------------------------------------------------- */
+
+export type Hornada = {
+  inicio: Date;
+  usuario: string;
+  secaderos: number;
+  /** Cuantos secaderos habia en humedo justo antes de esta hornada. */
+  habiaEsperando: number;
+};
+
+export type UsoDelHorno = {
+  hornadas: Hornada[];
+  total: number;
+  promedioSecaderos: number;
+  completas: number;
+  /**
+   * Hornadas que entraron por debajo de la capacidad TENIENDO material de
+   * sobra esperando. Son las unicas que dependen del sector: si el horno entro
+   * a medias porque no habia mas humedos, no es un desvio de nadie.
+   */
+  cortasConMaterial: number;
+};
+
+/**
+ * Como se esta aprovechando el horno.
+ *
+ * Las hornadas se reconstruyen agrupando entradas consecutivas separadas por
+ * menos de 15 minutos: no se guarda un id de lote, pero una hornada se carga de
+ * corrido, asi que el hueco temporal las separa bien.
+ *
+ * El dato que vuelve justa la medicion es `habiaEsperando`: se reconstruye el
+ * estado historico mirando, para cada secadero, cual fue su ultimo movimiento
+ * antes de la hornada. Si termino en `humedo`, estaba en la cola.
+ */
+export async function usoDelHorno(
+  rango: Rango,
+  capacidad: number,
+): Promise<UsoDelHorno> {
+  const filas = await db.execute<{
+    inicio: string;
+    usuario: string;
+    secaderos: string;
+    habia_esperando: string;
+  }>(sql`
+    with entradas as (
+      select id, creado_en, usuario_nombre,
+             case
+               when lag(creado_en) over (order by creado_en) is null
+                 or creado_en - lag(creado_en) over (order by creado_en)
+                    > interval '15 minutes'
+               then 1 else 0
+             end as arranca
+      from movimientos
+      where tipo = 'entrada_horno'
+        and creado_en >= ${rango.desde.toISOString()}::timestamptz
+        and creado_en <= ${rango.hasta.toISOString()}::timestamptz
+    ),
+    agrupadas as (
+      select *, sum(arranca) over (order by creado_en) as hornada from entradas
+    ),
+    hornadas as (
+      select hornada,
+             min(creado_en) as inicio,
+             min(usuario_nombre) as usuario,
+             count(*) as secaderos
+      from agrupadas
+      group by hornada
+    )
+    select h.inicio::text as inicio,
+           h.usuario,
+           h.secaderos::text as secaderos,
+           (
+             select count(*) from (
+               select distinct on (m.secadero_id) m.estado_hasta
+               from movimientos m
+               where m.creado_en < h.inicio
+               order by m.secadero_id, m.creado_en desc, m.id desc
+             ) u where u.estado_hasta = 'humedo'
+           )::text as habia_esperando
+    from hornadas h
+    order by h.inicio desc
+    limit 60
+  `);
+
+  const hornadas: Hornada[] = [...filas].map((f) => ({
+    inicio: new Date(f.inicio),
+    usuario: f.usuario,
+    secaderos: aNumero(f.secaderos),
+    habiaEsperando: aNumero(f.habia_esperando),
+  }));
+
+  const total = hornadas.length;
+  const completas = hornadas.filter((h) => h.secaderos >= capacidad).length;
+  const cortasConMaterial = hornadas.filter(
+    (h) => h.secaderos < capacidad && h.habiaEsperando > h.secaderos,
+  ).length;
+
+  return {
+    hornadas,
+    total,
+    promedioSecaderos:
+      total > 0 ? hornadas.reduce((a, h) => a + h.secaderos, 0) / total : 0,
+    completas,
+    cortasConMaterial,
+  };
+}
+
+export type CicloContraObjetivo = {
+  ciclos: number;
+  cortos: number;
+  largos: number;
+  enObjetivo: number;
+  promedioMin: number;
+};
+
+/** Cuantos ciclos de horno quedaron por debajo o por encima del objetivo. */
+export async function ciclosContraObjetivo(
+  rango: Rango,
+  objetivoMin: number,
+  tolerancia = 0.1,
+): Promise<CicloContraObjetivo> {
+  const filas = await db
+    .select({ duracion: movimientos.duracionMin })
+    .from(movimientos)
+    .where(
+      and(
+        enRango(rango),
+        eq(movimientos.tipo, "salida_horno"),
+        isNotNull(movimientos.duracionMin),
+      ),
+    );
+
+  const minimo = objetivoMin * (1 - tolerancia);
+  const maximo = objetivoMin * (1 + tolerancia);
+
+  let cortos = 0;
+  let largos = 0;
+  let suma = 0;
+  for (const f of filas) {
+    const d = f.duracion ?? 0;
+    suma += d;
+    if (d < minimo) cortos++;
+    else if (d > maximo) largos++;
+  }
+
+  return {
+    ciclos: filas.length,
+    cortos,
+    largos,
+    enObjetivo: filas.length - cortos - largos,
+    promedioMin: filas.length > 0 ? Math.round(suma / filas.length) : 0,
+  };
+}
+
+/* -------------------------------------------------------------------------- */
 /* Devoluciones al horno                                                      */
 /* -------------------------------------------------------------------------- */
 

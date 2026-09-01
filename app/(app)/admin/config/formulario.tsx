@@ -10,13 +10,19 @@ export function FormularioConfig({ inicial }: { inicial: Configuracion }) {
   const [capacidadHorno, setCapacidadHorno] = useState(
     String(inicial.capacidad_horno),
   );
+  const [objetivo, setObjetivo] = useState(
+    String(inicial.minutos_horno_objetivo),
+  );
 
   return (
     <div className="max-w-xl space-y-4">
       <div className="tarjeta p-4">
         <FormularioAbm
           accion={() =>
-            guardarConfig({ capacidad_horno: Number(capacidadHorno) })
+            guardarConfig({
+              capacidad_horno: Number(capacidadHorno),
+              minutos_horno_objetivo: Number(objetivo),
+            })
           }
         >
           <div>
@@ -34,6 +40,25 @@ export function FormularioConfig({ inicial }: { inicial: Configuracion }) {
             <p className="mt-1 text-xs text-slate-500">
               Cuántos secaderos entran en el horno. El sistema no deja meter de
               más.
+            </p>
+          </div>
+
+          <div>
+            <Campo etiqueta={ETIQUETA_CONFIG.minutos_horno_objetivo}>
+              <input
+                type="number"
+                inputMode="numeric"
+                min={1}
+                className="campo"
+                value={objetivo}
+                onChange={(e) => setObjetivo(e.target.value)}
+                required
+              />
+            </Campo>
+            <p className="mt-1 text-xs text-slate-500">
+              Cuánto debería durar un ciclo. Por ejemplo, 300 son 5 horas. No se
+              hace cumplir: sirve para detectar los ciclos que se quedaron
+              cortos, que son los que después vuelven sin secar.
             </p>
           </div>
         </FormularioAbm>

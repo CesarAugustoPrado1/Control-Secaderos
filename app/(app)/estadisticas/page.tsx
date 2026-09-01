@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { requerirRol } from "@/lib/auth";
+import { leerConfig } from "@/lib/consultas";
 import {
   adherenciaAlFlujo,
+  ciclosContraObjetivo,
   desperdicioPorEtapa,
   desperdicioPorMotivo,
   desperdicioPorUsuario,
@@ -17,9 +19,10 @@ import {
   tiemposPorEtapa,
   totales,
   ultimosCiclosDeHorno,
+  usoDelHorno,
 } from "@/lib/estadisticas";
 import { ETIQUETA_MOVIMIENTO } from "@/lib/estados";
-import { duracion, fechaHora, numero, porcentaje } from "@/lib/formato";
+import { duracion, fechaHora, hora, numero, porcentaje } from "@/lib/formato";
 import { Titulo, Vacio } from "@/components/ui";
 
 export const metadata = { title: "Estadísticas · Secaderos" };
@@ -75,6 +78,11 @@ export default async function PaginaEstadisticas({
     ]);
 
   const devoluciones = await resumenDevoluciones(rango);
+  const cfg = await leerConfig();
+  const [horno2, ciclos2] = await Promise.all([
+    usoDelHorno(rango, cfg.capacidad_horno),
+    ciclosContraObjetivo(rango, cfg.minutos_horno_objetivo),
+  ]);
 
   const hayDatos = tot.cargadas > 0 || tot.terminadas > 0 || tot.rotas > 0;
   const tiempo = (tipo: string) => etapas.find((e) => e.tipo === tipo);
@@ -313,6 +321,69 @@ export default async function PaginaEstadisticas({
               />
             )}
           </Panel>
+
+          {/* --------------------- Aprovechamiento del horno ------------------ */}
+          {horno2.total > 0 && (
+            <Panel
+              titulo="Aprovechamiento del horno"
+              detalle={`Capacidad ${cfg.capacidad_horno} secaderos · objetivo de ciclo ${duracion(cfg.minutos_horno_objetivo)}`}
+            >
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <Indicador
+                  rotulo="Hornadas"
+                  valor={numero(horno2.total)}
+                  detalle={`${horno2.promedioSecaderos.toLocaleString("es-AR", { maximumFractionDigits: 1 })} secaderos en promedio`}
+                  tono="neutro"
+                />
+                <Indicador
+                  rotulo="Entraron completas"
+                  valor={porcentaje(horno2.completas, horno2.total)}
+                  detalle={`${numero(horno2.completas)} de ${numero(horno2.total)}`}
+                  tono={
+                    horno2.completas / horno2.total >= 0.8 ? "bueno" : "neutro"
+                  }
+                />
+                <Indicador
+                  rotulo="A medias con material"
+                  valor={numero(horno2.cortasConMaterial)}
+                  detalle="Había húmedos sin cargar"
+                  tono={horno2.cortasConMaterial > 0 ? "malo" : "bueno"}
+                />
+                <Indicador
+                  rotulo="Ciclos fuera de objetivo"
+                  valor={numero(ciclos2.cortos + ciclos2.largos)}
+                  detalle={`${numero(ciclos2.cortos)} cortos · ${numero(ciclos2.largos)} largos`}
+                  tono={ciclos2.cortos > 0 ? "malo" : "neutro"}
+                />
+              </div>
+
+              {/* Sin esta aclaracion, una hornada corta se leeria como
+                  desperdicio de capacidad cuando puede no haber habido nada
+                  mas para cargar. */}
+              <p className="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                Una hornada por debajo de la capacidad sólo es un desvío del
+                sector si había húmedos esperando. Esa es la columna{" "}
+                <strong>esperaban</strong> de la tabla.
+              </p>
+
+              <div className="mt-3">
+                <Tabla
+                  encabezados={[
+                    "Hornada",
+                    "Entraron",
+                    "Esperaban",
+                    "Operario",
+                  ]}
+                  filas={horno2.hornadas.slice(0, 20).map((h) => [
+                    `${fechaHora(h.inicio)}`,
+                    `${numero(h.secaderos)} / ${numero(cfg.capacidad_horno)}`,
+                    numero(h.habiaEsperando),
+                    h.usuario,
+                  ])}
+                />
+              </div>
+            </Panel>
+          )}
 
           {/* ---------------------- Devoluciones al horno --------------------- */}
           {devoluciones.devoluciones > 0 && (
