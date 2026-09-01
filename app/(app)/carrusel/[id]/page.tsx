@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requerirRol } from "@/lib/auth";
-import { motivosActivos, productosActivos, secaderoPorId } from "@/lib/consultas";
+import { productosActivos, secaderoPorId } from "@/lib/consultas";
 import { Aviso } from "@/components/ui";
 import { FormularioCarga } from "./formulario";
 
@@ -16,10 +16,7 @@ export default async function PaginaCargar({
   const secadero = await secaderoPorId(Number(id));
   if (!secadero) notFound();
 
-  const [modelos, motivos] = await Promise.all([
-    productosActivos(secadero.tipoId),
-    motivosActivos(),
-  ]);
+  const modelos = await productosActivos(secadero.tipoId);
 
   return (
     <div className="mx-auto max-w-lg">
@@ -55,7 +52,6 @@ export default async function PaginaCargar({
           secaderoNumero={secadero.numero}
           capacidad={secadero.capacidad}
           modelos={modelos.map((m) => ({ id: m.id, nombre: m.nombre }))}
-          motivos={motivos.map((m) => ({ id: m.id, nombre: m.nombre }))}
         />
       )}
     </div>

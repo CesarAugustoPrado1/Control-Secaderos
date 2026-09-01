@@ -31,6 +31,24 @@ function inicioDelDia(diasAtras = 0): Date {
   return new Date(`${soloFecha.format(base)}T00:00:00-03:00`);
 }
 
+/**
+ * Fin del dia argentino de hoy. Es el corte superior de todos los rangos
+ * "hasta ahora", y NO se usa `new Date()` a proposito.
+ *
+ * El `creado_en` de cada fila lo pone Postgres con su propio reloj, que no es
+ * el mismo que el del servidor de la app: medido contra Supabase, la base va
+ * mas de un segundo adelantada. Cortando en "ahora" segun el reloj del app, la
+ * fila que se acaba de insertar queda en el futuro y desaparece del listado
+ * hasta que pase ese segundo. Era justo lo que hacia que una rotura recien
+ * cargada no apareciera en la lista.
+ *
+ * Cortar al final del dia elimina el problema sin cambiar nada mas: no hay
+ * movimientos legitimos mas alla de la medianoche de hoy.
+ */
+export function finDeHoy(): Date {
+  return new Date(`${soloFecha.format(new Date())}T23:59:59.999-03:00`);
+}
+
 export function esClaveRango(valor: string | undefined): valor is ClaveRango {
   return !!valor && (CLAVES_RANGO as readonly string[]).includes(valor);
 }
@@ -38,12 +56,18 @@ export function esClaveRango(valor: string | undefined): valor is ClaveRango {
 export function rangoPorClave(clave: ClaveRango): { desde: Date; hasta: Date } {
   switch (clave) {
     case "ayer":
-      return { desde: inicioDelDia(1), hasta: inicioDelDia(0) };
+      // Hasta un milisegundo antes de la medianoche de hoy, no hasta la
+      // medianoche misma: si no, un movimiento de las 00:00:00.000 de hoy
+      // caeria en los dos rangos.
+      return {
+        desde: inicioDelDia(1),
+        hasta: new Date(inicioDelDia(0).getTime() - 1),
+      };
     case "semana":
       // Los ultimos 7 dias incluyendo hoy.
-      return { desde: inicioDelDia(6), hasta: new Date() };
+      return { desde: inicioDelDia(6), hasta: finDeHoy() };
     default:
-      return { desde: inicioDelDia(0), hasta: new Date() };
+      return { desde: inicioDelDia(0), hasta: finDeHoy() };
   }
 }
 

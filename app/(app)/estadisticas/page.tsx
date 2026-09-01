@@ -501,7 +501,7 @@ export default async function PaginaEstadisticas({
               ) : (
                 <Barras
                   datos={porEtapa.map((e) => ({
-                    etiqueta: ETIQUETA_MOVIMIENTO[e.tipo],
+                    etiqueta: e.etapa,
                     valor: e.placas,
                   }))}
                   total={tot.rotas}

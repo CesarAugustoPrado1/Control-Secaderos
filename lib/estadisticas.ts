@@ -22,17 +22,34 @@ import {
   tipos,
   type TipoMovimiento,
 } from "./db/schema";
+import { ETIQUETA_MOVIMIENTO } from "./estados";
+import { finDeHoy } from "./rangos";
 
 export type Rango = { desde: Date; hasta: Date };
 
+/**
+ * Los ultimos N dias. El corte de arriba es el fin del dia de hoy y no "ahora"
+ * por la misma razon que en `rangos.ts`: el reloj de la base va adelantado
+ * respecto del de la app, y cortar en "ahora" esconde lo que se acaba de
+ * registrar.
+ */
 export function rangoDeDias(dias: number): Rango {
-  const hasta = new Date();
+  const hasta = finDeHoy();
   const desde = new Date(hasta.getTime() - dias * 24 * 60 * 60 * 1000);
   return { desde, hasta };
 }
 
 const enRango = (r: Rango) =>
   and(gte(movimientos.creadoEn, r.desde), lte(movimientos.creadoEn, r.hasta));
+
+const enRangoCarrusel = (r: Rango) =>
+  and(
+    gte(roturasCarrusel.creadoEn, r.desde),
+    lte(roturasCarrusel.creadoEn, r.hasta),
+  );
+
+/** Etiqueta de la etapa previa al secadero, usada en los cortes de desperdicio. */
+export const ETAPA_ANTES_DEL_SECADERO = "Antes del secadero";
 
 const aNumero = (v: string | number | null) => (v == null ? 0 : Number(v));
 
@@ -150,59 +167,116 @@ export type Totales = {
 };
 
 /**
- * `cargadas` cuenta lo que entro al circuito (placas cargadas + las que se
- * rompieron en la propia carga), asi el porcentaje de rotura tiene un
- * denominador honesto.
+ * `cargadas` es todo lo que el carrusel produjo: lo que entro a un secadero mas
+ * lo que se rompio antes de entrar. Sin ese segundo termino el denominador del
+ * porcentaje de rotura seria mas chico que la realidad y el indice saldria
+ * favorecido justo por las placas que se perdieron.
+ *
+ * `rotas` suma las dos fuentes: lo que se rompio con la placa ya adentro de un
+ * secadero (movimiento_lineas) y lo que se rompio en la linea, antes
+ * (roturas_carrusel).
  */
 export async function totales(rango: Rango): Promise<Totales> {
-  const [fila] = await db
-    .select({
-      cargadas: sql<string>`coalesce(sum(case when ${movimientos.tipo} = 'carga'
-        then ${movimientoLineas.cantidad} + ${movimientoLineas.desperdicio} else 0 end), 0)`,
-      terminadas: sql<string>`coalesce(sum(case when ${movimientos.tipo} = 'descarga'
-        then ${movimientoLineas.cantidad} else 0 end), 0)`,
-      rotas: sql<string>`coalesce(sum(${movimientoLineas.desperdicio}), 0)`,
-    })
-    .from(movimientoLineas)
-    .innerJoin(movimientos, eq(movimientos.id, movimientoLineas.movimientoId))
-    .where(enRango(rango));
+  const [[fila], [antes]] = await Promise.all([
+    db
+      .select({
+        cargadas: sql<string>`coalesce(sum(case when ${movimientos.tipo} = 'carga'
+          then ${movimientoLineas.cantidad} + ${movimientoLineas.desperdicio} else 0 end), 0)`,
+        terminadas: sql<string>`coalesce(sum(case when ${movimientos.tipo} = 'descarga'
+          then ${movimientoLineas.cantidad} else 0 end), 0)`,
+        rotas: sql<string>`coalesce(sum(${movimientoLineas.desperdicio}), 0)`,
+      })
+      .from(movimientoLineas)
+      .innerJoin(movimientos, eq(movimientos.id, movimientoLineas.movimientoId))
+      .where(enRango(rango)),
+    db
+      .select({ placas: sum(roturasCarrusel.cantidad) })
+      .from(roturasCarrusel)
+      .where(enRangoCarrusel(rango)),
+  ]);
+
+  const rotasAntes = aNumero(antes?.placas ?? 0);
 
   return {
-    cargadas: aNumero(fila?.cargadas ?? 0),
+    cargadas: aNumero(fila?.cargadas ?? 0) + rotasAntes,
     terminadas: aNumero(fila?.terminadas ?? 0),
-    rotas: aNumero(fila?.rotas ?? 0),
+    rotas: aNumero(fila?.rotas ?? 0) + rotasAntes,
   };
 }
 
+/**
+ * Motivos de rotura de las dos fuentes juntas.
+ *
+ * Los motivos salen de la misma tabla se rompa donde se rompa, asi que
+ * mostrarlos separados obligaria a sumar de a dos paneles para saber cual es el
+ * problema principal de la planta.
+ */
 export async function desperdicioPorMotivo(rango: Rango) {
-  const filas = await db
-    .select({
-      motivo: sql<string>`coalesce(${movimientoLineas.motivoNombre}, 'Sin motivo')`,
-      placas: sum(movimientoLineas.desperdicio),
-    })
-    .from(movimientoLineas)
-    .innerJoin(movimientos, eq(movimientos.id, movimientoLineas.movimientoId))
-    .where(and(enRango(rango), sql`${movimientoLineas.desperdicio} > 0`))
-    .groupBy(sql`coalesce(${movimientoLineas.motivoNombre}, 'Sin motivo')`)
-    .orderBy(desc(sum(movimientoLineas.desperdicio)));
+  const [enCircuito, antes] = await Promise.all([
+    db
+      .select({
+        motivo: sql<string>`coalesce(${movimientoLineas.motivoNombre}, 'Sin motivo')`,
+        placas: sum(movimientoLineas.desperdicio),
+      })
+      .from(movimientoLineas)
+      .innerJoin(movimientos, eq(movimientos.id, movimientoLineas.movimientoId))
+      .where(and(enRango(rango), sql`${movimientoLineas.desperdicio} > 0`))
+      .groupBy(sql`coalesce(${movimientoLineas.motivoNombre}, 'Sin motivo')`),
+    db
+      .select({
+        motivo: sql<string>`coalesce(${roturasCarrusel.motivoNombre}, 'Sin motivo')`,
+        placas: sum(roturasCarrusel.cantidad),
+      })
+      .from(roturasCarrusel)
+      .where(enRangoCarrusel(rango))
+      .groupBy(sql`coalesce(${roturasCarrusel.motivoNombre}, 'Sin motivo')`),
+  ]);
 
-  return filas.map((f) => ({ motivo: f.motivo, placas: aNumero(f.placas) }));
+  const total = new Map<string, number>();
+  for (const f of [...enCircuito, ...antes]) {
+    total.set(f.motivo, (total.get(f.motivo) ?? 0) + aNumero(f.placas));
+  }
+
+  return [...total.entries()]
+    .map(([motivo, placas]) => ({ motivo, placas }))
+    .sort((a, b) => b.placas - a.placas);
 }
 
-/** En que paso del circuito se rompen las placas. */
+/**
+ * En que paso del circuito se rompen las placas.
+ *
+ * "Antes del secadero" es una etapa mas, aunque no sea un movimiento: es donde
+ * mas se rompe y dejarla afuera daria la impresion de que el problema esta en
+ * el horno o en la descarga.
+ */
 export async function desperdicioPorEtapa(rango: Rango) {
-  const filas = await db
-    .select({
-      tipo: movimientos.tipo,
-      placas: sum(movimientoLineas.desperdicio),
-    })
-    .from(movimientoLineas)
-    .innerJoin(movimientos, eq(movimientos.id, movimientoLineas.movimientoId))
-    .where(and(enRango(rango), sql`${movimientoLineas.desperdicio} > 0`))
-    .groupBy(movimientos.tipo)
-    .orderBy(desc(sum(movimientoLineas.desperdicio)));
+  const [enCircuito, [antes]] = await Promise.all([
+    db
+      .select({
+        tipo: movimientos.tipo,
+        placas: sum(movimientoLineas.desperdicio),
+      })
+      .from(movimientoLineas)
+      .innerJoin(movimientos, eq(movimientos.id, movimientoLineas.movimientoId))
+      .where(and(enRango(rango), sql`${movimientoLineas.desperdicio} > 0`))
+      .groupBy(movimientos.tipo),
+    db
+      .select({ placas: sum(roturasCarrusel.cantidad) })
+      .from(roturasCarrusel)
+      .where(enRangoCarrusel(rango)),
+  ]);
 
-  return filas.map((f) => ({ tipo: f.tipo, placas: aNumero(f.placas) }));
+  const filas = enCircuito.map((f) => ({
+    etapa: ETIQUETA_MOVIMIENTO[f.tipo],
+    placas: aNumero(f.placas),
+  }));
+
+  const rotasAntes = aNumero(antes?.placas ?? 0);
+  if (rotasAntes > 0) {
+    filas.push({ etapa: ETAPA_ANTES_DEL_SECADERO, placas: rotasAntes });
+  }
+
+  return filas.sort((a, b) => b.placas - a.placas);
 }
 
 export type FilaModelo = {
@@ -212,29 +286,63 @@ export type FilaModelo = {
   rotas: number;
 };
 
+/**
+ * Produccion y rotura por producto, con las dos fuentes sumadas: es la tabla
+ * donde se responde "cuanto se rompe de este modelo", y esa respuesta seria
+ * enganosa si dejara afuera lo que se rompe antes de entrar al secadero.
+ */
 export async function resumenPorModelo(rango: Rango): Promise<FilaModelo[]> {
-  const filas = await db
-    .select({
-      modelo: movimientoLineas.productoNombre,
-      cargadas: sql<string>`coalesce(sum(case when ${movimientos.tipo} = 'carga'
-        then ${movimientoLineas.cantidad} + ${movimientoLineas.desperdicio} else 0 end), 0)`,
-      terminadas: sql<string>`coalesce(sum(case when ${movimientos.tipo} = 'descarga'
-        then ${movimientoLineas.cantidad} else 0 end), 0)`,
-      rotas: sql<string>`coalesce(sum(${movimientoLineas.desperdicio}), 0)`,
-    })
-    .from(movimientoLineas)
-    .innerJoin(movimientos, eq(movimientos.id, movimientoLineas.movimientoId))
-    .where(enRango(rango))
-    .groupBy(movimientoLineas.productoNombre)
-    .orderBy(desc(sql`coalesce(sum(case when ${movimientos.tipo} = 'carga'
-      then ${movimientoLineas.cantidad} + ${movimientoLineas.desperdicio} else 0 end), 0)`));
+  const [enCircuito, antes] = await Promise.all([
+    db
+      .select({
+        modelo: movimientoLineas.productoNombre,
+        cargadas: sql<string>`coalesce(sum(case when ${movimientos.tipo} = 'carga'
+          then ${movimientoLineas.cantidad} + ${movimientoLineas.desperdicio} else 0 end), 0)`,
+        terminadas: sql<string>`coalesce(sum(case when ${movimientos.tipo} = 'descarga'
+          then ${movimientoLineas.cantidad} else 0 end), 0)`,
+        rotas: sql<string>`coalesce(sum(${movimientoLineas.desperdicio}), 0)`,
+      })
+      .from(movimientoLineas)
+      .innerJoin(movimientos, eq(movimientos.id, movimientoLineas.movimientoId))
+      .where(enRango(rango))
+      .groupBy(movimientoLineas.productoNombre),
+    db
+      .select({
+        modelo: roturasCarrusel.productoNombre,
+        placas: sum(roturasCarrusel.cantidad),
+      })
+      .from(roturasCarrusel)
+      .where(enRangoCarrusel(rango))
+      .groupBy(roturasCarrusel.productoNombre),
+  ]);
 
-  return filas.map((f) => ({
-    modelo: f.modelo,
-    cargadas: aNumero(f.cargadas),
-    terminadas: aNumero(f.terminadas),
-    rotas: aNumero(f.rotas),
-  }));
+  const porModelo = new Map<string, FilaModelo>();
+  const asegurar = (modelo: string) => {
+    let fila = porModelo.get(modelo);
+    if (!fila) {
+      fila = { modelo, cargadas: 0, terminadas: 0, rotas: 0 };
+      porModelo.set(modelo, fila);
+    }
+    return fila;
+  };
+
+  for (const f of enCircuito) {
+    const fila = asegurar(f.modelo);
+    fila.cargadas += aNumero(f.cargadas);
+    fila.terminadas += aNumero(f.terminadas);
+    fila.rotas += aNumero(f.rotas);
+  }
+  // Rota antes de entrar cuenta como producida y como rota, igual que en el
+  // total general: si no, el producto que mas se rompe en la linea aparece con
+  // menos rotura que el que se rompe adentro.
+  for (const f of antes) {
+    const fila = asegurar(f.modelo);
+    const placas = aNumero(f.placas);
+    fila.cargadas += placas;
+    fila.rotas += placas;
+  }
+
+  return [...porModelo.values()].sort((a, b) => b.cargadas - a.cargadas);
 }
 
 /** Roturas atribuidas a cada operario, para detectar donde reforzar. */

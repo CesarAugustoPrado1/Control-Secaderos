@@ -92,8 +92,6 @@ export function RoturasCarrusel({
           nota: nota.trim() || undefined,
         }),
       () => {
-        // Primero el refresh, igual que el resto de los formularios de la app.
-        router.refresh();
         const nombre = productos.find((p) => p.id === productoId)?.nombre ?? "";
         setAviso(`Registradas ${numero(n)} placas rotas de ${nombre}.`);
         limpiar();

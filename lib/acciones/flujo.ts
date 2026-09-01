@@ -36,10 +36,21 @@ function revalidar() {
 /* Carrusel: vacio -> humedo                                                  */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * La carga no lleva roturas.
+ *
+ * El carrusel siempre saca el secadero completo, asi que la placa que se rompe
+ * en la linea nunca llega a entrar: no le pertenece a ningun secadero. Se
+ * registra una sola vez y suelta, con `registrarRoturaCarrusel`. Tenerla
+ * tambien aca hacia que el mismo hecho se pudiera anotar en dos lados y que el
+ * total dependiera de cual eligio el operario.
+ *
+ * Las roturas de las otras etapas si van en el movimiento: ahi la placa ya
+ * esta adentro del secadero y hay que descontarla de su contenido.
+ */
 const esquemaCarga = z.object({
   secaderoId: z.number().int().positive(),
   items: z.array(esquemaItem).min(1, "Elegí al menos un producto."),
-  roturas: z.array(esquemaRotura).default([]),
   nota: esquemaNota,
 });
 
@@ -59,19 +70,12 @@ export async function cargarSecadero(
 
       const catalogo = await cargarCatalogo(
         tx,
-        [
-          ...new Set([
-            ...datos.items.map((i) => i.productoId),
-            ...datos.roturas.map((r) => r.productoId),
-          ]),
-        ],
-        [...new Set(datos.roturas.map((r) => r.motivoId))],
+        [...new Set(datos.items.map((i) => i.productoId))],
+        [],
       );
 
       validarCarga(secadero, datos.items, catalogo, { exigirActivos: true });
 
-      // Las placas que se rompen al cargar nunca llegaron a entrar al secadero:
-      // se registran como desperdicio pero no ocupan capacidad.
       const cantidades = new Map(
         datos.items.filter((i) => i.cantidad > 0).map((i) => [i.productoId, i.cantidad]),
       );
@@ -82,7 +86,7 @@ export async function cargarSecadero(
         estadoHasta: "humedo",
         cantidades,
         contenidoFinal: cantidades,
-        roturas: datos.roturas,
+        roturas: [],
         nota: datos.nota,
       });
     });

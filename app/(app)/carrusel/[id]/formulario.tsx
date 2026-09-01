@@ -6,13 +6,6 @@ import { cargarSecadero } from "@/lib/acciones/flujo";
 import { numero } from "@/lib/formato";
 import { useAccion } from "@/components/usar-accion";
 import { Aviso } from "@/components/ui";
-import {
-  EditorRoturas,
-  convertirRoturas,
-  validarRoturas,
-  type MapaRoturas,
-  type Motivo,
-} from "@/components/editor-roturas";
 
 type Producto = { id: number; nombre: string };
 
@@ -21,13 +14,11 @@ export function FormularioCarga({
   secaderoNumero,
   capacidad,
   modelos,
-  motivos,
 }: {
   secaderoId: number;
   secaderoNumero: number;
   capacidad: number;
   modelos: Producto[];
-  motivos: Motivo[];
 }) {
   const router = useRouter();
   const { ejecutar, enviando, error, setError } = useAccion();
@@ -40,8 +31,6 @@ export function FormularioCarga({
    */
   const [completo, setCompleto] = useState(true);
   const [cantidades, setCantidades] = useState<Record<number, number>>({});
-  const [roturas, setRoturas] = useState<MapaRoturas>({});
-  const [verRoturas, setVerRoturas] = useState(false);
   const [nota, setNota] = useState("");
   const [filtro, setFiltro] = useState("");
 
@@ -50,14 +39,6 @@ export function FormularioCarga({
     [cantidades],
   );
   const restante = capacidad - total;
-
-  const cargados = useMemo(
-    () =>
-      modelos
-        .filter((m) => (cantidades[m.id] ?? 0) > 0)
-        .map((m) => ({ productoId: m.id, nombre: m.nombre, tope: capacidad })),
-    [modelos, cantidades, capacidad],
-  );
 
   const visibles = useMemo(() => {
     const q = filtro.trim().toLowerCase();
@@ -68,7 +49,6 @@ export function FormularioCarga({
   /** En modo completo, tocar un producto le asigna toda la capacidad. */
   function elegirUnico(id: number) {
     setError(null);
-    setRoturas({});
     setCantidades(cantidades[id] === capacidad ? {} : { [id]: capacidad });
   }
 
@@ -80,13 +60,6 @@ export function FormularioCarga({
       if (limpio === 0) delete siguiente[id];
       return siguiente;
     });
-    if (limpio === 0) {
-      setRoturas((prev) => {
-        const copia = { ...prev };
-        delete copia[id];
-        return copia;
-      });
-    }
   }
 
   function alternarCompleto() {
@@ -102,7 +75,6 @@ export function FormularioCarga({
         setCantidades(
           conCarga.length === 1 ? { [Number(conCarga[0])]: capacidad } : {},
         );
-        setRoturas({});
       }
       return ahora;
     });
@@ -121,9 +93,6 @@ export function FormularioCarga({
         `El secadero admite ${capacidad} placas y estás cargando ${total}.`,
       );
     }
-    const problema = validarRoturas(roturas, cargados);
-    if (problema) return setError(problema);
-
     await ejecutar(
       () =>
         cargarSecadero({
@@ -132,7 +101,6 @@ export function FormularioCarga({
             productoId: Number(productoId),
             cantidad,
           })),
-          roturas: convertirRoturas(roturas),
           nota: nota.trim() || undefined,
         }),
       () => {
@@ -294,26 +262,14 @@ export function FormularioCarga({
         </div>
       </div>
 
-      <div className="tarjeta p-4">
-        {!verRoturas ? (
-          <button
-            type="button"
-            onClick={() => setVerRoturas(true)}
-            disabled={cargados.length === 0}
-            className="text-sm font-semibold text-slate-600 underline underline-offset-4 disabled:text-slate-300 disabled:no-underline"
-          >
-            + Registrar placas rotas al cargar
-          </button>
-        ) : (
-          <EditorRoturas
-            opciones={cargados}
-            motivos={motivos}
-            valor={roturas}
-            alCambiar={setRoturas}
-            deshabilitado={enviando}
-          />
-        )}
-      </div>
+      {/* Las roturas del carrusel no se cargan aca. El secadero siempre sale
+          completo, asi que la placa rota nunca entro: se registra una sola vez,
+          suelta, en la pantalla de Cargar. */}
+      <p className="rounded-xl bg-slate-50 px-4 py-3 text-xs text-slate-500 ring-1 ring-slate-200">
+        Las placas rotas van en{" "}
+        <strong className="text-slate-700">Roturas antes del secadero</strong>,
+        en la pantalla anterior. Acá se carga sólo lo que entra al secadero.
+      </p>
 
       <div className="tarjeta p-4">
         <label htmlFor="nota" className="etiqueta">
