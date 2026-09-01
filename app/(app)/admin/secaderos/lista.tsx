@@ -11,8 +11,13 @@ import {
 } from "@/lib/acciones/admin";
 import type { Estado } from "@/lib/db/schema";
 import { numero } from "@/lib/formato";
+import {
+  analizarSecaderos,
+  importarSecaderos,
+} from "@/lib/acciones/planillas";
 import { useAccion } from "@/components/usar-accion";
 import { Aviso, ChipEstado, ChipTipo } from "@/components/ui";
+import { PlanillaExcel } from "@/components/admin/planilla-excel";
 import {
   BloqueNuevo,
   BotonAccion,
@@ -87,6 +92,27 @@ export function ListaSecaderosAdmin({
       </div>
 
       <AltaPorRango tipos={tipos} desdeSugerido={siguienteNumero} />
+
+      <PlanillaExcel
+        titulo="Secaderos en Excel"
+        hrefExportar="/admin/secaderos/exportar"
+        analizar={analizarSecaderos}
+        importar={importarSecaderos}
+        columnas="Numero, Tipo, Activo"
+        ayuda={
+          <>
+            Los secaderos se identifican por <strong>número</strong>: los que ya
+            existen se actualizan y los que no, se dan de alta. Lo que no
+            aparezca en la planilla queda intacto —{" "}
+            <strong>la importación nunca borra</strong>. En{" "}
+            <strong>Tipo</strong> va el nombre tal como está en la pestaña
+            Tipos; si el tipo no existe, la fila se marca como problema en lugar
+            de crearlo solo. En <strong>Activo</strong> poné SÍ o NO. Las
+            columnas Estado y Capacidad que trae la descarga son informativas y
+            se ignoran al subir.
+          </>
+        }
+      />
 
       <div className="tarjeta mb-4 space-y-3 p-4">
         <input

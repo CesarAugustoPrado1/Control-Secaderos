@@ -7,7 +7,12 @@ import {
   eliminarProducto,
   guardarProducto,
 } from "@/lib/acciones/admin";
+import {
+  analizarProductos,
+  importarProductos,
+} from "@/lib/acciones/planillas";
 import { ChipTipo } from "@/components/ui";
+import { PlanillaExcel } from "@/components/admin/planilla-excel";
 import {
   BloqueNuevo,
   BotonAccion,
@@ -58,6 +63,27 @@ export function ListaProductos({
           />
         )}
       </BloqueNuevo>
+
+      <PlanillaExcel
+        titulo="Productos en Excel"
+        hrefExportar="/admin/productos/exportar"
+        analizar={analizarProductos}
+        importar={importarProductos}
+        columnas="Nombre, Tipo, Activo"
+        ayuda={
+          <>
+            Los productos se identifican por <strong>nombre</strong>: los que ya
+            existen se actualizan y los que no, se dan de alta. Lo que no
+            aparezca en la planilla queda intacto —{" "}
+            <strong>la importación nunca borra</strong>; para sacar un producto
+            de circulación poné NO en Activo. La comparación de nombres ignora
+            mayúsculas y acentos, así que “Laja 12,5” y “laja 12,5” son el mismo
+            producto: si los escribís distinto, se corrige el nombre en lugar de
+            duplicarlo. En <strong>Tipo</strong> va el nombre tal como está en la
+            pestaña Tipos.
+          </>
+        }
+      />
 
       {productos.length === 0 ? (
         <p className="tarjeta px-4 py-10 text-center text-sm text-slate-500">
