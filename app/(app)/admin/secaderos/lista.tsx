@@ -98,18 +98,20 @@ export function ListaSecaderosAdmin({
         hrefExportar="/admin/secaderos/exportar"
         analizar={analizarSecaderos}
         importar={importarSecaderos}
-        columnas="Numero, Tipo, Activo"
+        columnas="Numero, Tipo de secadero, Activo"
         ayuda={
           <>
             Los secaderos se identifican por <strong>número</strong>: los que ya
             existen se actualizan y los que no, se dan de alta. Lo que no
             aparezca en la planilla queda intacto —{" "}
             <strong>la importación nunca borra</strong>. En{" "}
-            <strong>Tipo</strong> va el nombre tal como está en la pestaña
-            Tipos; si el tipo no existe, la fila se marca como problema en lugar
-            de crearlo solo. En <strong>Activo</strong> poné SÍ o NO. Las
-            columnas Estado y Capacidad que trae la descarga son informativas y
-            se ignoran al subir.
+            <strong>Tipo de secadero</strong> va el nombre tal como está en la
+            pestaña Tipos — es lo que define si el secadero es de placa grande o
+            chica, y con eso cuántas placas entran; si el tipo no existe, la
+            fila se marca como problema en lugar de crearlo solo. En{" "}
+            <strong>Activo</strong> poné SÍ o NO. Las columnas “Placas que
+            entran” y “Estado” que trae la descarga son informativas y se
+            ignoran al subir.
           </>
         }
       />

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import type { Resultado } from "@/lib/acciones/comun";
 import type { AccionFila, Analisis } from "@/lib/acciones/planillas";
 import { useAccion } from "@/components/usar-accion";
-import { Aviso } from "@/components/ui";
+import { Aviso, ChipTipo } from "@/components/ui";
 
 /**
  * Bloque de importar/exportar Excel, compartido por secaderos y productos.
@@ -167,6 +167,9 @@ export function PlanillaExcel({
                       <span className="font-semibold text-slate-900">
                         {f.etiqueta}
                       </span>
+                      {f.tipoId !== undefined && f.tipoNombre && (
+                        <ChipTipo id={f.tipoId} nombre={f.tipoNombre} />
+                      )}
                       <span
                         className={
                           f.accion === "error"

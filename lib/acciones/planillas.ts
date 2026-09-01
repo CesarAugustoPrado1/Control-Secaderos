@@ -32,6 +32,13 @@ export type FilaAnalizada = {
   etiqueta: string;
   accion: AccionFila;
   detalle: string;
+  /**
+   * Tipo de secadero al que queda asociada la fila, para mostrarlo con su
+   * etiqueta de color. "Secadero 2 - sin cambios" no dice nada si no se ve si
+   * es de placa grande o chica, que es justamente lo que se esta revisando.
+   */
+  tipoId?: number;
+  tipoNombre?: string;
 };
 
 export type Analisis = {
@@ -137,8 +144,13 @@ async function procesarSecaderos(
   for (const { fila, datos } of crudas) {
     const numero = leerEntero(datos.numero ?? "");
     const etiqueta = numero === null ? `Fila ${fila}` : `Secadero ${numero}`;
+
+    // `marca` acompaña a la fila hasta el final, incluso si termina en error:
+    // saber que el secadero trabado es de placa chica es parte de entender el
+    // problema.
+    let marca: { tipoId?: number; tipoNombre?: string } = {};
     const error = (detalle: string) =>
-      filas.push({ fila, etiqueta, accion: "error", detalle });
+      filas.push({ fila, etiqueta, ...marca, accion: "error", detalle });
 
     if (numero === null || numero <= 0) {
       error(
@@ -151,6 +163,14 @@ async function procesarSecaderos(
       continue;
     }
     vistos.add(numero);
+
+    const actual = porNumero.get(numero);
+    if (actual) {
+      marca = {
+        tipoId: actual.tipoId,
+        tipoNombre: tipoPorId.get(actual.tipoId)?.nombre,
+      };
+    }
 
     const textoTipo = (datos.tipo ?? "").trim();
     if (textoTipo === "") {
@@ -172,15 +192,15 @@ async function procesarSecaderos(
       continue;
     }
 
-    const actual = porNumero.get(numero);
-
     if (!actual) {
+      marca = { tipoId: tipo.id, tipoNombre: tipo.nombre };
       plan.push({ tipo: "crear", numero, tipoId: tipo.id, activo });
       filas.push({
         fila,
         etiqueta,
+        ...marca,
         accion: "crear",
-        detalle: `Alta como ${tipo.nombre}${activo ? "" : ", dado de baja"}.`,
+        detalle: `Alta nueva${activo ? "" : ", dada de baja"}.`,
       });
       continue;
     }
@@ -199,8 +219,10 @@ async function procesarSecaderos(
       }
       cambios.tipoId = tipo.id;
       detalles.push(
-        `tipo ${tipoPorId.get(actual.tipoId)?.nombre ?? "?"} → ${tipo.nombre}`,
+        `pasa de ${tipoPorId.get(actual.tipoId)?.nombre ?? "?"} a ${tipo.nombre}`,
       );
+      // La etiqueta pasa a mostrar en qué queda, que es lo que hay que aprobar.
+      marca = { tipoId: tipo.id, tipoNombre: tipo.nombre };
     }
 
     if (actual.activo !== activo) {
@@ -215,12 +237,19 @@ async function procesarSecaderos(
     }
 
     if (detalles.length === 0) {
-      filas.push({ fila, etiqueta, accion: "igual", detalle: "Sin cambios." });
+      filas.push({
+        fila,
+        etiqueta,
+        ...marca,
+        accion: "igual",
+        detalle: "Sin cambios.",
+      });
     } else {
       plan.push({ tipo: "actualizar", id: actual.id, cambios });
       filas.push({
         fila,
         etiqueta,
+        ...marca,
         accion: "actualizar",
         detalle: detalles.join(", ") + ".",
       });
@@ -338,8 +367,12 @@ async function procesarProductos(
   for (const { fila, datos } of crudas) {
     const nombre = (datos.nombre ?? "").trim();
     const etiqueta = nombre === "" ? `Fila ${fila}` : nombre;
+
+    // En qué secadero entra el producto: sin eso, "Lisa - sin cambios" no dice
+    // si es de placa grande o chica.
+    let marca: { tipoId?: number; tipoNombre?: string } = {};
     const error = (detalle: string) =>
-      filas.push({ fila, etiqueta, accion: "error", detalle });
+      filas.push({ fila, etiqueta, ...marca, accion: "error", detalle });
 
     if (nombre === "") {
       error("Falta el nombre del producto.");
@@ -368,6 +401,14 @@ async function procesarProductos(
       continue;
     }
 
+    const actual = porNombre.get(k);
+    if (actual) {
+      marca = {
+        tipoId: actual.tipoId,
+        tipoNombre: tipoPorId.get(actual.tipoId)?.nombre,
+      };
+    }
+
     const textoTipo = (datos.tipo ?? "").trim();
     if (textoTipo === "") {
       error(`Falta el tipo. Los tipos cargados son: ${nombresDeTipos}.`);
@@ -388,15 +429,15 @@ async function procesarProductos(
       continue;
     }
 
-    const actual = porNombre.get(k);
-
     if (!actual) {
+      marca = { tipoId: tipo.id, tipoNombre: tipo.nombre };
       plan.push({ tipo: "crear", nombre, tipoId: tipo.id, activo });
       filas.push({
         fila,
         etiqueta,
+        ...marca,
         accion: "crear",
-        detalle: `Alta para secadero ${tipo.nombre}${activo ? "" : ", suspendido"}.`,
+        detalle: `Alta nueva${activo ? "" : ", suspendida"}.`,
       });
       continue;
     }
@@ -418,8 +459,9 @@ async function procesarProductos(
       }
       cambios.tipoId = tipo.id;
       detalles.push(
-        `tipo ${tipoPorId.get(actual.tipoId)?.nombre ?? "?"} → ${tipo.nombre}`,
+        `pasa de secadero ${tipoPorId.get(actual.tipoId)?.nombre ?? "?"} a ${tipo.nombre}`,
       );
+      marca = { tipoId: tipo.id, tipoNombre: tipo.nombre };
     }
 
     if (actual.activo !== activo) {
@@ -428,12 +470,19 @@ async function procesarProductos(
     }
 
     if (detalles.length === 0) {
-      filas.push({ fila, etiqueta, accion: "igual", detalle: "Sin cambios." });
+      filas.push({
+        fila,
+        etiqueta,
+        ...marca,
+        accion: "igual",
+        detalle: "Sin cambios.",
+      });
     } else {
       plan.push({ tipo: "actualizar", id: actual.id, cambios });
       filas.push({
         fila,
         etiqueta,
+        ...marca,
         accion: "actualizar",
         detalle: detalles.join(", ") + ".",
       });

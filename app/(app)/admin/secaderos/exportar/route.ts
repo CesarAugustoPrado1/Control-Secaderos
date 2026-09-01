@@ -12,9 +12,14 @@ export const dynamic = "force-dynamic";
 /**
  * Baja la lista completa de secaderos como .xlsx.
  *
- * Las columnas Estado y Capacidad van de sola lectura: son utiles para mirar
- * la planilla, pero al importar se ignoran, porque el estado lo mueven los
- * operarios y la capacidad la define el tipo.
+ * El encabezado dice "Tipo de secadero" y no "Tipo" a proposito: abierta en
+ * Excel, lejos de la app, una columna que dice "Grande" no aclara si eso
+ * describe al secadero o a la placa que entra. La columna de placas al lado lo
+ * termina de fijar.
+ *
+ * Estado y placas van de sola lectura: sirven para mirar la planilla, pero al
+ * importar se ignoran, porque el estado lo mueven los operarios y la capacidad
+ * la define el tipo.
  */
 export async function GET() {
   try {
@@ -29,17 +34,17 @@ export async function GET() {
     "Secaderos",
     [
       { encabezado: "Numero", ancho: 12 },
-      { encabezado: "Tipo", ancho: 22 },
+      { encabezado: "Tipo de secadero", ancho: 20 },
       { encabezado: "Activo", ancho: 10 },
+      { encabezado: "Placas que entran", ancho: 18 },
       { encabezado: "Estado", ancho: 14 },
-      { encabezado: "Capacidad", ancho: 12 },
     ],
     filas.map((s) => [
       s.numero,
       s.tipoNombre,
       s.activo ? "SI" : "NO",
-      ETIQUETA_ESTADO[s.estado],
       s.capacidad,
+      ETIQUETA_ESTADO[s.estado],
     ]),
   );
 

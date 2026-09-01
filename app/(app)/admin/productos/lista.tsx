@@ -69,7 +69,7 @@ export function ListaProductos({
         hrefExportar="/admin/productos/exportar"
         analizar={analizarProductos}
         importar={importarProductos}
-        columnas="Nombre, Tipo, Activo"
+        columnas="Nombre, Tipo de secadero, Activo"
         ayuda={
           <>
             Los productos se identifican por <strong>nombre</strong>: los que ya
@@ -79,8 +79,11 @@ export function ListaProductos({
             de circulación poné NO en Activo. La comparación de nombres ignora
             mayúsculas y acentos, así que “Laja 12,5” y “laja 12,5” son el mismo
             producto: si los escribís distinto, se corrige el nombre en lugar de
-            duplicarlo. En <strong>Tipo</strong> va el nombre tal como está en la
-            pestaña Tipos.
+            duplicarlo. En <strong>Tipo de secadero</strong> va el nombre tal
+            como está en la pestaña Tipos — es en qué secadero entra el
+            producto, o sea si es de placa grande o chica. La columna “Placas
+            que entran” que trae la descarga es informativa y se ignora al
+            subir.
           </>
         }
       />

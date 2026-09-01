@@ -1,5 +1,5 @@
 import { autorizar } from "@/lib/auth";
-import { todosLosProductos } from "@/lib/consultas";
+import { todosLosProductos, todosLosTipos } from "@/lib/consultas";
 import {
   TIPO_XLSX,
   escribirPlanilla,
@@ -8,7 +8,14 @@ import {
 
 export const dynamic = "force-dynamic";
 
-/** Baja la lista completa de productos como .xlsx, lista para reimportar. */
+/**
+ * Baja la lista completa de productos como .xlsx.
+ *
+ * "Tipo de secadero" y no "Tipo": en una planilla de productos, una columna
+ * que dice "Grande" al lado de un nombre se lee como si el producto fuera
+ * grande. Lo que dice en realidad es en que secadero entra, y la columna de
+ * placas al lado lo hace evidente.
+ */
 export async function GET() {
   try {
     await autorizar("admin");
@@ -16,16 +23,26 @@ export async function GET() {
     return new Response("Sin permiso.", { status: 403 });
   }
 
-  const filas = await todosLosProductos();
+  const [filas, tipos] = await Promise.all([
+    todosLosProductos(),
+    todosLosTipos(),
+  ]);
+  const capacidadPorTipo = new Map(tipos.map((t) => [t.id, t.capacidad]));
 
   const archivo = await escribirPlanilla(
     "Productos",
     [
       { encabezado: "Nombre", ancho: 34 },
-      { encabezado: "Tipo", ancho: 22 },
+      { encabezado: "Tipo de secadero", ancho: 20 },
       { encabezado: "Activo", ancho: 10 },
+      { encabezado: "Placas que entran", ancho: 18 },
     ],
-    filas.map((p) => [p.nombre, p.tipoNombre, p.activo ? "SI" : "NO"]),
+    filas.map((p) => [
+      p.nombre,
+      p.tipoNombre,
+      p.activo ? "SI" : "NO",
+      capacidadPorTipo.get(p.tipoId) ?? null,
+    ]),
   );
 
   return new Response(archivo, {
