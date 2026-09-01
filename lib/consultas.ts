@@ -12,6 +12,7 @@ import {
   movimientoLineas,
   movimientos,
   productos,
+  roturasCarrusel,
   secaderoContenido,
   secaderos,
   tipos,
@@ -396,4 +397,45 @@ export async function historialDeSecadero(secaderoId: number, limite = 20) {
     porPagina: limite,
   });
   return items;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Roturas del carrusel                                                       */
+/* -------------------------------------------------------------------------- */
+
+export type RoturaListada = {
+  id: number;
+  productoNombre: string;
+  cantidad: number;
+  motivoNombre: string | null;
+  usuarioNombre: string;
+  nota: string | null;
+  creadoEn: Date;
+};
+
+/** Roturas reportadas en el carrusel dentro de un rango, de la mas nueva a la mas vieja. */
+export async function roturasDeCarrusel(
+  desde: Date,
+  hasta: Date,
+  limite = 100,
+): Promise<RoturaListada[]> {
+  return db
+    .select({
+      id: roturasCarrusel.id,
+      productoNombre: roturasCarrusel.productoNombre,
+      cantidad: roturasCarrusel.cantidad,
+      motivoNombre: roturasCarrusel.motivoNombre,
+      usuarioNombre: roturasCarrusel.usuarioNombre,
+      nota: roturasCarrusel.nota,
+      creadoEn: roturasCarrusel.creadoEn,
+    })
+    .from(roturasCarrusel)
+    .where(
+      and(
+        gte(roturasCarrusel.creadoEn, desde),
+        lte(roturasCarrusel.creadoEn, hasta),
+      ),
+    )
+    .orderBy(desc(roturasCarrusel.creadoEn))
+    .limit(limite);
 }

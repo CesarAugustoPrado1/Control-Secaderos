@@ -43,7 +43,16 @@ const TIPOS = [
  * partida: el admin los cambia desde el panel una vez que los consensue con la
  * gente, que es lo que hace que despues se usen de verdad.
  */
+/**
+ * Los dos primeros separan de quien es el faltante cuando paletizado no llega:
+ * "no hay secaderos" es que el carrusel no los cargo, y "no hay secaderos
+ * secos" es que estan cargados pero el horno todavia no los entrego. Metidos
+ * en un solo motivo generico, esa diferencia -que apunta a sectores distintos-
+ * se pierde.
+ */
 const MOTIVOS_DESVIO = [
+  "No hay secaderos para cumplir el plan",
+  "No hay secaderos secos para cumplir el plan",
   "Falta de personal",
   "Corte de luz",
   "Desperfecto técnico",

@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { SecaderoVista } from "@/lib/consultas";
 import { COLOR_ESTADO } from "@/lib/estados";
 import { duracion, minutosDesde, numero } from "@/lib/formato";
+import { ChipTipo } from "@/components/ui";
 
 /** Tarjeta tactil de un secadero. Si recibe `href` es un link; si no, un div. */
 export function TarjetaSecadero({
@@ -28,9 +29,9 @@ export function TarjetaSecadero({
 
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <span className="text-sm font-semibold text-slate-800">
-              {secadero.tipoNombre}
-            </span>
+            {/* Con su color propio: el cuadrado del numero ya usa el color del
+                estado, asi que sin esto todos los tipos se ven iguales. */}
+            <ChipTipo id={secadero.tipoId} nombre={secadero.tipoNombre} />
             {secadero.total > 0 && (
               <span className="text-sm font-bold tabular-nums text-slate-900">
                 · {numero(secadero.total)} placas

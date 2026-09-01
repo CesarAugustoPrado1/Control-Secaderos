@@ -3,8 +3,9 @@
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { guardarPlan } from "@/lib/acciones/plan";
-import type { Sector } from "@/lib/db/schema";
-import type { ComparacionPlan } from "@/lib/plan";
+import type { Destino, Sector } from "@/lib/db/schema";
+import type { ComparacionPlan, PedidoDeDia } from "@/lib/plan";
+import { DESTINOS, ETIQUETA_DESTINO } from "@/lib/estados";
 import { numero } from "@/lib/formato";
 import { etiquetaDia } from "@/lib/rangos";
 import { useAccion } from "@/components/usar-accion";
@@ -16,6 +17,9 @@ const ETIQUETA_SECTOR: Record<Sector, string> = {
   carrusel: "Carrusel",
   paletizado: "Paletizado",
 };
+
+/** Lo cargado en el editor para un producto. */
+type Pedido = { secaderos: number; destino: Destino | null; cliente: string };
 
 export function EditorPlan({
   fecha,
@@ -33,20 +37,33 @@ export function EditorPlan({
   comparacion: ComparacionPlan;
   semana: string[];
   /** Lo pedido en cada dia de la semana, para poder copiar de un toque. */
-  lineasSemana: Record<string, Record<number, number>>;
+  lineasSemana: Record<string, Record<number, PedidoDeDia>>;
 }) {
   const router = useRouter();
   const { ejecutar, enviando, error, setError } = useAccion();
 
-  const [cantidades, setCantidades] = useState<Record<number, number>>(() =>
-    Object.fromEntries(comparacion.lineas.map((l) => [l.productoId, l.pedidos])),
+  // Paletizado ademas de cuanto recibe que hacer con eso y para quien; el
+  // carrusel solo carga secaderos, no rotula nada.
+  const conDestino = sector === "paletizado";
+
+  const [pedidos, setPedidos] = useState<Record<number, Pedido>>(() =>
+    Object.fromEntries(
+      comparacion.lineas.map((l) => [
+        l.productoId,
+        {
+          secaderos: l.pedidos,
+          destino: l.destino,
+          cliente: l.cliente ?? "",
+        },
+      ]),
+    ),
   );
   const [nota, setNota] = useState(comparacion.nota ?? "");
   const [aviso, setAviso] = useState<string | null>(null);
 
   const total = useMemo(
-    () => Object.values(cantidades).reduce((a, n) => a + (n || 0), 0),
-    [cantidades],
+    () => Object.values(pedidos).reduce((a, p) => a + (p.secaderos || 0), 0),
+    [pedidos],
   );
 
   /** Lo hecho por producto, para mostrarlo al lado de lo pedido. */
@@ -56,13 +73,21 @@ export function EditorPlan({
     return m;
   }, [comparacion.lineas]);
 
-  function set(productoId: number, valor: number) {
+  function actualizar(productoId: number, cambios: Partial<Pedido>) {
     setError(null);
     setAviso(null);
-    const limpio = Math.max(0, Math.floor(valor) || 0);
-    setCantidades((prev) => {
-      const sig = { ...prev, [productoId]: limpio };
-      if (limpio === 0) delete sig[productoId];
+    setPedidos((prev) => {
+      const actual = prev[productoId] ?? {
+        secaderos: 0,
+        destino: null,
+        cliente: "",
+      };
+      const siguiente = { ...actual, ...cambios };
+      siguiente.secaderos = Math.max(0, Math.floor(siguiente.secaderos) || 0);
+
+      const sig = { ...prev, [productoId]: siguiente };
+      // Bajar a cero saca la linea del plan, con destino y cliente incluidos.
+      if (siguiente.secaderos === 0) delete sig[productoId];
       return sig;
     });
   }
@@ -73,18 +98,16 @@ export function EditorPlan({
         guardarPlan({
           fecha,
           sector,
-          lineas: Object.entries(cantidades).map(([productoId, secaderos]) => ({
+          lineas: Object.entries(pedidos).map(([productoId, p]) => ({
             productoId: Number(productoId),
-            secaderos,
+            secaderos: p.secaderos,
+            destino: conDestino ? p.destino : null,
+            cliente: conDestino ? p.cliente.trim() || null : null,
           })),
           nota: nota.trim() || undefined,
         }),
       () => {
-        setAviso(
-          total === 0
-            ? "Se borró el plan de ese día."
-            : "Plan guardado.",
-        );
+        setAviso(total === 0 ? "Se borró el plan de ese día." : "Plan guardado.");
         router.refresh();
       },
     );
@@ -114,59 +137,75 @@ export function EditorPlan({
         semana={semana}
         lineasSemana={lineasSemana}
         alCopiar={(valores, origen) => {
-          setCantidades(valores);
+          setPedidos(valores);
           setAviso(`Copiado de ${etiquetaDia(origen)}. Revisá y guardá.`);
         }}
       />
 
       <div className="mt-3 space-y-2">
         {productos.map((p) => {
-          const pedido = cantidades[p.id] ?? 0;
+          const pedido = pedidos[p.id];
+          const cantidad = pedido?.secaderos ?? 0;
           const hecho = hechoPorProducto.get(p.id) ?? 0;
           return (
             <div
               key={p.id}
-              className={`flex items-center gap-2 rounded-xl p-2.5 ring-1 ${
-                pedido > 0 ? "bg-blue-50 ring-blue-200" : "bg-slate-50 ring-slate-200"
+              className={`rounded-xl p-2.5 ring-1 ${
+                cantidad > 0
+                  ? "bg-blue-50 ring-blue-200"
+                  : "bg-slate-50 ring-slate-200"
               }`}
             >
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-semibold text-slate-800">
-                  {p.nombre}
-                </span>
-                {hecho > 0 && (
-                  <span className="block text-xs text-slate-500">
-                    hechos: {numero(hecho)}
+              <div className="flex items-center gap-2">
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-semibold text-slate-800">
+                    {p.nombre}
                   </span>
-                )}
-              </span>
-              <button
-                type="button"
-                disabled={enviando || pedido === 0}
-                onClick={() => set(p.id, pedido - 1)}
-                className="h-11 w-11 shrink-0 rounded-lg bg-white text-xl font-bold text-slate-700 ring-1 ring-slate-300 disabled:opacity-30"
-              >
-                −
-              </button>
-              <input
-                type="number"
-                inputMode="numeric"
-                min={0}
-                value={pedido === 0 ? "" : pedido}
-                placeholder="0"
-                disabled={enviando}
-                onChange={(e) => set(p.id, Number(e.target.value))}
-                className="h-11 w-16 rounded-lg border-0 bg-white text-center text-base font-bold tabular-nums ring-1 ring-slate-300 focus:ring-2 focus:ring-slate-900"
-                aria-label={`Secaderos de ${p.nombre}`}
-              />
-              <button
-                type="button"
-                disabled={enviando}
-                onClick={() => set(p.id, pedido + 1)}
-                className="h-11 w-11 shrink-0 rounded-lg bg-white text-xl font-bold text-slate-700 ring-1 ring-slate-300"
-              >
-                +
-              </button>
+                  {hecho > 0 && (
+                    <span className="block text-xs text-slate-500">
+                      hechos: {numero(hecho)}
+                    </span>
+                  )}
+                </span>
+                <button
+                  type="button"
+                  disabled={enviando || cantidad === 0}
+                  onClick={() => actualizar(p.id, { secaderos: cantidad - 1 })}
+                  className="h-11 w-11 shrink-0 rounded-lg bg-white text-xl font-bold text-slate-700 ring-1 ring-slate-300 disabled:opacity-30"
+                >
+                  −
+                </button>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min={0}
+                  value={cantidad === 0 ? "" : cantidad}
+                  placeholder="0"
+                  disabled={enviando}
+                  onChange={(e) =>
+                    actualizar(p.id, { secaderos: Number(e.target.value) })
+                  }
+                  className="h-11 w-16 rounded-lg border-0 bg-white text-center text-base font-bold tabular-nums ring-1 ring-slate-300 focus:ring-2 focus:ring-slate-900"
+                  aria-label={`Secaderos de ${p.nombre}`}
+                />
+                <button
+                  type="button"
+                  disabled={enviando}
+                  onClick={() => actualizar(p.id, { secaderos: cantidad + 1 })}
+                  className="h-11 w-11 shrink-0 rounded-lg bg-white text-xl font-bold text-slate-700 ring-1 ring-slate-300"
+                >
+                  +
+                </button>
+              </div>
+
+              {conDestino && cantidad > 0 && (
+                <Instruccion
+                  producto={p.nombre}
+                  pedido={pedido!}
+                  deshabilitado={enviando}
+                  alCambiar={(cambios) => actualizar(p.id, cambios)}
+                />
+              )}
             </div>
           );
         })}
@@ -217,6 +256,67 @@ export function EditorPlan({
 }
 
 /**
+ * Que hacer con los secaderos de un producto y para que cliente.
+ *
+ * Aparece recien cuando hay una cantidad pedida: sin secaderos no hay nada que
+ * paletizar, y un selector de destino vacio en cada producto seria ruido.
+ */
+function Instruccion({
+  producto,
+  pedido,
+  deshabilitado,
+  alCambiar,
+}: {
+  producto: string;
+  pedido: Pedido;
+  deshabilitado: boolean;
+  alCambiar: (cambios: Partial<Pedido>) => void;
+}) {
+  return (
+    <div className="mt-2.5 space-y-2 border-t border-blue-200 pt-2.5">
+      <div className="flex flex-wrap gap-1.5">
+        {DESTINOS.map((d) => {
+          const elegido = pedido.destino === d;
+          return (
+            <button
+              key={d}
+              type="button"
+              disabled={deshabilitado}
+              // Volver a tocar el destino elegido lo saca: el plan puede pedir
+              // secaderos sin decir todavia que hacer con ellos.
+              onClick={() => alCambiar({ destino: elegido ? null : d })}
+              className={`rounded-lg px-2.5 py-2 text-xs font-semibold transition ${
+                elegido
+                  ? "bg-slate-900 text-white"
+                  : "bg-white text-slate-600 ring-1 ring-slate-300 hover:bg-slate-100"
+              }`}
+            >
+              {ETIQUETA_DESTINO[d]}
+            </button>
+          );
+        })}
+      </div>
+
+      {pedido.destino && pedido.destino !== "placa_suelta" && (
+        <p className="text-xs text-slate-500">
+          Lo que sobre después de armar los palets va a placas sueltas.
+        </p>
+      )}
+
+      <input
+        className="campo py-2.5"
+        value={pedido.cliente}
+        maxLength={80}
+        disabled={deshabilitado}
+        onChange={(e) => alCambiar({ cliente: e.target.value })}
+        placeholder="Cliente para rotular (opcional)"
+        aria-label={`Cliente de ${producto}`}
+      />
+    </div>
+  );
+}
+
+/**
  * Copia lo pedido en otro dia del mismo sector, de un toque.
  *
  * Solo se ofrecen los dias que tienen algo cargado: un boton que copia un plan
@@ -230,8 +330,8 @@ function CopiarDeOtroDia({
 }: {
   fecha: string;
   semana: string[];
-  lineasSemana: Record<string, Record<number, number>>;
-  alCopiar: (valores: Record<number, number>, origen: string) => void;
+  lineasSemana: Record<string, Record<number, PedidoDeDia>>;
+  alCopiar: (valores: Record<number, Pedido>, origen: string) => void;
 }) {
   const conPlan = semana.filter(
     (f) => f !== fecha && Object.keys(lineasSemana[f] ?? {}).length > 0,
@@ -243,12 +343,27 @@ function CopiarDeOtroDia({
       <p className="text-xs font-semibold text-slate-600">Copiar de otro día</p>
       <div className="mt-2 flex flex-wrap gap-1.5">
         {conPlan.map((f) => {
-          const total = Object.values(lineasSemana[f]).reduce((a, n) => a + n, 0);
+          const dia = lineasSemana[f];
+          const total = Object.values(dia).reduce((a, p) => a + p.secaderos, 0);
           return (
             <button
               key={f}
               type="button"
-              onClick={() => alCopiar({ ...lineasSemana[f] }, f)}
+              onClick={() =>
+                alCopiar(
+                  Object.fromEntries(
+                    Object.entries(dia).map(([id, p]) => [
+                      Number(id),
+                      {
+                        secaderos: p.secaderos,
+                        destino: p.destino,
+                        cliente: p.cliente ?? "",
+                      },
+                    ]),
+                  ),
+                  f,
+                )
+              }
               className="rounded-lg bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-600 ring-1 ring-slate-300 hover:bg-slate-100"
             >
               {etiquetaDia(f)}

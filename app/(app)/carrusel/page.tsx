@@ -1,8 +1,15 @@
 import { requerirRol } from "@/lib/auth";
-import { listarMovimientos, secaderosConContenido } from "@/lib/consultas";
+import {
+  listarMovimientos,
+  motivosActivos,
+  productosActivos,
+  roturasDeCarrusel,
+  secaderosConContenido,
+} from "@/lib/consultas";
 import { ETIQUETA_ROL } from "@/lib/permisos";
 import { compararPlan, motivosDesvioActivos } from "@/lib/plan";
 import {
+  ETIQUETA_RANGO,
   esClaveRango,
   fechaLocal,
   rangoPorClave,
@@ -11,6 +18,7 @@ import {
 import { Actividad } from "@/components/actividad";
 import { PlanDelDia } from "@/components/plan-del-dia";
 import { BuscadorAccion } from "@/components/buscador-accion";
+import { RoturasCarrusel } from "@/components/roturas-carrusel";
 import { Titulo } from "@/components/ui";
 
 export const metadata = { title: "Cargar · Secaderos" };
@@ -27,18 +35,22 @@ export default async function PaginaCarrusel({
   const { desde, hasta } = rangoPorClave(rango);
 
   const hoy = fechaLocal();
-  const [secaderos, cargas, plan, motivosDesvio] = await Promise.all([
-    secaderosConContenido(),
-    listarMovimientos({
-      tipo: "carga",
-      desde,
-      hasta,
-      porPagina: 200,
-      orden: "asc",
-    }),
-    compararPlan(hoy, "carrusel"),
-    motivosDesvioActivos(),
-  ]);
+  const [secaderos, cargas, plan, motivosDesvio, productos, motivos, roturas] =
+    await Promise.all([
+      secaderosConContenido(),
+      listarMovimientos({
+        tipo: "carga",
+        desde,
+        hasta,
+        porPagina: 200,
+        orden: "asc",
+      }),
+      compararPlan(hoy, "carrusel"),
+      motivosDesvioActivos(),
+      productosActivos(),
+      motivosActivos(),
+      roturasDeCarrusel(desde, hasta),
+    ]);
 
   const sector =
     sesion.rol === "llenado_manual" || sesion.rol === "carrusel"
@@ -61,6 +73,7 @@ export default async function PaginaCarrusel({
         secaderos={secaderos.map((s) => ({
           id: s.id,
           numero: s.numero,
+          tipoId: s.tipoId,
           tipoNombre: s.tipoNombre,
           capacidad: s.capacidad,
           estado: s.estado,
@@ -73,6 +86,18 @@ export default async function PaginaCarrusel({
         hrefBase="/carrusel"
         verbo="Cargar"
         etiquetaDisponibles="secaderos vacíos disponibles"
+      />
+
+      <RoturasCarrusel
+        productos={productos.map((p) => ({ id: p.id, nombre: p.nombre }))}
+        motivos={motivos.map((m) => ({ id: m.id, nombre: m.nombre }))}
+        roturas={roturas.map((r) => ({
+          ...r,
+          creadoEn: r.creadoEn.toISOString(),
+        }))}
+        puedeCargar={sesion.rol !== "auditor"}
+        puedeBorrar={sesion.rol === "admin"}
+        etiquetaRango={ETIQUETA_RANGO[rango].toLowerCase()}
       />
 
       <Actividad

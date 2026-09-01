@@ -1,4 +1,4 @@
-import type { Estado, TipoMovimiento } from "./db/schema";
+import type { Destino, Estado, TipoMovimiento } from "./db/schema";
 
 /** Modulo sin dependencias de servidor: lo usan tanto las paginas como el cliente. */
 
@@ -75,6 +75,39 @@ export function colorTipo(tipoId: number): string {
   const i = Math.max(0, tipoId - 1) % PALETA_TIPOS.length;
   return PALETA_TIPOS[i];
 }
+
+/* -------------------------------------------------------------------------- */
+/* Destino de lo descargado                                                   */
+/* -------------------------------------------------------------------------- */
+
+export const DESTINOS: Destino[] = [
+  "palet_estandar",
+  "palet_optimizado",
+  "placa_suelta",
+];
+
+export const ETIQUETA_DESTINO: Record<Destino, string> = {
+  palet_estandar: "Palet estándar",
+  palet_optimizado: "Palet optimizado",
+  placa_suelta: "Placa suelta",
+};
+
+export const COLOR_DESTINO: Record<Destino, string> = {
+  palet_estandar: "bg-sky-100 text-sky-900",
+  palet_optimizado: "bg-violet-100 text-violet-900",
+  placa_suelta: "bg-stone-200 text-stone-800",
+};
+
+/**
+ * Un secadero no da una cantidad exacta de palets. Lo que sobra de armarlos va
+ * siempre a placas sueltas, sin excepcion, asi que no es una opcion a elegir
+ * sino una aclaracion que acompana a los dos destinos de palet.
+ */
+export const SOBRA_A_SUELTAS: Record<Destino, boolean> = {
+  palet_estandar: true,
+  palet_optimizado: true,
+  placa_suelta: false,
+};
 
 export const ETIQUETA_MOVIMIENTO: Record<TipoMovimiento, string> = {
   carga: "Carga",

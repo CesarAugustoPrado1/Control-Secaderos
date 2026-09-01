@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { explicarDesvio } from "@/lib/acciones/plan";
 import type { ComparacionPlan, LineaPlan } from "@/lib/plan";
+import { COLOR_DESTINO, ETIQUETA_DESTINO } from "@/lib/estados";
 import { numero, porcentaje } from "@/lib/formato";
 import { useAccion } from "@/components/usar-accion";
 import { Aviso } from "@/components/ui";
@@ -107,6 +108,44 @@ export function PlanDelDia({
   );
 }
 
+/**
+ * Que hacer con los secaderos de esta linea y para quien.
+ *
+ * Va debajo del avance y no escondido en una nota: es la instruccion que el
+ * paletizador necesita ANTES de descargar, no un dato de consulta. El aviso de
+ * que lo que sobra va a placas sueltas se repite en cada linea a proposito;
+ * es una regla que se aplica siempre y verla al lado del palet evita la duda.
+ */
+function Instruccion({
+  destino,
+  cliente,
+}: {
+  destino: LineaPlan["destino"];
+  cliente: string | null;
+}) {
+  if (!destino && !cliente) return null;
+
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
+      {destino && (
+        <span className={`chip ${COLOR_DESTINO[destino]}`}>
+          {ETIQUETA_DESTINO[destino]}
+        </span>
+      )}
+      {cliente && (
+        <span className="text-xs font-semibold text-slate-700">
+          Rotular: <span className="text-slate-900">{cliente}</span>
+        </span>
+      )}
+      {destino && destino !== "placa_suelta" && (
+        <span className="basis-full text-xs text-slate-500">
+          Lo que sobre va a placas sueltas.
+        </span>
+      )}
+    </div>
+  );
+}
+
 function FilaPlan({
   linea,
   motivos,
@@ -156,6 +195,8 @@ function FilaPlan({
       <p className="mt-1 text-xs tabular-nums text-slate-500">
         {numero(linea.placas)} de {numero(linea.placasEsperadas)} placas
       </p>
+
+      <Instruccion destino={linea.destino} cliente={linea.cliente} />
 
       {!completo && (
         <div className="mt-2">

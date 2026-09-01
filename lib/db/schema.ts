@@ -40,6 +40,21 @@ export const estadoEnum = pgEnum("estado_secadero", [
 ]);
 
 /**
+ * Que hacer con las placas de un secadero una vez descargado.
+ *
+ * Un secadero no da una cantidad exacta de palets, asi que lo que sobra de
+ * armar palets va siempre a placas sueltas: eso es una regla fija del oficio,
+ * no un dato que se cargue. Lo que se elige aca es el destino principal.
+ *
+ * La app no cuenta palets ni placas sueltas: solo transmite la instruccion.
+ */
+export const destinoEnum = pgEnum("destino_paletizado", [
+  "palet_estandar",
+  "palet_optimizado",
+  "placa_suelta",
+]);
+
+/**
  * Los tipos de movimiento describen QUE paso, no solo la transicion de estado.
  *
  * `ajuste` no cambia de estado: corrige cantidades o modelos de una carga viva.
@@ -233,6 +248,47 @@ export const movimientoLineas = pgTable(
   (t) => [index("movimiento_lineas_movimiento_idx").on(t.movimientoId)],
 );
 
+/**
+ * Roturas del carrusel: las placas que se rompen ANTES de entrar al secadero.
+ *
+ * No son un movimiento. Un movimiento describe algo que le pasa a un secadero,
+ * y estas roturas ocurren en la linea, antes de que la placa llegue a uno: el
+ * carrusel siempre trata de sacar secaderos completos, asi que lo roto se
+ * descarta y el secadero se llena igual. Meterlas en `movimiento_lineas`
+ * obligaria a inventarles un secadero, y despues toda estadistica por secadero
+ * estaria contaminada por placas que nunca estuvieron adentro de uno.
+ *
+ * Por eso viven aparte, con su propia fecha y hora, atadas al producto y a
+ * quien las reporto. Es la tabla que responde "cuanto se rompio de tal modelo
+ * en tal periodo".
+ */
+export const roturasCarrusel = pgTable(
+  "roturas_carrusel",
+  {
+    id: serial("id").primaryKey(),
+    productoId: integer("producto_id")
+      .notNull()
+      .references(() => productos.id),
+    /** Snapshot: el historial se lee aunque despues se renombre el producto. */
+    productoNombre: text("producto_nombre").notNull(),
+    cantidad: integer("cantidad").notNull(),
+    motivoId: integer("motivo_id").references(() => motivosDesperdicio.id),
+    motivoNombre: text("motivo_nombre"),
+    usuarioId: integer("usuario_id")
+      .notNull()
+      .references(() => usuarios.id),
+    usuarioNombre: text("usuario_nombre").notNull(),
+    nota: text("nota"),
+    creadoEn: timestamp("creado_en", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("roturas_carrusel_creado_idx").on(t.creadoEn),
+    index("roturas_carrusel_producto_idx").on(t.productoId),
+  ],
+);
+
 export const motivosDesvio = pgTable("motivos_desvio", {
   id: serial("id").primaryKey(),
   nombre: text("nombre").notNull(),
@@ -282,6 +338,13 @@ export const planLineas = pgTable(
       .notNull()
       .references(() => productos.id),
     secaderos: integer("secaderos").notNull(),
+    /**
+     * Que hacer con esos secaderos y para quien. Solo aplican al sector
+     * paletizado; en carrusel quedan nulos, porque cargar un secadero no tiene
+     * destino ni cliente.
+     */
+    destino: destinoEnum("destino"),
+    cliente: text("cliente"),
     motivoDesvioId: integer("motivo_desvio_id").references(
       () => motivosDesvio.id,
     ),
@@ -383,3 +446,5 @@ export type MotivoDesvio = typeof motivosDesvio.$inferSelect;
 export type Plan = typeof planes.$inferSelect;
 export type PlanLinea = typeof planLineas.$inferSelect;
 export type Sector = (typeof sectorEnum.enumValues)[number];
+export type Destino = (typeof destinoEnum.enumValues)[number];
+export type RoturaCarrusel = typeof roturasCarrusel.$inferSelect;

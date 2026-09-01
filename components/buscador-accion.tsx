@@ -6,10 +6,12 @@ import type { Estado } from "@/lib/db/schema";
 import { COLOR_ESTADO, ETIQUETA_ESTADO } from "@/lib/estados";
 import { duracion, minutosDesde, numero } from "@/lib/formato";
 import { MarcasSecadero } from "@/components/marcas-secadero";
+import { ChipTipo } from "@/components/ui";
 
 export type SecaderoBuscable = {
   id: number;
   numero: number;
+  tipoId: number;
   tipoNombre: string;
   capacidad: number;
   estado: Estado;
@@ -119,8 +121,11 @@ export function BuscadorAccion({
                     {s.numero}
                   </span>
                   <span className="min-w-0 flex-1">
+                    {/* El cuadrado del numero va con el color del ESTADO, que
+                        en esta pantalla es siempre el mismo. Sin este chip,
+                        grande y chico se veian identicos. */}
                     <span className="block text-sm font-semibold text-slate-800">
-                      {s.tipoNombre}
+                      <ChipTipo id={s.tipoId} nombre={s.tipoNombre} />
                       {s.total > 0 && (
                         <span className="ml-1.5 tabular-nums">
                           · {numero(s.total)} placas

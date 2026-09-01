@@ -62,6 +62,7 @@ export default async function PaginaPaletizado({
         secaderos={secaderos.map((s) => ({
           id: s.id,
           numero: s.numero,
+          tipoId: s.tipoId,
           tipoNombre: s.tipoNombre,
           capacidad: s.capacidad,
           estado: s.estado,

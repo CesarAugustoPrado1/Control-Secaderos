@@ -12,6 +12,8 @@ import {
   rangoDeDias,
   resumenDevoluciones,
   resumenPorModelo,
+  roturasCarruselPorMotivo,
+  roturasCarruselPorProducto,
   roturasPorEtapa,
   roturasPorProducto,
   roturasPorTipoSecadero,
@@ -76,6 +78,12 @@ export default async function PaginaEstadisticas({
       roturasPorProducto(rango),
       movimientoDeHornoDiario(rango),
     ]);
+
+  const [carruselProducto, carruselMotivo] = await Promise.all([
+    roturasCarruselPorProducto(rango),
+    roturasCarruselPorMotivo(rango),
+  ]);
+  const rotasEnCarrusel = carruselProducto.reduce((a, r) => a + r.placas, 0);
 
   const devoluciones = await resumenDevoluciones(rango);
   const cfg = await leerConfig();
@@ -494,6 +502,34 @@ export default async function PaginaEstadisticas({
               )}
             </Panel>
           </div>
+
+          {/* ------------------- Roturas antes del secadero -------------------- */}
+          {rotasEnCarrusel > 0 && (
+            <div className="grid gap-4 lg:grid-cols-2">
+              <Panel
+                titulo="Roturas antes del secadero, por producto"
+                detalle={`${numero(rotasEnCarrusel)} placas rotas en la línea del carrusel, sin llegar a entrar a un secadero`}
+              >
+                <Barras
+                  datos={carruselProducto.map((r) => ({
+                    etiqueta: r.producto,
+                    valor: r.placas,
+                  }))}
+                  total={rotasEnCarrusel}
+                />
+              </Panel>
+
+              <Panel titulo="Roturas antes del secadero, por motivo">
+                <Barras
+                  datos={carruselMotivo.map((r) => ({
+                    etiqueta: r.motivo,
+                    valor: r.placas,
+                  }))}
+                  total={rotasEnCarrusel}
+                />
+              </Panel>
+            </div>
+          )}
 
           {/* ----------------------------- Modelos ---------------------------- */}
           <Panel titulo="Por producto">

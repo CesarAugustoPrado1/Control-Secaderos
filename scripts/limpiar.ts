@@ -21,7 +21,10 @@ import { ne, sql as raw } from "drizzle-orm";
 import {
   movimientoLineas,
   movimientos,
+  planLineas,
+  planes,
   productos,
+  roturasCarrusel,
   secaderoContenido,
   secaderos,
   usuarios,
@@ -49,9 +52,12 @@ async function main() {
   const TABLAS = [
     "movimientos",
     "movimiento_lineas",
+    "roturas_carrusel",
     "secadero_contenido",
     "secaderos",
     "productos",
+    "planes",
+    "plan_lineas",
     "tipos",
     "usuarios",
     "motivos_desperdicio",
@@ -67,13 +73,14 @@ async function main() {
 Simulacion: no se borro nada. Elegi un alcance:
 
   npm run db:limpiar -- --movimientos
-      Borra el historial de movimientos y deja todos los secaderos vacios.
-      CONSERVA los secaderos, los productos y los usuarios que ya cargaste.
+      Borra los movimientos y las roturas del carrusel, y deja todos los
+      secaderos vacios. CONSERVA los secaderos, los productos, los usuarios
+      y los planes de produccion que ya cargaste.
       Es el que conviene si ya tenes los datos reales adentro.
 
   npm run db:limpiar -- --todo
-      Ademas borra los secaderos, los productos y los usuarios de prueba
-      (menos el admin). Deja la base como recien instalada.
+      Ademas borra los secaderos, los productos, los planes y los usuarios
+      de prueba (menos el admin). Deja la base como recien instalada.
 
 Los tipos de secadero, los motivos de desperdicio y los parametros se
 conservan en los dos casos.`);
@@ -90,8 +97,16 @@ conservan en los dos casos.`);
     await tx.delete(movimientoLineas);
     await tx.delete(movimientos);
     await tx.delete(secaderoContenido);
+    // Las roturas del carrusel son hechos registrados, igual que un
+    // movimiento: si se tira el historial, se tiran con el.
+    await tx.delete(roturasCarrusel);
 
     if (todo) {
+      // Los planes solo se borran en --todo. Son ordenes hacia adelante, no
+      // historial: alguien puede tener la semana que viene ya cargada y
+      // querer limpiar los movimientos de prueba sin perderla.
+      await tx.delete(planLineas);
+      await tx.delete(planes);
       await tx.delete(secaderos);
       await tx.delete(productos);
       // El admin se conserva: si no, quedas sin poder entrar al panel.

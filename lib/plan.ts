@@ -9,6 +9,7 @@ import {
   planes,
   productos,
   tipos,
+  type Destino,
   type Sector,
 } from "./db/schema";
 import { rangoDeFecha } from "./rangos";
@@ -29,6 +30,9 @@ export type LineaPlan = {
   hechos: number;
   placas: number;
   placasEsperadas: number;
+  /** Que hacer con lo descargado y para quien. Solo en paletizado. */
+  destino: Destino | null;
+  cliente: string | null;
   motivoDesvioId: number | null;
   notaDesvio: string | null;
   explicadoPorNombre: string | null;
@@ -81,6 +85,8 @@ export async function compararPlan(
           tipoNombre: tipos.nombre,
           capacidad: tipos.capacidad,
           pedidos: planLineas.secaderos,
+          destino: planLineas.destino,
+          cliente: planLineas.cliente,
           motivoDesvioId: planLineas.motivoDesvioId,
           notaDesvio: planLineas.notaDesvio,
           explicadoPorNombre: planLineas.explicadoPorNombre,
@@ -209,29 +215,47 @@ export async function planesDeFechas(fechas: string[]) {
   }));
 }
 
+/** Lo pedido para un producto en un dia: cantidad, destino y cliente. */
+export type PedidoDeDia = {
+  secaderos: number;
+  destino: Destino | null;
+  cliente: string | null;
+};
+
 /**
  * Lo pedido en cada dia de la semana para un sector, producto por producto.
  *
  * Se trae entero para que "copiar de otro dia" sea instantaneo en el cliente.
  * Cargar siete dias tipeando desde cero no lo hace nadie, asi que copiar tiene
  * que ser un toque y no una navegacion de ida y vuelta.
+ *
+ * Copia tambien destino y cliente: si copiar el lunes al martes trajera solo
+ * las cantidades, habria que volver a escribir a mano la instruccion de cada
+ * linea, que es justo la parte tediosa.
  */
 export async function lineasDeSemana(fechas: string[], sector: Sector) {
-  if (fechas.length === 0) return {} as Record<string, Record<number, number>>;
+  if (fechas.length === 0)
+    return {} as Record<string, Record<number, PedidoDeDia>>;
 
   const filas = await db
     .select({
       fecha: planes.fecha,
       productoId: planLineas.productoId,
       secaderos: planLineas.secaderos,
+      destino: planLineas.destino,
+      cliente: planLineas.cliente,
     })
     .from(planes)
     .innerJoin(planLineas, eq(planLineas.planId, planes.id))
     .where(and(inArray(planes.fecha, fechas), eq(planes.sector, sector)));
 
-  const porFecha: Record<string, Record<number, number>> = {};
+  const porFecha: Record<string, Record<number, PedidoDeDia>> = {};
   for (const f of filas) {
-    (porFecha[f.fecha] ??= {})[f.productoId] = f.secaderos;
+    (porFecha[f.fecha] ??= {})[f.productoId] = {
+      secaderos: f.secaderos,
+      destino: f.destino,
+      cliente: f.cliente,
+    };
   }
   return porFecha;
 }

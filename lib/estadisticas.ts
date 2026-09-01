@@ -18,6 +18,7 @@ import { db } from "./db";
 import {
   movimientoLineas,
   movimientos,
+  roturasCarrusel,
   tipos,
   type TipoMovimiento,
 } from "./db/schema";
@@ -720,5 +721,65 @@ export async function produccionDiaria(rango: Rango) {
     dia: f.dia,
     terminadas: aNumero(f.terminadas),
     rotas: aNumero(f.rotas),
+  }));
+}
+
+/* -------------------------------------------------------------------------- */
+/* Roturas del carrusel                                                       */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Cuanto se rompio antes del secadero, por modelo.
+ *
+ * Es la metrica que justifica registrar estas roturas: sin ella se sabe cuanto
+ * se rompe adentro de un secadero -eso ya lo daba `movimiento_lineas`- pero no
+ * cuanto se pierde en la linea, que es donde el carrusel puede hacer algo.
+ */
+export async function roturasCarruselPorProducto(rango: Rango) {
+  const filas = await db
+    .select({
+      producto: roturasCarrusel.productoNombre,
+      placas: sum(roturasCarrusel.cantidad),
+      reportes: count(),
+    })
+    .from(roturasCarrusel)
+    .where(
+      and(
+        gte(roturasCarrusel.creadoEn, rango.desde),
+        lte(roturasCarrusel.creadoEn, rango.hasta),
+      ),
+    )
+    .groupBy(roturasCarrusel.productoNombre)
+    .orderBy(desc(sum(roturasCarrusel.cantidad)));
+
+  return filas.map((f) => ({
+    producto: f.producto,
+    placas: aNumero(f.placas),
+    reportes: Number(f.reportes),
+  }));
+}
+
+/** Lo mismo agrupado por motivo: donde conviene intervenir. */
+export async function roturasCarruselPorMotivo(rango: Rango) {
+  const filas = await db
+    .select({
+      motivo: roturasCarrusel.motivoNombre,
+      placas: sum(roturasCarrusel.cantidad),
+      reportes: count(),
+    })
+    .from(roturasCarrusel)
+    .where(
+      and(
+        gte(roturasCarrusel.creadoEn, rango.desde),
+        lte(roturasCarrusel.creadoEn, rango.hasta),
+      ),
+    )
+    .groupBy(roturasCarrusel.motivoNombre)
+    .orderBy(desc(sum(roturasCarrusel.cantidad)));
+
+  return filas.map((f) => ({
+    motivo: f.motivo ?? "Sin motivo",
+    placas: aNumero(f.placas),
+    reportes: Number(f.reportes),
   }));
 }

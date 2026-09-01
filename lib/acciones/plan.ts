@@ -24,6 +24,12 @@ const esquemaFecha = z
 
 const esquemaSector = z.enum(["carrusel", "paletizado"]);
 
+const esquemaDestino = z.enum([
+  "palet_estandar",
+  "palet_optimizado",
+  "placa_suelta",
+]);
+
 const esquemaPlan = z.object({
   fecha: esquemaFecha,
   sector: esquemaSector,
@@ -32,6 +38,12 @@ const esquemaPlan = z.object({
       z.object({
         productoId: z.number().int().positive(),
         secaderos: z.number().int().min(0).max(500),
+        destino: esquemaDestino.nullish(),
+        cliente: z
+          .string()
+          .trim()
+          .max(80, "El cliente no puede tener más de 80 caracteres.")
+          .nullish(),
       }),
     )
     .default([]),
@@ -105,11 +117,18 @@ export async function guardarPlan(
         planId = creado.id;
       }
 
+      // Destino y cliente solo tienen sentido en paletizado: cargar un
+      // secadero no se rotula para nadie. Se limpian en vez de rechazarse para
+      // que cambiar el sector de un plan no falle por un dato que sobra.
+      const esPaletizado = datos.sector === "paletizado";
+
       await tx.insert(planLineas).values(
         lineas.map((l) => ({
           planId: planId!,
           productoId: l.productoId,
           secaderos: l.secaderos,
+          destino: esPaletizado ? (l.destino ?? null) : null,
+          cliente: esPaletizado ? (l.cliente || null) : null,
         })),
       );
     });
