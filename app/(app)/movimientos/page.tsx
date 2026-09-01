@@ -95,11 +95,16 @@ export default async function PaginaMovimientos({
           </label>
           <select id="tipo" name="tipo" defaultValue={q.tipo ?? ""} className="campo py-2.5">
             <option value="">Todos</option>
-            {tipoMovimientoEnum.enumValues.map((t) => (
-              <option key={t} value={t}>
-                {ETIQUETA_MOVIMIENTO[t]}
-              </option>
-            ))}
+            {/* `ajuste` queda fuera: no se genera mas, asi que como filtro
+                seria una opcion que no devuelve nunca nada. Sigue en el enum
+                por compatibilidad, no como cosa elegible. */}
+            {tipoMovimientoEnum.enumValues
+              .filter((t) => t !== "ajuste")
+              .map((t) => (
+                <option key={t} value={t}>
+                  {ETIQUETA_MOVIMIENTO[t]}
+                </option>
+              ))}
           </select>
         </div>
 

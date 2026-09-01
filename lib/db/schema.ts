@@ -57,7 +57,12 @@ export const destinoEnum = pgEnum("destino_paletizado", [
 /**
  * Los tipos de movimiento describen QUE paso, no solo la transicion de estado.
  *
- * `ajuste` no cambia de estado: corrige cantidades o modelos de una carga viva.
+ * `ajuste` ya no se genera. Existio para corregir cantidades de una carga viva
+ *   sin cambiar de estado, pero nunca se conecto a ninguna pantalla y no quedo
+ *   ni una fila con ese tipo. El valor se mantiene en el enum igual: sacarlo de
+ *   un enum de Postgres obliga a recrear el tipo y a tocar la columna de una
+ *   tabla que ya tiene historial, y no vale ese riesgo por un valor que no
+ *   molesta. Para corregir una carga esta `correccion`, que ademas exige nota.
  * `correccion` es la valvula de escape del admin para arreglar un error operativo.
  * `devolucion_horno` es un secadero que salio del horno sin secar bien y vuelve
  *   a la cola: es un hecho productivo, no un error de carga, y por eso tiene su

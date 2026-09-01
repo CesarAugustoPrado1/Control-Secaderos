@@ -231,8 +231,11 @@ export type Movida = {
   roturas: Rotura[];
   nota: string | null;
   /**
-   * Un `ajuste` no cierra el tramo de estado: el secadero sigue contando el
-   * tiempo desde que entro al estado, asi no se ensucia el tiempo de horno.
+   * No cierra el tramo de estado: el secadero sigue contando el tiempo desde
+   * que entro al estado en que ya estaba. Lo usa la correccion del admin
+   * cuando arregla el contenido sin mover al secadero de estado; si reiniciara
+   * el reloj, una correccion de tipeo se llevaria puesto el tiempo de horno
+   * medido de ese secadero.
    */
   conservarInicioDeEstado?: boolean;
 };
