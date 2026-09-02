@@ -33,3 +33,24 @@ export const DETALLE_SECTOR_SECADEROS: Record<SectorResumen, string> = {
   horno: "Secaderos que salieron secos del horno",
   paletizado: "Secaderos descargados a producto terminado",
 };
+
+/**
+ * Como se relaciona la rotura con los secaderos contados.
+ *
+ * En el carrusel la placa se rompe ANTES de llenar el secadero: no esta adentro
+ * de ninguno de los que se cuentan, asi que se suma aparte. "2 secaderos de
+ * Laja + 15 placas rotas" son dos secaderos llenos y quince placas que ademas
+ * paso la maquina.
+ *
+ * En horno y paletizado la placa rota SALIO de esos mismos secaderos, asi que
+ * se resta. "1 secadero de San Juan 60 - 3 placas rotas" es un secadero del que
+ * llegaron enteras todas menos tres.
+ *
+ * Poner el mismo signo en los tres seria comodo y estaria mal: en un caso la
+ * rotura se agrega a lo contado y en el otro sale de adentro.
+ */
+export const SIGNO_ROTURA: Record<SectorResumen, "+" | "−"> = {
+  carrusel: "+",
+  horno: "−",
+  paletizado: "−",
+};

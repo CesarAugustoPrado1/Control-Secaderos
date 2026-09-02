@@ -7,6 +7,8 @@ import {
   DETALLE_SECTOR,
   DETALLE_SECTOR_SECADEROS,
   ETIQUETA_SECTOR_RESUMEN,
+  SIGNO_ROTURA,
+  type SectorResumen,
 } from "@/lib/sectores";
 import { numero } from "@/lib/formato";
 import { etiquetaDia } from "@/lib/rangos";
@@ -68,7 +70,11 @@ export function PanelProduccion({
                 </h3>
                 <span className="text-sm font-bold tabular-nums text-slate-900">
                   {porSecaderos ? (
-                    `${numero(s.secaderos)} ${s.secaderos === 1 ? "secadero" : "secaderos"}`
+                    <EnSecaderos
+                      secaderos={s.secaderos}
+                      rotas={s.rotas}
+                      sector={s.sector}
+                    />
                   ) : (
                     <Cuenta total={s.total} buenas={s.buenas} rotas={s.rotas} />
                   )}
@@ -100,12 +106,11 @@ export function PanelProduccion({
                       </span>
                       <span className="shrink-0 text-sm tabular-nums">
                         {porSecaderos ? (
-                          <span className="font-bold text-slate-900">
-                            {numero(p.secaderos)}{" "}
-                            <span className="text-xs font-medium text-slate-500">
-                              {p.secaderos === 1 ? "secadero" : "secaderos"}
-                            </span>
-                          </span>
+                          <EnSecaderos
+                            secaderos={p.secaderos}
+                            rotas={p.rotas}
+                            sector={s.sector}
+                          />
                         ) : (
                           <Cuenta
                             total={p.total}
@@ -123,6 +128,45 @@ export function PanelProduccion({
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * "2 secaderos + 15 placas rotas" en el carrusel, "1 secadero - 3 placas rotas"
+ * en horno y paletizado.
+ *
+ * El signo no es cosmetico: en el carrusel la placa se rompio antes de llenar
+ * el secadero, asi que se suma a lo que paso el sector; en los otros dos salio
+ * de adentro de esos mismos secaderos, asi que se resta. Escribirlos igual
+ * daria a entender que en el carrusel esas placas estaban en los secaderos
+ * contados, y no estaban.
+ */
+function EnSecaderos({
+  secaderos,
+  rotas,
+  sector,
+}: {
+  secaderos: number;
+  rotas: number;
+  sector: SectorResumen;
+}) {
+  return (
+    <>
+      <span className="font-bold text-slate-900">{numero(secaderos)}</span>{" "}
+      <span className="text-xs font-medium text-slate-500">
+        {secaderos === 1 ? "secadero" : "secaderos"}
+      </span>
+      {rotas > 0 && (
+        <>
+          <span className="text-slate-400"> {SIGNO_ROTURA[sector]} </span>
+          <span className="font-bold text-red-600">{numero(rotas)}</span>
+          <span className="text-xs font-medium text-red-600">
+            {" "}
+            {rotas === 1 ? "placa rota" : "placas rotas"}
+          </span>
+        </>
+      )}
+    </>
   );
 }
 

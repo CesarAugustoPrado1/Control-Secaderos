@@ -49,6 +49,13 @@ export type ResumenSector = {
   buenas: number;
   rotas: number;
   total: number;
+  /**
+   * Secaderos DISTINTOS que paso el sector.
+   *
+   * No es la suma de la columna de cada producto: un secadero mixto aparece en
+   * la fila de cada producto que lleva adentro, asi que sumarlas daria mas
+   * secaderos de los que hubo. Se cuenta aparte, sobre los movimientos.
+   */
   secaderos: number;
 };
 
@@ -65,7 +72,7 @@ const nuevo = (): Acumulado => ({ buenas: 0, rotas: 0, secaderos: 0 });
 export async function resumenDelDia(fecha: string): Promise<ResumenDelDia> {
   const { desde, hasta } = rangoDeFecha(fecha);
 
-  const [porMovimiento, roturasLinea] = await Promise.all([
+  const [porMovimiento, roturasLinea, secaderosPorSector] = await Promise.all([
     db
       .select({
         tipo: movimientos.tipo,
@@ -105,6 +112,22 @@ export async function resumenDelDia(fecha: string): Promise<ResumenDelDia> {
         ),
       )
       .groupBy(roturasCarrusel.productoNombre),
+    // Secaderos distintos por sector. Va en su propia consulta justamente para
+    // no pasar por `movimiento_lineas`, que es lo que multiplica los mixtos.
+    db
+      .select({
+        tipo: movimientos.tipo,
+        secaderos: sql<string>`count(distinct ${movimientos.id})`,
+      })
+      .from(movimientos)
+      .where(
+        and(
+          gte(movimientos.creadoEn, desde),
+          lte(movimientos.creadoEn, hasta),
+          inArray(movimientos.tipo, ["carga", "salida_horno", "descarga"]),
+        ),
+      )
+      .groupBy(movimientos.tipo),
   ]);
 
   const porSector = new Map<SectorResumen, Map<string, Acumulado>>(
@@ -163,6 +186,15 @@ export async function resumenDelDia(fecha: string): Promise<ResumenDelDia> {
     asegurar("carrusel", f.producto).rotas += aNumero(f.rotas);
   }
 
+  const MOVIMIENTO_DEL_SECTOR: Record<SectorResumen, string> = {
+    carrusel: "carga",
+    horno: "salida_horno",
+    paletizado: "descarga",
+  };
+  const distintos = new Map(
+    secaderosPorSector.map((f) => [f.tipo as string, Number(f.secaderos)]),
+  );
+
   const sectores: ResumenSector[] = SECTORES.map((sector) => {
     const productos = [...porSector.get(sector)!.entries()]
       .map(([producto, a]) => ({
@@ -181,7 +213,7 @@ export async function resumenDelDia(fecha: string): Promise<ResumenDelDia> {
       buenas: productos.reduce((a, p) => a + p.buenas, 0),
       rotas: productos.reduce((a, p) => a + p.rotas, 0),
       total: productos.reduce((a, p) => a + p.total, 0),
-      secaderos: productos.reduce((a, p) => a + p.secaderos, 0),
+      secaderos: distintos.get(MOVIMIENTO_DEL_SECTOR[sector]) ?? 0,
     };
   });
 
