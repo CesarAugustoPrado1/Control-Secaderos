@@ -31,6 +31,7 @@ const COLOR_ROL: Record<Rol, string> = {
   llenado_manual: "bg-sky-100 text-sky-800",
   horno: "bg-orange-100 text-orange-800",
   paletizado: "bg-violet-100 text-violet-800",
+  administrativo: "bg-amber-100 text-amber-900",
   auditor: "bg-teal-100 text-teal-800",
 };
 
@@ -41,6 +42,7 @@ const QUE_HACE: Record<Rol, string> = {
   llenado_manual: "Carga y descarga secaderos (guardas y especiales)",
   horno: "Mete y saca secaderos del horno",
   paletizado: "Descarga secaderos secos",
+  administrativo: "Ve el resumen de producción del día, no opera",
   auditor: "Ve todo, no modifica nada",
 };
 

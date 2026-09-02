@@ -457,6 +457,7 @@ const esquemaUsuario = z.object({
     "llenado_manual",
     "horno",
     "paletizado",
+    "administrativo",
     "auditor",
   ]),
   pin: z

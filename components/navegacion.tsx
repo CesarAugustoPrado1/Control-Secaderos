@@ -11,6 +11,7 @@ const ICONOS: Record<string, string> = {
   horno: "🔥",
   pallet: "📦",
   lista: "☰",
+  resumen: "📋",
   grafico: "📈",
   config: "⚙",
 };

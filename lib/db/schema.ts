@@ -16,12 +16,17 @@ import { relations } from "drizzle-orm";
 /* Enums                                                                      */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * `administrativo` no opera nada: mira el resumen de produccion del dia. Es un
+ * rol de oficina, no de piso, asi que no tiene ninguna pantalla de carga.
+ */
 export const rolEnum = pgEnum("rol", [
   "admin",
   "carrusel",
   "llenado_manual",
   "horno",
   "paletizado",
+  "administrativo",
   "auditor",
 ]);
 

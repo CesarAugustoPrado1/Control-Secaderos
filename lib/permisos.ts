@@ -17,11 +17,20 @@ const REGLAS: Array<{ prefijo: string; roles: Rol[] }> = [
   { prefijo: "/carrusel", roles: ["carrusel", "llenado_manual", "admin"] },
   { prefijo: "/horno", roles: ["horno", "admin"] },
   { prefijo: "/paletizado", roles: ["paletizado", "llenado_manual", "admin"] },
+  { prefijo: "/produccion", roles: ["administrativo", "admin", "auditor"] },
   { prefijo: "/movimientos", roles: ["admin", "auditor"] },
   { prefijo: "/estadisticas", roles: ["admin", "auditor"] },
   {
     prefijo: "/tablero",
-    roles: ["admin", "auditor", "carrusel", "llenado_manual", "horno", "paletizado"],
+    roles: [
+      "admin",
+      "auditor",
+      "carrusel",
+      "llenado_manual",
+      "horno",
+      "paletizado",
+      "administrativo",
+    ],
   },
 ];
 
@@ -43,6 +52,8 @@ export function rutaInicial(rol: Rol): string {
       return "/horno";
     case "paletizado":
       return "/paletizado";
+    case "administrativo":
+      return "/produccion";
     default:
       return "/tablero";
   }
@@ -59,6 +70,7 @@ export const ETIQUETA_ROL: Record<Rol, string> = {
   llenado_manual: "Llenado manual",
   horno: "Horno",
   paletizado: "Paletizado",
+  administrativo: "Administrativo de producción",
   auditor: "Auditor",
 };
 
@@ -68,6 +80,7 @@ export const ROLES: Rol[] = [
   "llenado_manual",
   "horno",
   "paletizado",
+  "administrativo",
   "auditor",
 ];
 
@@ -78,6 +91,7 @@ const NAV: ItemNav[] = [
   { href: "/carrusel", etiqueta: "Cargar", icono: "carrusel" },
   { href: "/horno", etiqueta: "Horno", icono: "horno" },
   { href: "/paletizado", etiqueta: "Descargar", icono: "pallet" },
+  { href: "/produccion", etiqueta: "Producción", icono: "resumen" },
   { href: "/movimientos", etiqueta: "Movimientos", icono: "lista" },
   { href: "/estadisticas", etiqueta: "Estadísticas", icono: "grafico" },
   { href: "/admin", etiqueta: "Administración", icono: "config" },

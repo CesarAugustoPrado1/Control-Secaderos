@@ -1,5 +1,8 @@
 import { ZONA } from "./formato";
 
+/** La misma zona, para pasarsela a Postgres en un `at time zone`. */
+export const ZONA_SQL = ZONA;
+
 /**
  * Rangos rapidos para las pantallas de operario.
  *
