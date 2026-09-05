@@ -21,7 +21,8 @@ export { ETIQUETA_ESTADO };
 /** Secadero con los datos de su tipo resueltos, que es como lo usa el motor. */
 export type SecaderoConTipo = Secadero & {
   tipoNombre: string;
-  capacidad: number;
+  /** null = el tipo no tiene tope fijo. Ver `tipos` en el esquema. */
+  capacidad: number | null;
 };
 
 /** Transaccion de Drizzle. Todo el motor trabaja adentro de una. */
@@ -145,7 +146,8 @@ export async function cargarCatalogo(
 
 /**
  * Un secadero solo lleva modelos de su mismo tipo, y el total no puede pasar
- * la capacidad que ese tipo tiene definida.
+ * la capacidad que ese tipo tiene definida. Si el tipo no tiene tope fijo, la
+ * cantidad es la que el operario diga: no hay contra que compararla.
  */
 export function validarCarga(
   secadero: SecaderoConTipo,
@@ -177,7 +179,7 @@ export function validarCarga(
   }
 
   const total = conCantidad.reduce((a, i) => a + i.cantidad, 0);
-  if (total > secadero.capacidad) {
+  if (secadero.capacidad !== null && total > secadero.capacidad) {
     fallar(
       `El secadero ${secadero.numero} (${secadero.tipoNombre}) admite hasta ${secadero.capacidad} placas y estás cargando ${total}.`,
     );

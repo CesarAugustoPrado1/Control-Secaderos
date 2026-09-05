@@ -117,11 +117,19 @@ export const usuarios = pgTable(
  * tipos mas, asi que vive en una tabla: agregar uno nuevo es cargarlo desde
  * el panel, sin migracion ni deploy. La capacidad en placas es propia de cada
  * tipo, por eso vive aca y no en la configuracion general.
+ *
+ * `capacidad` en null significa SIN TOPE FIJO, y no es lo mismo que cero ni que
+ * un numero grande. Hay tipos -guarda, especial- donde no existe un "secadero
+ * lleno": entra lo que ese dia haya, y la cantidad cambia carga a carga. Ponerles
+ * un numero inventado hace que el sistema rechace cargas validas y, peor, que
+ * marque como INCOMPLETA una carga que estaba perfecta. Con null el sistema
+ * simplemente no opina sobre la cantidad: no valida tope, no marca incompleto y
+ * los deja afuera de la adherencia al flujo.
  */
 export const tipos = pgTable("tipos", {
   id: serial("id").primaryKey(),
   nombre: text("nombre").notNull(),
-  capacidad: integer("capacidad").notNull(),
+  capacidad: integer("capacidad"),
   activo: boolean("activo").notNull().default(true),
   /** Para controlar en que orden aparecen en los selectores. */
   orden: integer("orden").notNull().default(0),

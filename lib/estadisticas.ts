@@ -371,10 +371,13 @@ export async function desperdicioPorUsuario(rango: Rango) {
 /* -------------------------------------------------------------------------- */
 
 export type Adherencia = {
+  /** Cargas evaluables, es decir las de tipos con tope fijo. */
   total: number;
   optimas: number;
   incompletas: number;
   mezcladas: number;
+  /** Cargas dejadas afuera por ser de un tipo sin tope fijo. */
+  sinNorma: number;
   desvios: {
     id: number;
     secaderoNumero: number;
@@ -393,6 +396,12 @@ export type Adherencia = {
  * Se mide sobre las cargas, comparando lo que entro contra la capacidad del
  * tipo. Las que se apartan se listan para poder revisarlas: el valor no esta
  * en el porcentaje sino en ver que carga concreta se salio de la norma.
+ *
+ * La norma aplica SOLO a los tipos con tope fijo. Una carga de guarda o especial
+ * no se puede evaluar: sin tope no hay "completa", y ahi llevar varios productos
+ * es lo habitual. Se cuentan aparte en `sinNorma` en vez de descartarlas en
+ * silencio, para que el porcentaje se lea sabiendo sobre cuantas cargas se
+ * calculo. Meterlas al denominador hundiria el indicador con cargas correctas.
  */
 export async function adherenciaAlFlujo(rango: Rango): Promise<Adherencia> {
   const filas = await db
@@ -422,12 +431,20 @@ export async function adherenciaAlFlujo(rango: Rango): Promise<Adherencia> {
     )
     .orderBy(desc(movimientos.creadoEn));
 
+  let evaluables = 0;
+  let sinNorma = 0;
   let optimas = 0;
   let incompletas = 0;
   let mezcladas = 0;
   const desvios: Adherencia["desvios"] = [];
 
   for (const f of filas) {
+    if (f.capacidad === null) {
+      sinNorma++;
+      continue;
+    }
+    evaluables++;
+
     const placas = aNumero(f.placas);
     const productos = aNumero(f.productos);
     const completa = placas >= f.capacidad;
@@ -453,7 +470,7 @@ export async function adherenciaAlFlujo(rango: Rango): Promise<Adherencia> {
     }
   }
 
-  return { total: filas.length, optimas, incompletas, mezcladas, desvios };
+  return { total: evaluables, optimas, incompletas, mezcladas, sinNorma, desvios };
 }
 
 /* -------------------------------------------------------------------------- */

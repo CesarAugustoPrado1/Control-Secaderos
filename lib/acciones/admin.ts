@@ -33,11 +33,17 @@ function revalidar() {
 const esquemaTipo = z.object({
   id: z.number().int().positive().optional(),
   nombre: z.string().trim().min(1, "El tipo necesita un nombre.").max(40),
+  /**
+   * null es "sin tope fijo", una opcion valida y distinta de cero: hay tipos
+   * donde no existe un secadero lleno. Cero sigue rechazandose porque eso seria
+   * un secadero donde no entra nada.
+   */
   capacidad: z
     .number()
     .int()
     .positive("La capacidad tiene que ser mayor a cero.")
-    .max(100000),
+    .max(100000)
+    .nullable(),
   orden: z.number().int().min(0).max(999).default(0),
 });
 

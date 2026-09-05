@@ -10,7 +10,7 @@ import {
   ETIQUETA_ESTADO,
   ETIQUETA_MOVIMIENTO,
 } from "@/lib/estados";
-import { duracion, fechaHora, numero } from "@/lib/formato";
+import { capacidadTexto, duracion, fechaHora, numero } from "@/lib/formato";
 import { ChipEstado } from "@/components/ui";
 import { FormularioCorreccion } from "./formulario";
 
@@ -48,7 +48,7 @@ export default async function PaginaCorregir({
           </h2>
           <ChipEstado estado={secadero.estado} />
           <span className="text-sm text-slate-500">
-            {secadero.tipoNombre} · hasta {secadero.capacidad} placas
+            {secadero.tipoNombre} · {capacidadTexto(secadero.capacidad)}
           </span>
         </div>
       </div>

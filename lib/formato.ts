@@ -48,6 +48,15 @@ export function minutosDesde(desde: Date): number {
 
 export const numero = (n: number) => n.toLocaleString("es-AR");
 
+/**
+ * Como se nombra la capacidad de un tipo en los encabezados: "hasta 102 placas"
+ * o, cuando no tiene tope fijo, "sin tope fijo". Vive aca para que las pantallas
+ * digan todas lo mismo; que una sola muestre "hasta 0 placas" seria peor que no
+ * mostrar nada.
+ */
+export const capacidadTexto = (capacidad: number | null) =>
+  capacidad === null ? "sin tope fijo" : `hasta ${numero(capacidad)} placas`;
+
 export function porcentaje(parte: number, total: number): string {
   if (!total) return "0,0%";
   return `${((parte / total) * 100).toLocaleString("es-AR", {

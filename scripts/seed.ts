@@ -30,12 +30,15 @@ const conEjemplos = !process.argv.includes("--sin-ejemplos");
 /**
  * Los cuatro tipos que hay hoy en la planta. Son un punto de partida: el admin
  * los renombra, les cambia la capacidad o agrega otros desde el panel.
+ *
+ * Guarda y especial van sin capacidad a proposito: en esos no existe un secadero
+ * "lleno", entra lo que ese dia haya. Ver el comentario de `tipos` en el esquema.
  */
-const TIPOS = [
+const TIPOS: { nombre: string; capacidad: number | null; orden: number }[] = [
   { nombre: "Grande", capacidad: 102, orden: 10 },
   { nombre: "Chico", capacidad: 204, orden: 20 },
-  { nombre: "Guarda", capacidad: 50, orden: 30 },
-  { nombre: "Especial", capacidad: 50, orden: 40 },
+  { nombre: "Guarda", capacidad: null, orden: 30 },
+  { nombre: "Especial", capacidad: null, orden: 40 },
 ];
 
 /**

@@ -10,7 +10,7 @@ import {
   guardarSecadero,
 } from "@/lib/acciones/admin";
 import type { Estado } from "@/lib/db/schema";
-import { numero } from "@/lib/formato";
+import { capacidadTexto } from "@/lib/formato";
 import {
   analizarSecaderos,
   importarSecaderos,
@@ -26,14 +26,15 @@ import {
   FormularioAbm,
 } from "@/components/admin/comunes";
 
-type TipoOpcion = { id: number; nombre: string; capacidad: number };
+/** `capacidad` en null es un tipo sin tope fijo. Ver `tipos` en el esquema. */
+type TipoOpcion = { id: number; nombre: string; capacidad: number | null };
 
 type Fila = {
   id: number;
   numero: number;
   tipoId: number;
   tipoNombre: string;
-  capacidad: number;
+  capacidad: number | null;
   estado: Estado;
   activo: boolean;
 };
@@ -193,8 +194,8 @@ export function ListaSecaderosAdmin({
                           </span>
                         )}
                       </div>
-                      <p className="mt-1 text-xs text-slate-500">
-                        Hasta {numero(s.capacidad)} placas
+                      <p className="mt-1 text-xs text-slate-500 first-letter:uppercase">
+                        {capacidadTexto(s.capacidad)}
                       </p>
                     </div>
 
@@ -355,7 +356,7 @@ function AltaPorRango({
             >
               {tipos.map((t) => (
                 <option key={t.id} value={t.id}>
-                  {t.nombre} — {t.capacidad} placas
+                  {t.nombre} — {capacidadTexto(t.capacidad)}
                 </option>
               ))}
             </select>
@@ -447,7 +448,7 @@ function FormularioSecadero({
           >
             {tipos.map((t) => (
               <option key={t.id} value={t.id}>
-                {t.nombre} — hasta {t.capacidad} placas
+                {t.nombre} — {capacidadTexto(t.capacidad)}
               </option>
             ))}
           </select>

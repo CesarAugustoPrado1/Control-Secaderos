@@ -47,6 +47,10 @@ Reglas que el sistema hace cumplir:
   hagan falta) y solo lleva modelos de ese mismo tipo, hasta la capacidad en
   placas que el tipo tenga definida. Los tipos se administran desde el panel:
   agregar uno nuevo no requiere tocar código ni desplegar.
+- La capacidad puede quedar **sin definir**, que es lo normal en guarda y
+  especial: ahí no existe un secadero “lleno”, entra lo que ese día haya. En
+  esos tipos el sistema no controla la cantidad, no marca cargas incompletas y
+  no los mide contra el flujo óptimo. No es lo mismo que capacidad cero.
 - En el horno entran 15 secaderos por defecto, también configurable.
 - En **cada** cambio de estado se pueden registrar placas rotas con su motivo.
   El desperdicio se descuenta del contenido y queda asentado en el movimiento.

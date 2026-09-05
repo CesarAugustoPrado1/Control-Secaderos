@@ -20,7 +20,8 @@ export function FormularioCorreccion({
 }: {
   secaderoId: number;
   estadoActual: Estado;
-  capacidad: number;
+  /** null = el tipo no tiene tope fijo. */
+  capacidad: number | null;
   contenidoActual: LineaContenido[];
   modelos: Modelo[];
 }) {
@@ -49,7 +50,7 @@ export function FormularioCorreccion({
         `Un secadero ${TITULO_ESTADO[estado].toLowerCase()} necesita al menos un producto con cantidad.`,
       );
     }
-    if (total > capacidad) {
+    if (capacidad !== null && total > capacidad) {
       return setError(`El secadero admite ${capacidad} placas y pusiste ${total}.`);
     }
 
@@ -112,10 +113,12 @@ export function FormularioCorreccion({
             <span className="etiqueta mb-0">Contenido</span>
             <span
               className={`text-sm font-bold tabular-nums ${
-                total > capacidad ? "text-red-600" : "text-slate-600"
+                capacidad !== null && total > capacidad
+                  ? "text-red-600"
+                  : "text-slate-600"
               }`}
             >
-              {total} / {capacidad}
+              {capacidad === null ? total : `${total} / ${capacidad}`}
             </span>
           </div>
 

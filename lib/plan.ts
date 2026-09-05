@@ -25,11 +25,17 @@ export type LineaPlan = {
   productoId: number;
   producto: string;
   tipoNombre: string;
-  capacidad: number;
+  /** null = el tipo no tiene tope fijo. */
+  capacidad: number | null;
   pedidos: number;
   hechos: number;
   placas: number;
-  placasEsperadas: number;
+  /**
+   * Cuantas placas deberian salir de los secaderos pedidos. Es null cuando el
+   * tipo no tiene tope: sin capacidad no hay meta en placas que calcular, y el
+   * plan de esos productos se sigue solo por cantidad de secaderos.
+   */
+  placasEsperadas: number | null;
   /** Que hacer con lo descargado y para quien. Solo en paletizado. */
   destino: Destino | null;
   cliente: string | null;
@@ -139,7 +145,7 @@ export async function compararPlan(
       ...l,
       hechos: real?.hechos ?? 0,
       placas: real?.placas ?? 0,
-      placasEsperadas: l.pedidos * l.capacidad,
+      placasEsperadas: l.capacidad === null ? null : l.pedidos * l.capacidad,
     };
   });
 

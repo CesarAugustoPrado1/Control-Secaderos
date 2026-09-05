@@ -191,9 +191,12 @@ function FilaPlan({
       </div>
 
       {/* El detalle en placas revela los secaderos que salieron incompletos:
-          3 de 3 secaderos puede ser 500 de 612 placas. */}
+          3 de 3 secaderos puede ser 500 de 612 placas. Sin tope fijo no hay
+          esperado contra el cual compararlo, asi que va solo lo hecho. */}
       <p className="mt-1 text-xs tabular-nums text-slate-500">
-        {numero(linea.placas)} de {numero(linea.placasEsperadas)} placas
+        {linea.placasEsperadas === null
+          ? `${numero(linea.placas)} placas`
+          : `${numero(linea.placas)} de ${numero(linea.placasEsperadas)} placas`}
       </p>
 
       <Instruccion destino={linea.destino} cliente={linea.cliente} />

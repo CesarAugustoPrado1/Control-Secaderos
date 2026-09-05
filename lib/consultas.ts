@@ -47,7 +47,8 @@ export type SecaderoVista = {
   numero: number;
   tipoId: number;
   tipoNombre: string;
-  capacidad: number;
+  /** null = el tipo no tiene tope fijo. */
+  capacidad: number | null;
   estado: Estado;
   activo: boolean;
   estadoDesde: Date;

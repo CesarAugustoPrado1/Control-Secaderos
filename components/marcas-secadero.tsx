@@ -11,6 +11,11 @@ import { numero } from "@/lib/formato";
  *
  * La incompleta muestra el numero: de un vistazo se distingue un secadero al
  * que le faltan tres placas por rotura de uno que salio cargado a medias.
+ *
+ * Los tipos sin tope fijo no se marcan NUNCA, ni por cantidad ni por mezcla. La
+ * norma de "completo y con un solo producto" es de los tipos donde el secadero
+ * se llena; en guarda o especial entra lo que ese dia haya y mezclar es normal,
+ * asi que una marca ahi seria una alarma sobre algo que nadie hizo mal.
  */
 export function MarcasSecadero({
   total,
@@ -19,12 +24,15 @@ export function MarcasSecadero({
   compacto,
 }: {
   total: number;
-  capacidad: number;
+  /** null = el tipo no tiene tope fijo, y entonces no se marca nada. */
+  capacidad: number | null;
   /** Cuantos productos distintos tiene adentro. */
   productos: number;
   /** Version corta, para listas muy densas. */
   compacto?: boolean;
 }) {
+  if (capacidad === null) return null;
+
   const incompleto = total > 0 && total < capacidad;
   const mixto = productos > 1;
 

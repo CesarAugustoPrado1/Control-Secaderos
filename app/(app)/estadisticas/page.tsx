@@ -208,7 +208,7 @@ export default async function PaginaEstadisticas({
           {/* ------------------------- Flujo óptimo --------------------------- */}
           <Panel
             titulo="Cargas según el flujo óptimo"
-            detalle="Secadero completo y con un solo producto"
+            detalle="Secadero completo y con un solo producto, sólo en los tipos con capacidad fija"
           >
             {adherencia.total === 0 ? (
               <SinDatos />
@@ -263,6 +263,16 @@ export default async function PaginaEstadisticas({
                       ])}
                     />
                   </>
+                )}
+
+                {/* Sin esta linea el porcentaje se leeria como si cubriera toda
+                    la produccion del periodo, y no es asi. */}
+                {adherencia.sinNorma > 0 && (
+                  <p className="mt-3 text-xs text-slate-500">
+                    Quedan afuera {numero(adherencia.sinNorma)} cargas de tipos
+                    sin capacidad fija, donde no hay un secadero “lleno” contra
+                    el cual medirlas.
+                  </p>
                 )}
               </>
             )}

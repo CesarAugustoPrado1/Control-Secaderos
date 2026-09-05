@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requerirRol } from "@/lib/auth";
 import { productosActivos, secaderoPorId } from "@/lib/consultas";
+import { capacidadTexto } from "@/lib/formato";
 import { Aviso } from "@/components/ui";
 import { FormularioCarga } from "./formulario";
 
@@ -32,7 +33,7 @@ export default async function PaginaCargar({
           Cargar secadero {secadero.numero}
         </h1>
         <p className="text-sm text-slate-500">
-          {secadero.tipoNombre} · hasta {secadero.capacidad} placas
+          {secadero.tipoNombre} · {capacidadTexto(secadero.capacidad)}
         </p>
       </div>
 

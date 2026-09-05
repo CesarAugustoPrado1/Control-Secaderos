@@ -17,7 +17,8 @@ export function FormularioCarga({
 }: {
   secaderoId: number;
   secaderoNumero: number;
-  capacidad: number;
+  /** null = el tipo no tiene tope fijo: se carga a mano y sin controles. */
+  capacidad: number | null;
   modelos: Producto[];
 }) {
   const router = useRouter();
@@ -28,8 +29,11 @@ export function FormularioCarga({
    * tildado: el operario toca el producto y ya queda la capacidad entera.
    * El producto NO viene preseleccionado a proposito: elegirlo siempre a mano
    * es lo que evita cargar la tanda equivocada.
+   *
+   * Sin tope fijo no existe "completo", asi que el atajo no aplica y el
+   * formulario arranca -y se queda- en carga a mano.
    */
-  const [completo, setCompleto] = useState(true);
+  const [completo, setCompleto] = useState(capacidad !== null);
   const [cantidades, setCantidades] = useState<Record<number, number>>({});
   const [nota, setNota] = useState("");
   const [filtro, setFiltro] = useState("");
@@ -38,7 +42,7 @@ export function FormularioCarga({
     () => Object.values(cantidades).reduce((a, n) => a + (n || 0), 0),
     [cantidades],
   );
-  const restante = capacidad - total;
+  const restante = capacidad === null ? 0 : capacidad - total;
 
   const visibles = useMemo(() => {
     const q = filtro.trim().toLowerCase();
@@ -48,6 +52,7 @@ export function FormularioCarga({
 
   /** En modo completo, tocar un producto le asigna toda la capacidad. */
   function elegirUnico(id: number) {
+    if (capacidad === null) return;
     setError(null);
     setCantidades(cantidades[id] === capacidad ? {} : { [id]: capacidad });
   }
@@ -63,6 +68,7 @@ export function FormularioCarga({
   }
 
   function alternarCompleto() {
+    if (capacidad === null) return;
     setError(null);
     setCompleto((antes) => {
       const ahora = !antes;
@@ -88,7 +94,7 @@ export function FormularioCarga({
           : "Cargá al menos un producto con cantidad.",
       );
     }
-    if (total > capacidad) {
+    if (capacidad !== null && total > capacidad) {
       return setError(
         `El secadero admite ${capacidad} placas y estás cargando ${total}.`,
       );
@@ -114,60 +120,72 @@ export function FormularioCarga({
     <div className="space-y-4">
       <div className="tarjeta p-4">
         {/* Interruptor entre el caso tipico -uno solo, completo- y la carga
-            mezclada con cantidades a mano. */}
-        <button
-          type="button"
-          onClick={alternarCompleto}
-          disabled={enviando}
-          className={`flex w-full items-center gap-3 rounded-xl p-3 text-left ring-1 transition ${
-            completo
-              ? "bg-blue-50 ring-blue-300"
-              : "bg-slate-50 ring-slate-200"
-          }`}
-        >
-          <span
-            className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-sm font-bold ring-2 transition ${
+            mezclada con cantidades a mano. Sin tope fijo no hay atajo posible:
+            el interruptor, el contador contra la capacidad y la barra de avance
+            necesitan los tres un numero que en estos tipos no existe. */}
+        {capacidad !== null && (
+          <button
+            type="button"
+            onClick={alternarCompleto}
+            disabled={enviando}
+            className={`flex w-full items-center gap-3 rounded-xl p-3 text-left ring-1 transition ${
               completo
-                ? "bg-slate-900 text-white ring-slate-900"
-                : "bg-white text-transparent ring-slate-300"
+                ? "bg-blue-50 ring-blue-300"
+                : "bg-slate-50 ring-slate-200"
             }`}
-            aria-hidden
           >
-            ✓
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="block text-sm font-bold text-slate-900">
-              Secadero completo · {numero(capacidad)} placas
+            <span
+              className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-sm font-bold ring-2 transition ${
+                completo
+                  ? "bg-slate-900 text-white ring-slate-900"
+                  : "bg-white text-transparent ring-slate-300"
+              }`}
+              aria-hidden
+            >
+              ✓
             </span>
-            <span className="block text-xs text-slate-500">
-              {completo
-                ? "Tocá el producto y se carga la capacidad entera"
-                : "Cargá a mano la cantidad de cada producto"}
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-bold text-slate-900">
+                Secadero completo · {numero(capacidad)} placas
+              </span>
+              <span className="block text-xs text-slate-500">
+                {completo
+                  ? "Tocá el producto y se carga la capacidad entera"
+                  : "Cargá a mano la cantidad de cada producto"}
+              </span>
             </span>
-          </span>
-        </button>
+          </button>
+        )}
 
         <div className="mt-4 mb-2 flex items-baseline justify-between">
           <span className="etiqueta mb-0">
             {completo ? "¿Qué producto lleva?" : "Productos"}
           </span>
-          <span
-            className={`text-sm font-bold tabular-nums ${
-              total > capacidad ? "text-red-600" : "text-slate-700"
-            }`}
-          >
-            {numero(total)} / {numero(capacidad)}
-          </span>
+          {capacidad === null ? (
+            <span className="text-sm font-bold tabular-nums text-slate-700">
+              {numero(total)} placas
+            </span>
+          ) : (
+            <span
+              className={`text-sm font-bold tabular-nums ${
+                total > capacidad ? "text-red-600" : "text-slate-700"
+              }`}
+            >
+              {numero(total)} / {numero(capacidad)}
+            </span>
+          )}
         </div>
 
-        <div className="mb-3 h-2 overflow-hidden rounded-full bg-slate-200">
-          <div
-            className={`h-full rounded-full transition-all ${
-              total > capacidad ? "bg-red-500" : "bg-blue-500"
-            }`}
-            style={{ width: `${Math.min(100, (total / capacidad) * 100)}%` }}
-          />
-        </div>
+        {capacidad !== null && (
+          <div className="mb-3 h-2 overflow-hidden rounded-full bg-slate-200">
+            <div
+              className={`h-full rounded-full transition-all ${
+                total > capacidad ? "bg-red-500" : "bg-blue-500"
+              }`}
+              style={{ width: `${Math.min(100, (total / capacidad) * 100)}%` }}
+            />
+          </div>
+        )}
 
         {modelos.length > 8 && (
           <input
@@ -209,9 +227,10 @@ export function FormularioCarga({
                   <span className="min-w-0 flex-1 truncate text-base font-semibold text-slate-800">
                     {producto.nombre}
                   </span>
+                  {/* En modo completo la cantidad ES la capacidad entera. */}
                   {elegido && (
                     <span className="shrink-0 text-sm font-bold tabular-nums text-blue-700">
-                      {numero(capacidad)}
+                      {numero(cantidad)}
                     </span>
                   )}
                 </button>
@@ -241,16 +260,19 @@ export function FormularioCarga({
                   aria-label={`Cantidad de ${producto.nombre}`}
                 />
 
-                {/* Completa lo que falta para llenar el secadero. */}
-                <button
-                  type="button"
-                  disabled={enviando || restante <= 0}
-                  onClick={() => setCantidad(producto.id, cantidad + restante)}
-                  className="h-11 shrink-0 rounded-lg bg-white px-3 text-xs font-bold text-slate-600 ring-1 ring-slate-300 transition active:scale-95 disabled:opacity-30"
-                  title="Completar la capacidad del secadero con este producto"
-                >
-                  +{restante > 0 ? restante : 0}
-                </button>
+                {/* Completa lo que falta para llenar el secadero. Sin tope no
+                    hay "lo que falta", asi que el boton ni aparece. */}
+                {capacidad !== null && (
+                  <button
+                    type="button"
+                    disabled={enviando || restante <= 0}
+                    onClick={() => setCantidad(producto.id, cantidad + restante)}
+                    className="h-11 shrink-0 rounded-lg bg-white px-3 text-xs font-bold text-slate-600 ring-1 ring-slate-300 transition active:scale-95 disabled:opacity-30"
+                    title="Completar la capacidad del secadero con este producto"
+                  >
+                    +{restante > 0 ? restante : 0}
+                  </button>
+                )}
               </div>
             );
           })}

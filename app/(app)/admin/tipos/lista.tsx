@@ -19,7 +19,8 @@ import {
 type Fila = {
   id: number;
   nombre: string;
-  capacidad: number;
+  /** null = sin tope fijo. */
+  capacidad: number | null;
   orden: number;
   activo: boolean;
   secaderos: number;
@@ -73,9 +74,15 @@ export function ListaTipos({ tipos }: { tipos: Fila[] }) {
                       <span className={`chip ${colorTipo(t.id)}`}>
                         {t.nombre}
                       </span>
-                      <span className="text-sm font-bold tabular-nums text-slate-700">
-                        {numero(t.capacidad)} placas
-                      </span>
+                      {t.capacidad === null ? (
+                        <span className="text-sm font-bold text-slate-500">
+                          sin tope fijo
+                        </span>
+                      ) : (
+                        <span className="text-sm font-bold tabular-nums text-slate-700">
+                          {numero(t.capacidad)} placas
+                        </span>
+                      )}
                       {!t.activo && (
                         <span className="chip bg-amber-100 text-amber-900">
                           DESACTIVADO
@@ -124,6 +131,12 @@ export function ListaTipos({ tipos }: { tipos: Fila[] }) {
         y es lo que el sistema controla al cargar. Cambiarla no afecta a los
         secaderos que ya están cargados, sólo a las cargas nuevas.
       </p>
+      <p className="mt-2 text-xs text-slate-500">
+        Dejala <strong className="text-slate-700">vacía</strong> si en ese tipo
+        no hay un secadero “lleno” y entra lo que ese día haya. El sistema no
+        controla la cantidad: no rechaza cargas por pasarse, no las marca como
+        incompletas y no las cuenta en el flujo óptimo de estadísticas.
+      </p>
     </>
   );
 }
@@ -132,12 +145,23 @@ function FormularioTipo({
   inicial,
   alGuardar,
 }: {
-  inicial: { id?: number; nombre: string; capacidad: number; orden: number };
+  inicial: {
+    id?: number;
+    nombre: string;
+    capacidad: number | null;
+    orden: number;
+  };
   alGuardar: () => void;
 }) {
   const [nombre, setNombre] = useState(inicial.nombre);
-  const [capacidad, setCapacidad] = useState(String(inicial.capacidad));
+  const [capacidad, setCapacidad] = useState(
+    inicial.capacidad === null ? "" : String(inicial.capacidad),
+  );
   const [orden, setOrden] = useState(String(inicial.orden));
+
+  // El campo vacio es "sin tope fijo". Se distingue del cero a proposito: no se
+  // usa Number(""), que daria 0 y significaria un secadero donde no entra nada.
+  const sinTope = capacidad.trim() === "";
 
   return (
     <FormularioAbm
@@ -146,7 +170,7 @@ function FormularioTipo({
         guardarTipo({
           id: inicial.id,
           nombre,
-          capacidad: Number(capacidad),
+          capacidad: sinTope ? null : Number(capacidad),
           orden: Number(orden),
         })
       }
@@ -170,9 +194,12 @@ function FormularioTipo({
             min={1}
             className="campo"
             value={capacidad}
+            placeholder="Sin tope fijo"
             onChange={(e) => setCapacidad(e.target.value)}
-            required
           />
+          <p className="mt-1 text-xs text-slate-500">
+            {sinTope ? "Sin tope: entra lo que haya" : "Vacío = sin tope fijo"}
+          </p>
         </Campo>
 
         <Campo etiqueta="Orden en las listas">
