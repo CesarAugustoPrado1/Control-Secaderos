@@ -11,7 +11,13 @@
  * y los productos reales y solo querés tirar los movimientos de prueba.
  * El modo `--todo` es para volver a foja cero.
  *
- * En los dos casos se conservan los tipos de secadero, los motivos de
+ * A `--todo` se le puede agregar `--conservar-usuarios` para que no toque la
+ * tabla de usuarios. Sirve cuando la gente real ya esta cargada con su PIN
+ * repartido: los PIN son hashes, no se pueden recuperar, asi que borrar los
+ * usuarios obliga a inventar PIN nuevos y avisarle a cada uno. Los datos de
+ * prueba no estan ahi adentro, estan en los movimientos.
+ *
+ * En todos los casos se conservan los tipos de secadero, los motivos de
  * desperdicio y los parametros: eso es configuracion, no dato de prueba.
  */
 import { config as cargarEnv } from "dotenv";
@@ -34,6 +40,7 @@ cargarEnv({ path: [".env.local", ".env"], quiet: true });
 
 const soloMovimientos = process.argv.includes("--movimientos");
 const todo = process.argv.includes("--todo");
+const conservarUsuarios = process.argv.includes("--conservar-usuarios");
 
 async function main() {
   const url = process.env.DATABASE_URL;
@@ -82,8 +89,13 @@ Simulacion: no se borro nada. Elegi un alcance:
       Ademas borra los secaderos, los productos, los planes y los usuarios
       de prueba (menos el admin). Deja la base como recien instalada.
 
+  npm run db:limpiar -- --todo --conservar-usuarios
+      Lo mismo, pero sin tocar ningun usuario. Es el que va si la gente real
+      ya esta cargada: los PIN son hashes y no se pueden recuperar, asi que
+      borrarlos obliga a repartir PIN nuevos.
+
 Los tipos de secadero, los motivos de desperdicio y los parametros se
-conservan en los dos casos.`);
+conservan siempre.`);
     await client.end();
     return;
   }
@@ -109,8 +121,10 @@ conservan en los dos casos.`);
       await tx.delete(planes);
       await tx.delete(secaderos);
       await tx.delete(productos);
-      // El admin se conserva: si no, quedas sin poder entrar al panel.
-      await tx.delete(usuarios).where(ne(usuarios.usuario, "admin"));
+      // El admin se conserva siempre: si no, quedas sin poder entrar al panel.
+      if (!conservarUsuarios) {
+        await tx.delete(usuarios).where(ne(usuarios.usuario, "admin"));
+      }
     } else {
       /**
        * Sin movimientos ni contenido, un secadero que quedara en `humedo`
@@ -134,11 +148,19 @@ conservan en los dos casos.`);
   for (const t of TABLAS) {
     console.log(`  ${t.padEnd(20)} ${await contar(t)}`);
   }
-  console.log(
-    todo
-      ? "\nCarga los tipos, los secaderos y los productos desde Administracion."
-      : "\nTodos los secaderos quedaron vacios, listos para empezar a cargar.",
-  );
+  if (todo) {
+    console.log(
+      conservarUsuarios
+        ? "\nLos usuarios quedaron intactos, con su PIN de siempre."
+        : "\nQuedo solo el usuario admin: los demas hay que crearlos de nuevo.",
+    );
+    console.log("Carga los secaderos y los productos desde Administracion.");
+  } else {
+    console.log("\nTodos los secaderos quedaron vacios, listos para empezar a cargar.");
+    if (conservarUsuarios) {
+      console.log("(--conservar-usuarios no hacia falta: este modo nunca los toca.)");
+    }
+  }
 
   await client.end();
 }

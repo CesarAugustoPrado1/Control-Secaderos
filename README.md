@@ -234,4 +234,5 @@ scripts/seed.ts     carga inicial
 | `npm run db:limpiar` | Muestra qué hay en cada tabla y explica los alcances. No toca nada |
 | `npm run db:limpiar -- --movimientos` | Borra sólo el historial y deja todos los secaderos vacíos. **Conserva secaderos, productos y usuarios** |
 | `npm run db:limpiar -- --todo` | Además borra secaderos, productos y usuarios de prueba (menos el admin) |
+| `npm run db:limpiar -- --todo --conservar-usuarios` | Igual que `--todo` pero sin tocar los usuarios. El que va si la gente real ya tiene su PIN repartido |
 | `npm run verificar-deploy` | Recorre las pantallas del deploy y le manda una ráfaga en paralelo |
