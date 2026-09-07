@@ -51,6 +51,8 @@ export type SecaderoVista = {
   tipoNombre: string;
   /** null = el tipo no tiene tope fijo. */
   capacidad: number | null;
+  /** null = comparte el cupo general del horno. */
+  cupoHorno: number | null;
   estado: Estado;
   activo: boolean;
   estadoDesde: Date;
@@ -76,6 +78,7 @@ export async function secaderosConContenido(
       tipoId: secaderos.tipoId,
       tipoNombre: tipos.nombre,
       capacidad: tipos.capacidad,
+      cupoHorno: tipos.cupoHorno,
       estado: secaderos.estado,
       activo: secaderos.activo,
       estadoDesde: secaderos.estadoDesde,
@@ -133,6 +136,7 @@ export async function secaderoPorId(id: number): Promise<SecaderoVista | null> {
       tipoId: secaderos.tipoId,
       tipoNombre: tipos.nombre,
       capacidad: tipos.capacidad,
+      cupoHorno: tipos.cupoHorno,
       estado: secaderos.estado,
       activo: secaderos.activo,
       estadoDesde: secaderos.estadoDesde,

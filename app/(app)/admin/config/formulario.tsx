@@ -42,8 +42,16 @@ export function FormularioConfig({ inicial }: { inicial: Configuracion }) {
               />
             </Campo>
             <p className="mt-1 text-xs text-slate-500">
-              Cuántos secaderos entran en el horno. El sistema no deja meter de
-              más.
+              Cuántos secaderos entran en el horno, contando sólo los tipos que
+              comparten los lugares generales. Los que tienen{" "}
+              <Link
+                href="/admin/tipos"
+                className="font-semibold text-slate-900 underline"
+              >
+                cupo propio
+              </Link>{" "}
+              —las guardas— van aparte y no descuentan de acá. El sistema no
+              deja meter de más en ninguno de los dos.
             </p>
           </div>
 

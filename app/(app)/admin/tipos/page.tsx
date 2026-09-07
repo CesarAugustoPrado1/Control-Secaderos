@@ -13,6 +13,7 @@ export default async function PaginaAdminTipos() {
         id: t.id,
         nombre: t.nombre,
         capacidad: t.capacidad,
+        cupoHorno: t.cupoHorno,
         orden: t.orden,
         activo: t.activo,
         secaderos: uso.get(t.id)?.secaderos ?? 0,

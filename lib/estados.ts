@@ -115,6 +115,7 @@ export const ETIQUETA_MOVIMIENTO: Record<TipoMovimiento, string> = {
   entrada_horno: "Entrada a horno",
   salida_horno: "Salida de horno",
   devolucion_horno: "No secó: vuelve a húmedos",
+  secado_natural: "Secó al sol, sin horno",
   descarga: "Descarga a producto terminado",
   correccion: "Corrección",
 };
@@ -125,6 +126,7 @@ export const ETIQUETA_MOVIMIENTO_CORTA: Record<TipoMovimiento, string> = {
   entrada_horno: "A horno",
   salida_horno: "De horno",
   devolucion_horno: "No secó",
+  secado_natural: "Al sol",
   descarga: "Descarga",
   correccion: "Corrección",
 };
@@ -135,6 +137,7 @@ export const COLOR_MOVIMIENTO: Record<TipoMovimiento, string> = {
   entrada_horno: "bg-orange-100 text-orange-800",
   salida_horno: "bg-emerald-100 text-emerald-800",
   devolucion_horno: "bg-red-100 text-red-800",
+  secado_natural: "bg-yellow-100 text-yellow-900",
   descarga: "bg-violet-100 text-violet-800",
   correccion: "bg-amber-100 text-amber-900",
 };

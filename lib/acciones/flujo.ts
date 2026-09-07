@@ -1,10 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { eq, and, count } from "drizzle-orm";
+import { eq, and, count, isNotNull } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db";
-import { secaderos, type Estado } from "../db/schema";
+import { secaderos, tipos, type Estado } from "../db/schema";
 import { autorizar } from "../auth";
 import { leerConfig } from "../consultas";
 import {
@@ -122,15 +122,53 @@ export async function entrarAHorno(
       const ids = datos.seleccion.map((s) => s.secaderoId);
       const filas = await bloquearSecaderos(tx, ids);
 
-      const [{ dentro }] = await tx
-        .select({ dentro: count() })
+      /**
+       * El horno no es un solo cupo. Los tipos con estructura propia -las
+       * guardas- tienen sus lugares y no compiten con los grandes y chicos, asi
+       * que un horno lleno de guardas no puede bloquear la entrada de un grande.
+       * Cada tipo con `cupoHorno` se valida contra el suyo; los que lo tienen en
+       * null comparten el cupo general.
+       */
+      const ocupacion = await tx
+        .select({ tipoId: secaderos.tipoId, dentro: count() })
         .from(secaderos)
-        .where(and(eq(secaderos.estado, "horno"), eq(secaderos.activo, true)));
+        .where(and(eq(secaderos.estado, "horno"), eq(secaderos.activo, true)))
+        .groupBy(secaderos.tipoId);
 
-      if (dentro + ids.length > cfg.capacidad_horno) {
+      const conCupoPropio = await tx
+        .select({ id: tipos.id, nombre: tipos.nombre, cupo: tipos.cupoHorno })
+        .from(tipos)
+        .where(isNotNull(tipos.cupoHorno));
+      const cupoPropio = new Map(
+        conCupoPropio.map((t) => [t.id, { nombre: t.nombre, cupo: t.cupo! }]),
+      );
+
+      // Los que ya estan adentro, repartidos entre el cupo general y los propios.
+      const dentroPorCupo = new Map<number | null, number>();
+      for (const o of ocupacion) {
+        const clave = cupoPropio.has(o.tipoId) ? o.tipoId : null;
+        dentroPorCupo.set(clave, (dentroPorCupo.get(clave) ?? 0) + o.dentro);
+      }
+
+      const entrandoPorCupo = new Map<number | null, number>();
+      for (const s of filas) {
+        const clave = s.cupoHorno === null ? null : s.tipoId;
+        entrandoPorCupo.set(clave, (entrandoPorCupo.get(clave) ?? 0) + 1);
+      }
+
+      for (const [clave, entrando] of entrandoPorCupo) {
+        const dentro = dentroPorCupo.get(clave) ?? 0;
+        const tope =
+          clave === null ? cfg.capacidad_horno : cupoPropio.get(clave)!.cupo;
+        if (dentro + entrando <= tope) continue;
+
+        const donde =
+          clave === null
+            ? "En el horno entran"
+            : `Para ${cupoPropio.get(clave)!.nombre} hay`;
         fallar(
-          `En el horno entran ${cfg.capacidad_horno} secaderos. Ya hay ${dentro} adentro ` +
-            `y estás metiendo ${ids.length}. Sacá los secos primero.`,
+          `${donde} ${tope} secaderos. Ya hay ${dentro} adentro y estás ` +
+            `metiendo ${entrando}. Sacá los secos primero.`,
         );
       }
 
@@ -171,6 +209,48 @@ export async function salirDeHorno(
           secadero,
           roturas: seleccion.roturas,
           tipo: "salida_horno",
+          estadoHasta: "seco",
+          vaciar: false,
+          nota: datos.nota,
+        });
+      }
+    });
+
+    revalidar();
+  });
+}
+
+/**
+ * humedo -> seco sin pasar por el horno, tipicamente secado al sol.
+ *
+ * Lo hace el hornero porque es el que decide que se hornea y que no: si el
+ * secadero se seco solo, no hay ciclo que gastar. No es una correccion -no hubo
+ * error de nadie- ni una salida de horno, y por eso escribe `secado_natural`.
+ * De contarlo como salida, las esperas de un dia entero al sol entrarian al
+ * promedio de un ciclo de cinco horas y romperian el unico numero que dice
+ * cuanto hay que hornear de verdad.
+ *
+ * Acepta roturas como cualquier otra transicion: al mover las placas de
+ * afuera tambien se rompen.
+ */
+export async function secarSinHorno(
+  entrada: z.input<typeof esquemaLoteHorno>,
+): Promise<Resultado> {
+  return ejecutar(async () => {
+    const sesion = await autorizar("horno", "admin");
+    const datos = esquemaLoteHorno.parse(entrada);
+
+    await db.transaction(async (tx) => {
+      const ids = datos.seleccion.map((s) => s.secaderoId);
+      const filas = await bloquearSecaderos(tx, ids);
+
+      for (const secadero of filas) {
+        const seleccion = datos.seleccion.find((s) => s.secaderoId === secadero.id)!;
+        exigirEstado(secadero, "humedo");
+        await procesarTransicion(tx, sesion, {
+          secadero,
+          roturas: seleccion.roturas,
+          tipo: "secado_natural",
           estadoHasta: "seco",
           vaciar: false,
           nota: datos.nota,
@@ -347,7 +427,12 @@ async function procesarTransicion(
   opciones: {
     secadero: Awaited<ReturnType<typeof bloquearSecaderos>>[number];
     roturas: z.infer<typeof esquemaRotura>[];
-    tipo: "entrada_horno" | "salida_horno" | "descarga" | "devolucion_horno";
+    tipo:
+      | "entrada_horno"
+      | "salida_horno"
+      | "descarga"
+      | "devolucion_horno"
+      | "secado_natural";
     estadoHasta: Estado;
     vaciar: boolean;
     nota: string | null;

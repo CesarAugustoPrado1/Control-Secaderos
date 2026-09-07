@@ -73,6 +73,12 @@ export const destinoEnum = pgEnum("destino_paletizado", [
  *   a la cola: es un hecho productivo, no un error de carga, y por eso tiene su
  *   propio tipo. Mezclarlo con `correccion` haria imposible distinguir un error
  *   humano de un problema de secado.
+ * `secado_natural` es humedo -> seco sin pasar por el horno, tipicamente al
+ *   sol. Tiene tipo propio y no se anota como `salida_horno` por una razon que
+ *   no es cosmetica: toda la estadistica de horno mide `duracion_min` de las
+ *   salidas, y estos secaderos nunca estuvieron adentro. Contarlos ahi meteria
+ *   esperas de un dia entero en el promedio de un ciclo de cinco horas y
+ *   arruinaria el unico numero que dice cuanto hay que hornear de verdad.
  */
 export const tipoMovimientoEnum = pgEnum("tipo_movimiento", [
   "carga",
@@ -80,6 +86,7 @@ export const tipoMovimientoEnum = pgEnum("tipo_movimiento", [
   "entrada_horno",
   "salida_horno",
   "devolucion_horno",
+  "secado_natural",
   "descarga",
   "correccion",
 ]);
@@ -130,6 +137,17 @@ export const tipos = pgTable("tipos", {
   id: serial("id").primaryKey(),
   nombre: text("nombre").notNull(),
   capacidad: integer("capacidad"),
+  /**
+   * Lugares propios en el horno, para los tipos que no compiten por el cupo
+   * general. Las guardas van en su propia estructura: entran 4 y no ocupan
+   * ninguno de los lugares de los grandes y chicos.
+   *
+   * En null el tipo comparte el cupo general (`capacidad_horno` en la config),
+   * que es el caso de la mayoria. Vive por tipo y no como un segundo parametro
+   * global porque el nombre "Guarda" es editable y los tipos se agregan en
+   * caliente: atar la regla a un nombre la rompe el dia que alguien lo cambie.
+   */
+  cupoHorno: integer("cupo_horno"),
   activo: boolean("activo").notNull().default(true),
   /** Para controlar en que orden aparecen en los selectores. */
   orden: integer("orden").notNull().default(0),

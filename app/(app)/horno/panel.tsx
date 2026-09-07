@@ -2,7 +2,11 @@
 
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import { entrarAHorno, salirDeHorno } from "@/lib/acciones/flujo";
+import {
+  entrarAHorno,
+  salirDeHorno,
+  secarSinHorno,
+} from "@/lib/acciones/flujo";
 import type { SecaderoVista } from "@/lib/consultas";
 import { duracion, minutosDesde, numero } from "@/lib/formato";
 import { useAccion } from "@/components/usar-accion";
@@ -59,6 +63,7 @@ export function PanelHorno({
 
   const salida = useAccion();
   const entrada = useAccion();
+  const sol = useAccion();
 
   const aSacar = useMemo(
     () =>
@@ -68,7 +73,45 @@ export function PanelHorno({
     [enHorno, excluidos],
   );
 
-  const lugaresLibres = capacidadHorno - enHorno.length + aSacar.size;
+  /**
+   * El horno no es un solo cupo. Los tipos con estructura propia -las guardas-
+   * tienen sus lugares aparte y no compiten con los grandes y chicos, asi que
+   * un horno lleno de guardas no puede frenar la entrada de un grande.
+   *
+   * La clave null es el cupo general, que comparten los tipos sin cupo propio.
+   * Los cupos se descubren mirando los secaderos que hay: si de un tipo no hay
+   * ninguno ni adentro ni esperando, mostrar su cupo no le sirve a nadie.
+   */
+  const cupos = useMemo(() => {
+    const info = new Map<number | null, { nombre: string; tope: number }>();
+    info.set(null, { nombre: "Horno", tope: capacidadHorno });
+    for (const s of [...enHorno, ...humedos]) {
+      if (s.cupoHorno !== null && !info.has(s.tipoId)) {
+        info.set(s.tipoId, { nombre: s.tipoNombre, tope: s.cupoHorno });
+      }
+    }
+
+    const claveDe = (s: SecaderoVista) =>
+      s.cupoHorno === null ? null : s.tipoId;
+
+    return [...info.entries()].map(([clave, { nombre, tope }]) => {
+      const dentro = enHorno.filter((s) => claveDe(s) === clave).length;
+      const saliendo = enHorno.filter(
+        (s) => claveDe(s) === clave && aSacar.has(s.id),
+      ).length;
+      return {
+        clave,
+        nombre,
+        tope,
+        dentro,
+        libres: tope - dentro + saliendo,
+      };
+    });
+  }, [enHorno, humedos, aSacar, capacidadHorno]);
+
+  const cupoDe = (s: SecaderoVista) => (s.cupoHorno === null ? null : s.tipoId);
+  const lugaresLibres = cupos.reduce((a, c) => a + Math.max(0, c.libres), 0);
+  const hayCuposPropios = cupos.length > 1;
 
   /** Productos que hay esperando, con cuantos secaderos de cada uno. */
   const productosEnEspera = useMemo(() => {
@@ -93,10 +136,23 @@ export function PanelHorno({
     [humedos, productoFiltro],
   );
 
-  /** Marca los N mas viejos de lo que se esta viendo, sin pasarse del horno. */
+  /**
+   * Marca los N mas viejos de lo que se esta viendo, sin pasarse de ningun
+   * cupo. Va uno por uno y saltea el que ya no entra en el suyo: si las guardas
+   * se llenaron, sigue tomando grandes en vez de cortar la seleccion ahi.
+   */
   function elegirMasViejos(cuantos: number) {
-    const tope = Math.max(0, Math.min(cuantos, lugaresLibres));
-    setAMeter(new Set(humedosVisibles.slice(0, tope).map((s) => s.id)));
+    const restante = new Map(cupos.map((c) => [c.clave, Math.max(0, c.libres)]));
+    const elegidos = new Set<number>();
+    for (const s of humedosVisibles) {
+      if (elegidos.size >= cuantos) break;
+      const clave = cupoDe(s);
+      const libre = restante.get(clave) ?? 0;
+      if (libre <= 0) continue;
+      elegidos.add(s.id);
+      restante.set(clave, libre - 1);
+    }
+    setAMeter(elegidos);
   }
 
   function alternarSacar(id: number) {
@@ -153,10 +209,18 @@ export function PanelHorno({
     const problema = primerProblema(aMeter, humedos);
     if (problema) return entrada.setError(problema);
 
-    if (aMeter.size > lugaresLibres) {
-      return entrada.setError(
-        `Solo quedan ${lugaresLibres} lugares en el horno y estás metiendo ${aMeter.size}. Sacá los secos primero.`,
-      );
+    // Se valida cupo por cupo: meter 4 guardas no consume lugares de grandes.
+    for (const c of cupos) {
+      const entrando = humedos.filter(
+        (s) => aMeter.has(s.id) && cupoDe(s) === c.clave,
+      ).length;
+      if (entrando > c.libres) {
+        return entrada.setError(
+          `Para ${c.nombre} quedan ${Math.max(0, c.libres)} ${
+            c.libres === 1 ? "lugar" : "lugares"
+          } y estás metiendo ${entrando}. Sacá los secos primero.`,
+        );
+      }
     }
 
     await entrada.ejecutar(
@@ -169,10 +233,43 @@ export function PanelHorno({
     );
   }
 
+  /**
+   * humedo -> seco sin pasar por el horno. No consume lugares ni valida cupos:
+   * justamente, el secadero nunca entra. Pide confirmacion porque saltea el
+   * horno y eso no se deshace desde esta pantalla.
+   */
+  async function secarAlSol() {
+    const problema = primerProblema(aMeter, humedos);
+    if (problema) return sol.setError(problema);
+
+    const cuantos = aMeter.size;
+    if (
+      !window.confirm(
+        `¿Pasar ${cuantos} ${cuantos === 1 ? "secadero" : "secaderos"} a secos sin hornear?\n\n` +
+          "Usá esto solo si secaron al sol. No van a contar en el tiempo de horno.",
+      )
+    ) {
+      return;
+    }
+
+    await sol.ejecutar(
+      () => secarSinHorno({ seleccion: armarSeleccion(aMeter, humedos) }),
+      () => {
+        setAMeter(new Set());
+        setRoturas({});
+        router.refresh();
+      },
+    );
+  }
+
   return (
     <div className="space-y-8">
+      {/* Con cupos separados, un solo "12 de 19" mentiria: esconderia que las
+          guardas pueden estar llenas mientras sobran lugares de grandes. */}
       <Titulo
-        detalle={`${enHorno.length} de ${capacidadHorno} lugares ocupados`}
+        detalle={cupos
+          .map((c) => `${c.nombre}: ${c.dentro} de ${c.tope}`)
+          .join(" · ")}
       >
         Horno
       </Titulo>
@@ -251,7 +348,11 @@ export function PanelHorno({
           titulo="Meter al horno"
           detalle={
             humedos.length
-              ? `${lugaresLibres} ${lugaresLibres === 1 ? "lugar libre" : "lugares libres"} si sacás los marcados arriba`
+              ? hayCuposPropios
+                ? `Libres si sacás los marcados arriba — ${cupos
+                    .map((c) => `${c.nombre}: ${Math.max(0, c.libres)}`)
+                    .join(" · ")}`
+                : `${lugaresLibres} ${lugaresLibres === 1 ? "lugar libre" : "lugares libres"} si sacás los marcados arriba`
               : undefined
           }
           contador={humedos.length}
@@ -331,22 +432,39 @@ export function PanelHorno({
               </BotonSeleccion>
             </div>
 
-            {entrada.error && (
+            {(entrada.error || sol.error) && (
               <div className="mt-3">
-                <Aviso>{entrada.error}</Aviso>
+                <Aviso>{entrada.error ?? sol.error}</Aviso>
               </div>
             )}
 
             <button
               type="button"
               onClick={() => void meter()}
-              disabled={entrada.enviando || aMeter.size === 0}
+              disabled={entrada.enviando || sol.enviando || aMeter.size === 0}
               className="boton w-full mt-3 bg-orange-600 text-white hover:bg-orange-700"
             >
               {entrada.enviando
                 ? "Guardando…"
                 : `Meter ${aMeter.size} al horno`}
             </button>
+
+            {/* Salida por afuera del horno, con la misma seleccion de arriba.
+                Va abajo y en secundario porque es la excepcion, no el camino
+                de todos los dias. */}
+            <button
+              type="button"
+              onClick={() => void secarAlSol()}
+              disabled={entrada.enviando || sol.enviando || aMeter.size === 0}
+              className="boton mt-2 w-full bg-yellow-100 text-yellow-900 ring-1 ring-yellow-300 hover:bg-yellow-200"
+            >
+              {sol.enviando
+                ? "Guardando…"
+                : `Secaron al sol: pasar ${aMeter.size} a secos sin hornear`}
+            </button>
+            <p className="mt-1.5 text-center text-xs text-slate-500">
+              No ocupan lugar en el horno y no cuentan en el tiempo de horno.
+            </p>
           </>
         )}
       </section>

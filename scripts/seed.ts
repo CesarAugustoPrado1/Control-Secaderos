@@ -34,11 +34,18 @@ const conEjemplos = !process.argv.includes("--sin-ejemplos");
  * Guarda y especial van sin capacidad a proposito: en esos no existe un secadero
  * "lleno", entra lo que ese dia haya. Ver el comentario de `tipos` en el esquema.
  */
-const TIPOS: { nombre: string; capacidad: number | null; orden: number }[] = [
-  { nombre: "Grande", capacidad: 102, orden: 10 },
-  { nombre: "Chico", capacidad: 204, orden: 20 },
-  { nombre: "Guarda", capacidad: null, orden: 30 },
-  { nombre: "Especial", capacidad: null, orden: 40 },
+const TIPOS: {
+  nombre: string;
+  capacidad: number | null;
+  cupoHorno: number | null;
+  orden: number;
+}[] = [
+  { nombre: "Grande", capacidad: 102, cupoHorno: null, orden: 10 },
+  { nombre: "Chico", capacidad: 204, cupoHorno: null, orden: 20 },
+  // Las guardas van en su propia estructura adentro del horno: entran 4 y no
+  // ocupan ninguno de los lugares que se reparten grandes, chicos y especiales.
+  { nombre: "Guarda", capacidad: null, cupoHorno: 4, orden: 30 },
+  { nombre: "Especial", capacidad: null, cupoHorno: null, orden: 40 },
 ];
 
 /**

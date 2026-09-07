@@ -23,6 +23,8 @@ export type SecaderoConTipo = Secadero & {
   tipoNombre: string;
   /** null = el tipo no tiene tope fijo. Ver `tipos` en el esquema. */
   capacidad: number | null;
+  /** null = comparte el cupo general del horno. Ver `tipos` en el esquema. */
+  cupoHorno: number | null;
 };
 
 /** Transaccion de Drizzle. Todo el motor trabaja adentro de una. */
@@ -50,6 +52,7 @@ export async function bloquearSecaderos(
       secadero: secaderos,
       tipoNombre: tipos.nombre,
       capacidad: tipos.capacidad,
+      cupoHorno: tipos.cupoHorno,
     })
     .from(secaderos)
     .innerJoin(tipos, eq(tipos.id, secaderos.tipoId))
@@ -63,6 +66,7 @@ export async function bloquearSecaderos(
     ...f.secadero,
     tipoNombre: f.tipoNombre,
     capacidad: f.capacidad,
+    cupoHorno: f.cupoHorno,
   }));
 }
 

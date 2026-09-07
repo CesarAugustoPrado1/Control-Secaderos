@@ -7,6 +7,11 @@
  */
 
 export const CONFIG_POR_DEFECTO = {
+  /**
+   * Lugares del horno que se reparten los tipos SIN cupo propio: grandes,
+   * chicos y especiales. Los que tienen estructura aparte -las guardas- llevan
+   * su cupo en `tipos.cupoHorno` y no descuentan de este numero.
+   */
   capacidad_horno: 15,
   /**
    * Cuanto deberia durar un ciclo de horno. No lo hace cumplir el sistema: se
@@ -28,7 +33,7 @@ export const CONFIG_POR_DEFECTO = {
 export type ClaveConfig = keyof typeof CONFIG_POR_DEFECTO;
 
 export const ETIQUETA_CONFIG: Record<ClaveConfig, string> = {
-  capacidad_horno: "Capacidad del horno (secaderos)",
+  capacidad_horno: "Lugares del horno para los tipos sin cupo propio",
   minutos_horno_objetivo: "Tiempo objetivo de horno (minutos)",
   kg_por_bolson: "Peso de un bolsón de yeso (kg)",
   kg_por_balde_yeso: "Peso de un balde de desperdicio (kg)",

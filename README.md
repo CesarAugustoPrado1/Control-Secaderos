@@ -16,6 +16,13 @@ administración y auditoría miren todo desde la PC.
 | **Vacío** | Carrusel o llenado manual | Elige un secadero vacío, le carga uno o varios modelos con sus cantidades. Pasa a **húmedo**. |
 | **Húmedo** | Horno | Selecciona los secaderos que entran al horno (respetando su capacidad). Pasan a **horno**. |
 | **Horno** | Horno | Saca los secaderos —normalmente todos, pero puede dejar adentro el que no secó—. Pasan a **seco**. |
+
+Un secadero húmedo puede pasar a **seco sin entrar al horno**, típicamente
+porque secó al sol. Lo hace el hornero desde su pantalla, con la misma
+selección con que mete al horno. Queda registrado como movimiento propio y
+**no cuenta en las estadísticas de tiempo de horno**: esas placas nunca
+estuvieron adentro, y contarlas metería esperas de un día entero en el promedio
+de un ciclo de cinco horas.
 | **Seco** | Paletizado o llenado manual | Descarga las placas: las sanas van a producto terminado, las rotas a desperdicio. Vuelve a **vacío**. |
 
 Si al descargar se detecta que un secadero **no secó bien**, paletizado lo deja
@@ -51,7 +58,11 @@ Reglas que el sistema hace cumplir:
   especial: ahí no existe un secadero “lleno”, entra lo que ese día haya. En
   esos tipos el sistema no controla la cantidad, no marca cargas incompletas y
   no los mide contra el flujo óptimo. No es lo mismo que capacidad cero.
-- En el horno entran 15 secaderos por defecto, también configurable.
+- En el horno entran 15 secaderos por defecto, también configurable. Un tipo
+  puede tener **cupo propio**: las guardas van en su propia estructura, entran
+  4 y no ocupan ninguno de los 15. El cupo vive en el tipo y no como un segundo
+  parámetro global, porque los nombres se editan y los tipos se agregan en
+  caliente: atar la regla al nombre “Guarda” la rompería el día que se cambie.
 - En **cada** cambio de estado se pueden registrar placas rotas con su motivo.
   El desperdicio se descuenta del contenido y queda asentado en el movimiento.
 - Si dos personas tocan el mismo secadero a la vez, la segunda recibe un aviso

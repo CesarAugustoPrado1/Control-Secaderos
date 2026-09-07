@@ -21,6 +21,8 @@ type Fila = {
   nombre: string;
   /** null = sin tope fijo. */
   capacidad: number | null;
+  /** null = comparte el cupo general del horno. */
+  cupoHorno: number | null;
   orden: number;
   activo: boolean;
   secaderos: number;
@@ -38,7 +40,12 @@ export function ListaTipos({ tipos }: { tipos: Fila[] }) {
       <BloqueNuevo etiqueta="Agregar tipo">
         {(cerrar) => (
           <FormularioTipo
-            inicial={{ nombre: "", capacidad: 100, orden: siguienteOrden }}
+            inicial={{
+              nombre: "",
+              capacidad: 100,
+              cupoHorno: null,
+              orden: siguienteOrden,
+            }}
             alGuardar={cerrar}
           />
         )}
@@ -81,6 +88,11 @@ export function ListaTipos({ tipos }: { tipos: Fila[] }) {
                       ) : (
                         <span className="text-sm font-bold tabular-nums text-slate-700">
                           {numero(t.capacidad)} placas
+                        </span>
+                      )}
+                      {t.cupoHorno !== null && (
+                        <span className="chip bg-orange-100 text-orange-800">
+                          {t.cupoHorno} en el horno, aparte
                         </span>
                       )}
                       {!t.activo && (
@@ -137,6 +149,12 @@ export function ListaTipos({ tipos }: { tipos: Fila[] }) {
         controla la cantidad: no rechaza cargas por pasarse, no las marca como
         incompletas y no las cuenta en el flujo óptimo de estadísticas.
       </p>
+      <p className="mt-2 text-xs text-slate-500">
+        El <strong className="text-slate-700">cupo de horno</strong> es para los
+        tipos que tienen su propia estructura adentro, como las guardas: entran
+        esos lugares y no ocupan ninguno de los del cupo general. Dejalo vacío
+        si el tipo comparte los lugares con los demás, que es lo normal.
+      </p>
     </>
   );
 }
@@ -149,6 +167,7 @@ function FormularioTipo({
     id?: number;
     nombre: string;
     capacidad: number | null;
+    cupoHorno: number | null;
     orden: number;
   };
   alGuardar: () => void;
@@ -157,11 +176,16 @@ function FormularioTipo({
   const [capacidad, setCapacidad] = useState(
     inicial.capacidad === null ? "" : String(inicial.capacidad),
   );
+  const [cupoHorno, setCupoHorno] = useState(
+    inicial.cupoHorno === null ? "" : String(inicial.cupoHorno),
+  );
   const [orden, setOrden] = useState(String(inicial.orden));
 
   // El campo vacio es "sin tope fijo". Se distingue del cero a proposito: no se
   // usa Number(""), que daria 0 y significaria un secadero donde no entra nada.
   const sinTope = capacidad.trim() === "";
+  // Mismo criterio: vacio es "comparte el cupo general", no "no entra ninguno".
+  const sinCupoPropio = cupoHorno.trim() === "";
 
   return (
     <FormularioAbm
@@ -171,11 +195,12 @@ function FormularioTipo({
           id: inicial.id,
           nombre,
           capacidad: sinTope ? null : Number(capacidad),
+          cupoHorno: sinCupoPropio ? null : Number(cupoHorno),
           orden: Number(orden),
         })
       }
     >
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Campo etiqueta="Nombre">
           <input
             className="campo"
@@ -199,6 +224,23 @@ function FormularioTipo({
           />
           <p className="mt-1 text-xs text-slate-500">
             {sinTope ? "Sin tope: entra lo que haya" : "Vacío = sin tope fijo"}
+          </p>
+        </Campo>
+
+        <Campo etiqueta="Cupo propio en el horno">
+          <input
+            type="number"
+            inputMode="numeric"
+            min={1}
+            className="campo"
+            value={cupoHorno}
+            placeholder="Comparte el general"
+            onChange={(e) => setCupoHorno(e.target.value)}
+          />
+          <p className="mt-1 text-xs text-slate-500">
+            {sinCupoPropio
+              ? "Vacío = compite por los lugares generales"
+              : "Lugares aparte, no ocupan los del resto"}
           </p>
         </Campo>
 

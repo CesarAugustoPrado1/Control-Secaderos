@@ -44,6 +44,17 @@ const esquemaTipo = z.object({
     .positive("La capacidad tiene que ser mayor a cero.")
     .max(100000)
     .nullable(),
+  /**
+   * null es "comparte el cupo general del horno", que es lo normal. Un numero
+   * significa que el tipo tiene su propia estructura adentro y no compite por
+   * los lugares de los demas.
+   */
+  cupoHorno: z
+    .number()
+    .int()
+    .positive("El cupo de horno tiene que ser mayor a cero.")
+    .max(1000)
+    .nullable(),
   orden: z.number().int().min(0).max(999).default(0),
 });
 
@@ -73,6 +84,7 @@ export async function guardarTipo(
         .set({
           nombre: datos.nombre,
           capacidad: datos.capacidad,
+          cupoHorno: datos.cupoHorno,
           orden: datos.orden,
         })
         .where(eq(tipos.id, datos.id));
