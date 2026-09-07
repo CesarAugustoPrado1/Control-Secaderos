@@ -58,12 +58,30 @@ function conectar(): Db {
       /**
        * En modo sesion cada conexion ocupa un lugar del pool de Supabase
        * mientras viva, y en serverless cada instancia de Vercel abre la suya.
-       * Con el pool en 15, una rafaga de 25 requests llega al techo y las
-       * ultimas fallan (medido: 22 de 25).
+       * Con el pool en 15, una rafaga de 25 requests llega al techo: las que
+       * quedan sin cupo agotan el connect_timeout y devuelven 500, no una
+       * pantalla lenta.
+       *
+       * Cuantas fallan depende de cuantas instancias frias hay, no del codigo.
+       * Medido sobre la misma version: contra un deploy ya caliente pasaron las
+       * 25; repitiendo la rafaga recien desplegado -cada instancia arranca fria
+       * y pide su propia conexion- pasaron 12. El "22 de 25" que decia antes
+       * este comentario era un punto intermedio, no el piso, y hacia pensar que
+       * el margen era mas grande de lo que es.
+       *
+       * Al diagnosticar esto, ojo con dos trampas. Repetir la verificacion
+       * varias veces seguidas empeora el resultado por si sola, asi que una
+       * caida entre corridas no prueba que el ultimo cambio la haya causado. Y
+       * el contador de `pg_stat_activity` mide backends de Supavisor, que no
+       * bajan apenas se desconecta el cliente: verlo clavado en 15 es el techo
+       * del pool, no necesariamente una fuga.
        *
        * Cerrar las ociosas a los 20 segundos devuelve el cupo rapido entre
-       * picos. Para el volumen de la planta alcanza de sobra; si alguna vez
-       * hiciera falta mas, se sube el pool size en Supabase.
+       * picos. Para el volumen de la planta sobra -unos 50 movimientos por dia
+       * desde un punado de celulares, lejisimos de 25 simultaneos- y el unico
+       * escenario real que lo toca es un pico justo despues de un deploy. Si
+       * alguna vez hiciera falta mas, se sube el pool size en Supabase: la base
+       * free tolera cerca de 60 conexiones.
        */
       idle_timeout: 20,
       // Que un pooler caido falle rapido en vez de colgar la pantalla.
