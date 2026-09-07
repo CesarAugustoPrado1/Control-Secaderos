@@ -14,6 +14,15 @@ export const CONFIG_POR_DEFECTO = {
    * quedaron cortos, que son los que despues vuelven sin secar.
    */
   minutos_horno_objetivo: 300,
+  /**
+   * Cuanto pesa un bolson de yeso y cuanto un balde de desperdicio. No validan
+   * nada: solo convierten unidades a kilos para poder sumarlas.
+   *
+   * Cambiarlos afecta a lo que se registre de aca en adelante y no al
+   * historial, porque cada registro se queda con el peso que regia ese dia.
+   */
+  kg_por_bolson: 800,
+  kg_por_balde_yeso: 20,
 } as const;
 
 export type ClaveConfig = keyof typeof CONFIG_POR_DEFECTO;
@@ -21,6 +30,8 @@ export type ClaveConfig = keyof typeof CONFIG_POR_DEFECTO;
 export const ETIQUETA_CONFIG: Record<ClaveConfig, string> = {
   capacidad_horno: "Capacidad del horno (secaderos)",
   minutos_horno_objetivo: "Tiempo objetivo de horno (minutos)",
+  kg_por_bolson: "Peso de un bolsón de yeso (kg)",
+  kg_por_balde_yeso: "Peso de un balde de desperdicio (kg)",
 };
 
 export type Configuracion = Record<ClaveConfig, number>;

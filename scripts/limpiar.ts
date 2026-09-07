@@ -25,6 +25,7 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { ne, sql as raw } from "drizzle-orm";
 import {
+  consumoYeso,
   movimientoLineas,
   movimientos,
   planLineas,
@@ -60,6 +61,7 @@ async function main() {
     "movimientos",
     "movimiento_lineas",
     "roturas_carrusel",
+    "consumo_yeso",
     "secadero_contenido",
     "secaderos",
     "productos",
@@ -109,9 +111,10 @@ conservan siempre.`);
     await tx.delete(movimientoLineas);
     await tx.delete(movimientos);
     await tx.delete(secaderoContenido);
-    // Las roturas del carrusel son hechos registrados, igual que un
+    // Las roturas del carrusel y el yeso son hechos registrados, igual que un
     // movimiento: si se tira el historial, se tiran con el.
     await tx.delete(roturasCarrusel);
+    await tx.delete(consumoYeso);
 
     if (todo) {
       // Los planes solo se borran en --todo. Son ordenes hacia adelante, no

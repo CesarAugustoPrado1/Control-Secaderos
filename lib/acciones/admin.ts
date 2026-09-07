@@ -647,6 +647,11 @@ export async function cambiarEstadoMotivo(
 const esquemaConfig = z.object({
   capacidad_horno: z.number().int().min(1).max(1000),
   minutos_horno_objetivo: z.number().int().min(1).max(100000),
+  // Un bolson son cientos de kilos y un balde son decenas, pero el tope es el
+  // mismo para los dos: no vale la pena inventar un limite fino para atajar un
+  // error de tipeo que igual va a caer adentro del rango valido.
+  kg_por_bolson: z.number().int().min(1).max(10000),
+  kg_por_balde_yeso: z.number().int().min(1).max(10000),
 });
 
 export async function guardarConfig(

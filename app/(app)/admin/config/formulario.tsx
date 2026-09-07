@@ -13,6 +13,8 @@ export function FormularioConfig({ inicial }: { inicial: Configuracion }) {
   const [objetivo, setObjetivo] = useState(
     String(inicial.minutos_horno_objetivo),
   );
+  const [kgBolson, setKgBolson] = useState(String(inicial.kg_por_bolson));
+  const [kgBalde, setKgBalde] = useState(String(inicial.kg_por_balde_yeso));
 
   return (
     <div className="max-w-xl space-y-4">
@@ -22,6 +24,8 @@ export function FormularioConfig({ inicial }: { inicial: Configuracion }) {
             guardarConfig({
               capacidad_horno: Number(capacidadHorno),
               minutos_horno_objetivo: Number(objetivo),
+              kg_por_bolson: Number(kgBolson),
+              kg_por_balde_yeso: Number(kgBalde),
             })
           }
         >
@@ -61,6 +65,39 @@ export function FormularioConfig({ inicial }: { inicial: Configuracion }) {
               cortos, que son los que después vuelven sin secar.
             </p>
           </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Campo etiqueta={ETIQUETA_CONFIG.kg_por_bolson}>
+              <input
+                type="number"
+                inputMode="numeric"
+                min={1}
+                className="campo"
+                value={kgBolson}
+                onChange={(e) => setKgBolson(e.target.value)}
+                required
+              />
+            </Campo>
+
+            <Campo etiqueta={ETIQUETA_CONFIG.kg_por_balde_yeso}>
+              <input
+                type="number"
+                inputMode="numeric"
+                min={1}
+                className="campo"
+                value={kgBalde}
+                onChange={(e) => setKgBalde(e.target.value)}
+                required
+              />
+            </Campo>
+          </div>
+
+          <p className="-mt-1 text-xs text-slate-500">
+            El carrusel registra bolsones y baldes por unidad; esto es lo que se
+            usa para pasarlos a kilos. Cambiarlos afecta a lo que se cargue de
+            acá en adelante: cada registro se queda con el peso que regía ese
+            día, así que el histórico no se recalcula.
+          </p>
         </FormularioAbm>
       </div>
 

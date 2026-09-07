@@ -57,6 +57,20 @@ export const numero = (n: number) => n.toLocaleString("es-AR");
 export const capacidadTexto = (capacidad: number | null) =>
   capacidad === null ? "sin tope fijo" : `hasta ${numero(capacidad)} placas`;
 
+/**
+ * Kilos legibles de un vistazo. Arriba de 10 toneladas el numero en kilos deja
+ * de decir algo -"192.000 kg" hay que contarlo con el dedo- asi que pasa a
+ * toneladas. Se redondea siempre: son kilos estimados a partir de unidades, y
+ * mostrar decimales les daria una precision que no tienen.
+ */
+export function kilos(kg: number): string {
+  if (kg < 10000) return `${numero(Math.round(kg))} kg`;
+  return `${(kg / 1000).toLocaleString("es-AR", {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  })} t`;
+}
+
 export function porcentaje(parte: number, total: number): string {
   if (!total) return "0,0%";
   return `${((parte / total) * 100).toLocaleString("es-AR", {

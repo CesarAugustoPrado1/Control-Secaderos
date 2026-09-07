@@ -8,6 +8,7 @@ import {
 } from "./configuracion";
 import {
   config,
+  consumoYeso,
   motivosDesperdicio,
   movimientoLineas,
   movimientos,
@@ -18,6 +19,7 @@ import {
   tipos,
   usuarios,
   type Estado,
+  type TipoYeso,
 } from "./db/schema";
 
 /**
@@ -438,5 +440,48 @@ export async function roturasDeCarrusel(
       ),
     )
     .orderBy(desc(roturasCarrusel.creadoEn))
+    .limit(limite);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Yeso                                                                       */
+/* -------------------------------------------------------------------------- */
+
+export type RegistroYesoListado = {
+  id: number;
+  tipo: TipoYeso;
+  cantidad: number;
+  kgPorUnidad: number;
+  usuarioNombre: string;
+  nota: string | null;
+  creadoEn: Date;
+};
+
+/**
+ * Bolsones y baldes registrados en un rango, del mas nuevo al mas viejo.
+ *
+ * Vienen los dos tipos en una sola consulta: la lectura util no es cuanto yeso
+ * entro ni cuanto se tiro por separado, sino la relacion entre las dos cosas.
+ */
+export async function consumoDeYeso(
+  desde: Date,
+  hasta: Date,
+  limite = 200,
+): Promise<RegistroYesoListado[]> {
+  return db
+    .select({
+      id: consumoYeso.id,
+      tipo: consumoYeso.tipo,
+      cantidad: consumoYeso.cantidad,
+      kgPorUnidad: consumoYeso.kgPorUnidad,
+      usuarioNombre: consumoYeso.usuarioNombre,
+      nota: consumoYeso.nota,
+      creadoEn: consumoYeso.creadoEn,
+    })
+    .from(consumoYeso)
+    .where(
+      and(gte(consumoYeso.creadoEn, desde), lte(consumoYeso.creadoEn, hasta)),
+    )
+    .orderBy(desc(consumoYeso.creadoEn))
     .limit(limite);
 }

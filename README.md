@@ -60,6 +60,23 @@ Reglas que el sistema hace cumplir:
   errores se arreglan con una **corrección** de admin que queda registrada con
   su motivo.
 
+### Yeso
+
+El carrusel registra aparte los **bolsones de yeso consumidos** y los **baldes
+de desperdicio**. No cuelgan de ningún secadero ni de ningún modelo: el yeso se
+consume en la línea, antes de que exista la placa, y repartir un bolsón entre
+los modelos del día sería pedirle al operario que adivine.
+
+Se cargan por evento, con un botón de `+1` para el que registra sobre la marcha
+y un campo de cantidad para el que carga todo junto al final del día. Las dos
+formas escriben lo mismo, así que el total del día no depende de cuál se usó.
+
+El peso de cada unidad se configura en **Administración → Parámetros** (800 kg
+el bolsón, 20 kg el balde). Cada registro guarda el peso que regía ese día, así
+que cambiar el parámetro no recalcula el histórico. Ojo con esos kilos: son una
+conversión de unidades, no un pesaje. Sirven para comparar un período contra
+otro, no para discutir con un proveedor.
+
 ## Roles
 
 - **admin** — todo: ABM de secaderos, tipos, modelos, usuarios, motivos de

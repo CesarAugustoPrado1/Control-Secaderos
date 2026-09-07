@@ -307,6 +307,57 @@ export const roturasCarrusel = pgTable(
   ],
 );
 
+/**
+ * Yeso: los bolsones que entran a la linea y los baldes que se tiran.
+ *
+ * No cuelga de ningun secadero, igual que las roturas del carrusel. El yeso se
+ * consume antes de que exista una placa: un bolson abierto no le pasa a un
+ * secadero, le pasa al dia. Atarlo a uno obligaria a inventar cual, y despues
+ * toda estadistica por secadero quedaria contaminada.
+ *
+ * Tampoco se ata a un producto. El yeso entra a granel y el carrusel cambia de
+ * modelo durante el dia: repartir un bolson entre modelos seria pedirle al
+ * operario que adivine, y un dato adivinado ensucia mas de lo que aporta.
+ *
+ * Cada fila guarda su propio `kgPorUnidad` en vez de multiplicar por el
+ * parametro al momento de leer. Si manana cambia el proveedor y el bolson pasa
+ * a 900 kg, los kilos de los meses anteriores tienen que seguir dando lo mismo
+ * que daban: un parametro global aplicado hacia atras reescribe el historial.
+ *
+ * Ojo con como se leen esos kilos: son una conversion, no una medicion. Nadie
+ * pesa el balde. Sirven para comparar un periodo contra otro, no para una
+ * liquidacion ni para discutir con un proveedor.
+ */
+export const tipoYesoEnum = pgEnum("tipo_yeso", [
+  "bolson",
+  "balde_desperdicio",
+]);
+
+export const consumoYeso = pgTable(
+  "consumo_yeso",
+  {
+    id: serial("id").primaryKey(),
+    tipo: tipoYesoEnum("tipo").notNull(),
+    /** Unidades enteras: bolsones abiertos o baldes tirados. */
+    cantidad: integer("cantidad").notNull(),
+    /** Peso vigente al registrar. Ver el comentario de arriba. */
+    kgPorUnidad: integer("kg_por_unidad").notNull(),
+    usuarioId: integer("usuario_id")
+      .notNull()
+      .references(() => usuarios.id),
+    /** Snapshot: el historial se lee aunque despues se renombre el usuario. */
+    usuarioNombre: text("usuario_nombre").notNull(),
+    nota: text("nota"),
+    creadoEn: timestamp("creado_en", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("consumo_yeso_creado_idx").on(t.creadoEn),
+    index("consumo_yeso_tipo_idx").on(t.tipo),
+  ],
+);
+
 export const motivosDesvio = pgTable("motivos_desvio", {
   id: serial("id").primaryKey(),
   nombre: text("nombre").notNull(),
@@ -466,3 +517,5 @@ export type PlanLinea = typeof planLineas.$inferSelect;
 export type Sector = (typeof sectorEnum.enumValues)[number];
 export type Destino = (typeof destinoEnum.enumValues)[number];
 export type RoturaCarrusel = typeof roturasCarrusel.$inferSelect;
+export type TipoYeso = (typeof tipoYesoEnum.enumValues)[number];
+export type ConsumoYeso = typeof consumoYeso.$inferSelect;
