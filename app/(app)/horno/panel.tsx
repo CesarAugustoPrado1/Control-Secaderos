@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   entrarAHorno,
   salirDeHorno,
@@ -63,6 +63,8 @@ export function PanelHorno({
   const [aMeter, setAMeter] = useState<Set<number>>(new Set());
   const [roturas, setRoturas] = useState<Roturas>({});
   const [productoFiltro, setProductoFiltro] = useState<string | null>(null);
+  const [busqueda, setBusqueda] = useState("");
+  const campoBusqueda = useRef<HTMLInputElement>(null);
 
   const salida = useAccion();
   const entrada = useAccion();
@@ -138,6 +140,45 @@ export function PanelHorno({
         : humedos,
     [humedos, productoFiltro],
   );
+
+  /**
+   * Lo que muestra la lista de meter. Buscar por numero mira TODOS los humedos
+   * e ignora el filtro de producto: quien escribe un numero ya sabe cual quiere,
+   * y que no aparezca porque arriba quedo elegido otro producto confunde.
+   */
+  const q = busqueda.trim();
+  const humedosEnLista = useMemo(
+    () =>
+      q
+        ? humedos
+            .filter((s) => String(s.numero).startsWith(q))
+            .sort((a, b) => a.numero - b.numero)
+        : humedosVisibles,
+    [q, humedos, humedosVisibles],
+  );
+
+  /** Los marcados para meter, por numero, para verlos sin recorrer la lista. */
+  const elegidosParaMeter = useMemo(
+    () =>
+      humedos
+        .filter((s) => aMeter.has(s.id))
+        .sort((a, b) => a.numero - b.numero),
+    [humedos, aMeter],
+  );
+
+  /**
+   * Marcar desde la busqueda limpia el campo y lo deja listo para el siguiente
+   * numero: con muchos secaderos se tipean uno atras de otro, y borrar a mano
+   * cada vez es lo que hace lento el buscador.
+   */
+  function alternarDesdeBusqueda(id: number) {
+    const marcando = !aMeter.has(id);
+    alternarMeter(id);
+    if (marcando) {
+      setBusqueda("");
+      campoBusqueda.current?.focus();
+    }
+  }
 
   /**
    * Marca los N mas viejos de lo que se esta viendo, sin pasarse de ningun
@@ -369,10 +410,71 @@ export function PanelHorno({
           </p>
         ) : (
           <>
+            {/* Buscador por numero, como en carrusel. Sin autofoco: arriba
+                estan las notas y la seccion de sacar, y abrir el teclado al
+                entrar taparia todo eso. */}
+            <div className="relative mb-3">
+              <input
+                ref={campoBusqueda}
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                enterKeyHint="done"
+                value={busqueda}
+                onChange={(e) => setBusqueda(e.target.value.replace(/\D/g, ""))}
+                onKeyDown={(e) => {
+                  if (e.key !== "Enter") return;
+                  e.preventDefault();
+                  // Enter marca el numero exacto, o el unico que coincide.
+                  const exacto =
+                    humedosEnLista.find((s) => String(s.numero) === q) ??
+                    (humedosEnLista.length === 1 ? humedosEnLista[0] : null);
+                  if (exacto && !aMeter.has(exacto.id)) {
+                    alternarDesdeBusqueda(exacto.id);
+                  }
+                }}
+                placeholder="Buscar número de secadero…"
+                aria-label="Buscar secadero húmedo por número"
+                className="campo py-3.5 pr-24 text-lg font-semibold tabular-nums"
+              />
+              {busqueda && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBusqueda("");
+                    campoBusqueda.current?.focus();
+                  }}
+                  className="absolute top-1/2 right-3 -translate-y-1/2 rounded-lg bg-slate-200 px-3 py-1.5 text-xs font-bold text-slate-600"
+                >
+                  Borrar
+                </button>
+              )}
+            </div>
+
+            {elegidosParaMeter.length > 0 && (
+              <div className="mb-3 flex flex-wrap items-center gap-1.5">
+                <span className="text-xs font-semibold text-slate-500">
+                  Marcados:
+                </span>
+                {elegidosParaMeter.map((s) => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => alternarMeter(s.id)}
+                    disabled={entrada.enviando || sol.enviando}
+                    className="rounded-lg bg-slate-900 px-2 py-1 text-xs font-bold tabular-nums text-white"
+                    aria-label={`Desmarcar secadero ${s.numero}`}
+                  >
+                    {s.numero} ×
+                  </button>
+                ))}
+              </div>
+            )}
+
             {/* Filtro por producto: el horno rinde mejor con una hornada de un
                 solo producto, asi que se puede acotar la lista antes de elegir.
                 Los secaderos ya vienen del mas viejo al mas nuevo. */}
-            {productosEnEspera.length > 1 && (
+            {!q && productosEnEspera.length > 1 && (
               <div className="-mx-4 mb-3 overflow-x-auto px-4">
                 <div className="flex min-w-max gap-1.5">
                   <BotonSeleccion
@@ -395,12 +497,14 @@ export function PanelHorno({
             )}
 
             <div className="space-y-2">
-              {humedosVisibles.map((s) => (
+              {humedosEnLista.map((s) => (
                 <FilaSecadero
                   key={s.id}
                   secadero={s}
                   elegido={aMeter.has(s.id)}
-                  alAlternar={() => alternarMeter(s.id)}
+                  alAlternar={() =>
+                    q ? alternarDesdeBusqueda(s.id) : alternarMeter(s.id)
+                  }
                   motivos={motivos}
                   roturas={roturas[s.id] ?? {}}
                   alCambiarRoturas={(v) =>
@@ -411,9 +515,13 @@ export function PanelHorno({
                   reproceso={enReproceso.has(s.id)}
                 />
               ))}
-              {humedosVisibles.length === 0 && (
+              {humedosEnLista.length === 0 && (
                 <p className="tarjeta px-4 py-8 text-center text-sm text-slate-500">
-                  No hay secaderos húmedos con ese producto.
+                  {q ? (
+                    <SinCoincidencia q={q} enHorno={enHorno} />
+                  ) : (
+                    "No hay secaderos húmedos con ese producto."
+                  )}
                 </p>
               )}
             </div>
@@ -524,6 +632,35 @@ function NotasDelDia({
         </div>
       )}
     </section>
+  );
+}
+
+/**
+ * Por que un numero buscado no aparece para meter.
+ *
+ * Como en el buscador de carrusel, "no existe" y "no esta disponible" no son lo
+ * mismo: si ya esta adentro del horno se dice, para que no lo busque de nuevo.
+ */
+function SinCoincidencia({
+  q,
+  enHorno,
+}: {
+  q: string;
+  enHorno: SecaderoVista[];
+}) {
+  const adentro = enHorno.find((s) => String(s.numero) === q);
+  if (adentro) {
+    return (
+      <>
+        El <strong className="text-slate-700">{q}</strong> ya está en el horno.
+      </>
+    );
+  }
+  return (
+    <>
+      No hay ningún secadero húmedo que empiece con{" "}
+      <strong className="text-slate-700">{q}</strong>.
+    </>
   );
 }
 
