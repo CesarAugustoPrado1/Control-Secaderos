@@ -28,6 +28,7 @@ import {
   consumoYeso,
   movimientoLineas,
   movimientos,
+  notasHorno,
   planLineas,
   planes,
   productos,
@@ -67,6 +68,7 @@ async function main() {
     "productos",
     "planes",
     "plan_lineas",
+    "notas_horno",
     "tipos",
     "usuarios",
     "motivos_desperdicio",
@@ -122,6 +124,7 @@ conservan siempre.`);
       // querer limpiar los movimientos de prueba sin perderla.
       await tx.delete(planLineas);
       await tx.delete(planes);
+      await tx.delete(notasHorno);
       await tx.delete(secaderos);
       await tx.delete(productos);
       // El admin se conserva siempre: si no, quedas sin poder entrar al panel.

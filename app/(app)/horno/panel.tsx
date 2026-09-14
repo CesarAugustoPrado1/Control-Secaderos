@@ -36,6 +36,7 @@ export function PanelHorno({
   motivos,
   capacidadHorno,
   reproceso,
+  notas,
 }: {
   enHorno: SecaderoVista[];
   humedos: SecaderoVista[];
@@ -43,6 +44,8 @@ export function PanelHorno({
   capacidadHorno: number;
   /** Ids de los secaderos que no secaron bien y estan siendo rehorneados. */
   reproceso: number[];
+  /** Indicaciones del dia que dejo el admin. */
+  notas: { carga: string | null; descarga: string | null };
 }) {
   const enReproceso = useMemo(() => new Set(reproceso), [reproceso]);
   const router = useRouter();
@@ -274,6 +277,8 @@ export function PanelHorno({
         Horno
       </Titulo>
 
+      <NotasDelDia descarga={notas.descarga} carga={notas.carga} />
+
       {/* ---------------- Sacar ---------------- */}
       <section>
         <EncabezadoSeccion
@@ -473,6 +478,54 @@ export function PanelHorno({
 }
 
 /* -------------------------------------------------------------------------- */
+
+/**
+ * Las indicaciones del admin para hoy, arriba de todo.
+ *
+ * Van antes de las listas a proposito: son para leer antes de tocar nada, y
+ * abajo quedarian tapadas por los secaderos. En el orden en que trabaja el
+ * hornero: primero saca, despues mete. Sin notas queda un renglon discreto, asi
+ * sabe que no se olvido de mirar sino que hoy no hay nada.
+ */
+function NotasDelDia({
+  descarga,
+  carga,
+}: {
+  descarga: string | null;
+  carga: string | null;
+}) {
+  if (!descarga && !carga) {
+    return (
+      <p className="-mt-4 text-sm text-slate-400">
+        Sin indicaciones para hoy.
+      </p>
+    );
+  }
+
+  return (
+    <section className="tarjeta space-y-3 border-l-4 border-orange-400 p-4">
+      <h2 className="text-sm font-bold tracking-wide text-slate-500 uppercase">
+        Indicaciones de hoy
+      </h2>
+      {descarga && (
+        <div>
+          <p className="text-xs font-bold text-emerald-700">Para descargar</p>
+          <p className="mt-0.5 text-base whitespace-pre-line text-slate-900">
+            {descarga}
+          </p>
+        </div>
+      )}
+      {carga && (
+        <div>
+          <p className="text-xs font-bold text-orange-700">Para cargar</p>
+          <p className="mt-0.5 text-base whitespace-pre-line text-slate-900">
+            {carga}
+          </p>
+        </div>
+      )}
+    </section>
+  );
+}
 
 function EncabezadoSeccion({
   titulo,

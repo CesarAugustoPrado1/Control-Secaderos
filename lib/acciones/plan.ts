@@ -6,6 +6,7 @@ import { z } from "zod";
 import { db } from "../db";
 import {
   motivosDesvio,
+  notasHorno,
   planLineas,
   planes,
   productos,
@@ -132,6 +133,53 @@ export async function guardarPlan(
         })),
       );
     });
+
+    revalidar();
+  });
+}
+
+const esquemaNota = z
+  .string()
+  .trim()
+  .max(500, "Cada nota puede tener hasta 500 caracteres.")
+  .nullish();
+
+const esquemaNotasHorno = z.object({
+  fecha: esquemaFecha,
+  carga: esquemaNota,
+  descarga: esquemaNota,
+});
+
+/**
+ * Guarda las indicaciones del dia para el hornero.
+ *
+ * Las dos notas vacias borran la fila: asi "sin indicaciones" es la ausencia de
+ * fila y no una fila con dos textos en blanco que la semana mostraria como
+ * cargada.
+ */
+export async function guardarNotasHorno(
+  entrada: z.input<typeof esquemaNotasHorno>,
+): Promise<Resultado> {
+  return ejecutar(async () => {
+    const sesion = await autorizar("admin");
+    const datos = esquemaNotasHorno.parse(entrada);
+    const carga = datos.carga || null;
+    const descarga = datos.descarga || null;
+
+    if (!carga && !descarga) {
+      await db.delete(notasHorno).where(eq(notasHorno.fecha, datos.fecha));
+    } else {
+      const valores = {
+        carga,
+        descarga,
+        actualizadoPor: sesion.uid,
+        actualizadoEn: new Date(),
+      };
+      await db
+        .insert(notasHorno)
+        .values({ fecha: datos.fecha, ...valores })
+        .onConflictDoUpdate({ target: notasHorno.fecha, set: valores });
+    }
 
     revalidar();
   });

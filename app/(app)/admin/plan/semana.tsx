@@ -11,6 +11,9 @@ type Resumen = {
   secaderos: number;
 };
 
+/** Las filas de la semana: los sectores con plan, mas las notas del horno. */
+export type Fila = Sector | "horno";
+
 const SECTORES: { clave: Sector; etiqueta: string }[] = [
   { clave: "carrusel", etiqueta: "Carrusel" },
   { clave: "paletizado", etiqueta: "Paletizado" },
@@ -22,24 +25,31 @@ const SECTORES: { clave: Sector; etiqueta: string }[] = [
  * Un dia sin plan se muestra como "sin plan" y no como cero. La diferencia
  * importa: el cumplimiento de un dia sin plan no se mide, asi que un olvido no
  * castiga a nadie en las estadisticas.
+ *
+ * El horno va en una fila aparte y sin numero: no recibe orden, solo las
+ * indicaciones del dia para cargar y descargar.
  */
 export function Semana({
   inicio,
   fechas,
   hoy,
   resumen,
+  notasHorno,
   diaElegido,
-  sectorElegido,
+  filaElegida,
 }: {
   inicio: string;
   fechas: string[];
   hoy: string;
   resumen: Resumen[];
+  /** Fechas de la semana que tienen notas para el horno. */
+  notasHorno: string[];
   diaElegido: string | null;
-  sectorElegido: Sector;
+  filaElegida: Fila;
 }) {
   const buscar = (fecha: string, sector: Sector) =>
     resumen.find((r) => r.fecha === fecha && r.sector === sector);
+  const conNotas = new Set(notasHorno);
 
   const correr = (dias: number) => {
     const d = new Date(`${inicio}T12:00:00-03:00`);
@@ -107,7 +117,7 @@ export function Semana({
                 </td>
                 {fechas.map((f) => {
                   const r = buscar(f, s.clave);
-                  const activo = diaElegido === f && sectorElegido === s.clave;
+                  const activo = diaElegido === f && filaElegida === s.clave;
                   return (
                     <td key={f} className="px-1 py-2 text-center">
                       <Link
@@ -130,13 +140,41 @@ export function Semana({
                 })}
               </tr>
             ))}
+            <tr>
+              <td className="py-2 pr-3 font-medium text-slate-800">Horno</td>
+              {fechas.map((f) => {
+                const hay = conNotas.has(f);
+                const activo = diaElegido === f && filaElegida === "horno";
+                return (
+                  <td key={f} className="px-1 py-2 text-center">
+                    <Link
+                      href={`/admin/plan?desde=${inicio}&dia=${f}&sector=horno`}
+                      className={`block min-w-14 rounded-lg px-2 py-2 text-xs font-bold transition ${
+                        activo
+                          ? "bg-slate-900 text-white"
+                          : hay
+                            ? "bg-orange-50 text-orange-800 ring-1 ring-orange-300 hover:bg-orange-100"
+                            : "bg-slate-50 text-slate-400 ring-1 ring-slate-200 hover:bg-slate-100"
+                      }`}
+                    >
+                      {hay ? "✎" : "—"}
+                      <span className="block text-[10px] font-medium opacity-80">
+                        {hay ? "notas" : "sin notas"}
+                      </span>
+                    </Link>
+                  </td>
+                );
+              })}
+            </tr>
           </tbody>
         </table>
       </div>
 
       <p className="mt-3 text-xs text-slate-500">
         Tocá un día para cargar o editar su orden. Un día sin plan no se mide
-        como incumplimiento: queda marcado como sin plan.
+        como incumplimiento: queda marcado como sin plan. En Horno se cargan
+        las indicaciones para cargar y descargar, que el hornero ve arriba de
+        su pantalla.
       </p>
     </section>
   );

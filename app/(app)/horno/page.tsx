@@ -5,6 +5,8 @@ import {
   secaderosConContenido,
   secaderosEnReproceso,
 } from "@/lib/consultas";
+import { notasDelHorno } from "@/lib/plan";
+import { fechaLocal } from "@/lib/rangos";
 import { PanelHorno } from "./panel";
 
 export const metadata = { title: "Horno · Secaderos" };
@@ -12,12 +14,13 @@ export const metadata = { title: "Horno · Secaderos" };
 export default async function PaginaHorno() {
   await requerirRol("horno", "admin");
 
-  const [enHorno, humedos, motivos, cfg, reproceso] = await Promise.all([
+  const [enHorno, humedos, motivos, cfg, reproceso, notas] = await Promise.all([
     secaderosConContenido(["horno"]),
     secaderosConContenido(["humedo"]),
     motivosActivos(),
     leerConfig(),
     secaderosEnReproceso(),
+    notasDelHorno(fechaLocal()),
   ]);
 
   // Lo mas viejo primero: es el orden en que conviene trabajar.
@@ -44,6 +47,7 @@ export default async function PaginaHorno() {
       motivos={motivos.map((m) => ({ id: m.id, nombre: m.nombre }))}
       capacidadHorno={cfg.capacidad_horno}
       reproceso={[...reproceso]}
+      notas={notas}
     />
   );
 }

@@ -443,6 +443,28 @@ export const planLineas = pgTable(
   (t) => [index("plan_lineas_plan_idx").on(t.planId)],
 );
 
+/**
+ * Indicaciones del dia para el hornero: una para cargar y otra para descargar.
+ *
+ * No es un plan y por eso no vive en `planes`: el horno no recibe orden porque
+ * no decide que secar, y nada de esto se mide contra lo hecho. Es texto libre
+ * que el admin deja para que el hornero lo lea arriba de su pantalla.
+ *
+ * La fecha es la clave: hay una sola fila por dia. Si las dos notas quedan
+ * vacias la fila se borra, asi que un dia sin fila es un dia sin indicaciones.
+ */
+export const notasHorno = pgTable("notas_horno", {
+  fecha: date("fecha").primaryKey(),
+  carga: text("carga"),
+  descarga: text("descarga"),
+  actualizadoPor: integer("actualizado_por").references(() => usuarios.id, {
+    onDelete: "set null",
+  }),
+  actualizadoEn: timestamp("actualizado_en", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
 /** Parametros editables por el admin. Valores guardados como texto. */
 export const config = pgTable("config", {
   clave: text("clave").primaryKey(),
@@ -532,6 +554,7 @@ export type MotivoDesperdicio = typeof motivosDesperdicio.$inferSelect;
 export type MotivoDesvio = typeof motivosDesvio.$inferSelect;
 export type Plan = typeof planes.$inferSelect;
 export type PlanLinea = typeof planLineas.$inferSelect;
+export type NotaHorno = typeof notasHorno.$inferSelect;
 export type Sector = (typeof sectorEnum.enumValues)[number];
 export type Destino = (typeof destinoEnum.enumValues)[number];
 export type RoturaCarrusel = typeof roturasCarrusel.$inferSelect;

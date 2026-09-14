@@ -141,6 +141,8 @@ motivos_desvio        nombre, activo
 planes                fecha (date), sector, nota
 plan_lineas           plan_id, producto_id, secaderos, destino, cliente,
                       motivo_desvio_id, nota_desvio, explicado_por
+notas_horno           fecha (date, PK), carga, descarga, actualizado_por
+                      (texto libre para el hornero; no es un plan ni se mide)
 config                clave (PK), valor (text)
 ```
 

@@ -5,6 +5,7 @@ import {
   motivosDesvio,
   movimientoLineas,
   movimientos,
+  notasHorno,
   planLineas,
   planes,
   productos,
@@ -264,6 +265,30 @@ export async function lineasDeSemana(fechas: string[], sector: Sector) {
     };
   }
   return porFecha;
+}
+
+/** Las dos indicaciones del dia para el hornero. Vacias si no se cargo nada. */
+export async function notasDelHorno(fecha: string) {
+  const [fila] = await db
+    .select({ carga: notasHorno.carga, descarga: notasHorno.descarga })
+    .from(notasHorno)
+    .where(eq(notasHorno.fecha, fecha))
+    .limit(1);
+
+  return { carga: fila?.carga ?? null, descarga: fila?.descarga ?? null };
+}
+
+/** Que dias de la semana tienen indicaciones para el horno. */
+export async function notasHornoDeFechas(fechas: string[]) {
+  if (fechas.length === 0) return [];
+  return db
+    .select({
+      fecha: notasHorno.fecha,
+      carga: notasHorno.carga,
+      descarga: notasHorno.descarga,
+    })
+    .from(notasHorno)
+    .where(inArray(notasHorno.fecha, fechas));
 }
 
 export async function motivosDesvioActivos() {
