@@ -1,6 +1,4 @@
-import Link from "next/link";
 import type { MovimientoVista } from "@/lib/consultas";
-import { CLAVES_RANGO, ETIQUETA_RANGO, type ClaveRango } from "@/lib/rangos";
 import { hora, numero } from "@/lib/formato";
 import { MarcasSecadero } from "@/components/marcas-secadero";
 import { ChipTipo } from "@/components/ui";
@@ -12,18 +10,21 @@ import { ChipTipo } from "@/components/ui";
  * una cola de trabajo sino un muro de scroll. Esto en cambio le confirma al
  * operario lo que ya hizo -y lo que hizo el compañero de turno-, que es lo que
  * evita cargar dos veces el mismo secadero.
+ *
+ * El dia lo elige el selector de arriba de la pantalla, que es el mismo que
+ * cambia el plan: tener dos selectores de fecha distintos en una pantalla era
+ * invitar a mirar el plan de un dia y lo hecho de otro.
  */
 export function Actividad({
   titulo,
+  dia,
   movimientos,
-  rango,
-  rutaBase,
   vacio,
 }: {
   titulo: string;
+  /** "Hoy", "Ayer", "lun 14/09": el dia que se esta mirando. */
+  dia: string;
   movimientos: MovimientoVista[];
-  rango: ClaveRango;
-  rutaBase: string;
   vacio: string;
 }) {
   const totalPlacas = movimientos.reduce(
@@ -37,25 +38,9 @@ export function Actividad({
 
   return (
     <section>
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-base font-bold text-slate-900">{titulo}</h2>
-        <div className="flex gap-1.5">
-          {CLAVES_RANGO.map((c) => (
-            <Link
-              key={c}
-              href={c === "hoy" ? rutaBase : `${rutaBase}?rango=${c}`}
-              scroll={false}
-              className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
-                rango === c
-                  ? "bg-slate-900 text-white"
-                  : "bg-white text-slate-600 ring-1 ring-slate-300"
-              }`}
-            >
-              {ETIQUETA_RANGO[c]}
-            </Link>
-          ))}
-        </div>
-      </div>
+      <h2 className="mb-3 text-base font-bold text-slate-900">
+        {titulo} · {dia}
+      </h2>
 
       {movimientos.length === 0 ? (
         <p className="tarjeta px-4 py-10 text-center text-sm text-slate-500">

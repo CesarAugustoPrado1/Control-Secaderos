@@ -6,14 +6,15 @@ import {
   motivosDesvioActivos,
 } from "@/lib/plan";
 import {
-  esClaveRango,
+  esFecha,
+  etiquetaRelativa,
   fechaLocal,
-  rangoPorClave,
-  type ClaveRango,
+  rangoDeFecha,
 } from "@/lib/rangos";
 import { Actividad } from "@/components/actividad";
 import { PlanDelDia } from "@/components/plan-del-dia";
 import { BuscadorAccion } from "@/components/buscador-accion";
+import { SelectorDia } from "@/components/selector-dia";
 import { Titulo } from "@/components/ui";
 
 export const metadata = { title: "Descargar · Secaderos" };
@@ -22,14 +23,15 @@ export const dynamic = "force-dynamic";
 export default async function PaginaPaletizado({
   searchParams,
 }: {
-  searchParams: Promise<{ rango?: string }>;
+  searchParams: Promise<{ dia?: string }>;
 }) {
   const sesion = await requerirRol("paletizado", "llenado_manual", "admin");
-  const { rango: rangoParam } = await searchParams;
-  const rango: ClaveRango = esClaveRango(rangoParam) ? rangoParam : "hoy";
-  const { desde, hasta } = rangoPorClave(rango);
-
+  const { dia } = await searchParams;
   const hoy = fechaLocal();
+  const fecha = esFecha(dia) ? dia : hoy;
+  const { desde, hasta } = rangoDeFecha(fecha);
+  const esFuturo = fecha > hoy;
+
   const [secaderos, descargas, plan, motivosDesvio, entregados] =
     await Promise.all([
       secaderosConContenido(),
@@ -40,9 +42,9 @@ export default async function PaginaPaletizado({
         porPagina: 200,
         orden: "asc",
       }),
-      compararPlan(hoy, "paletizado"),
+      compararPlan(fecha, "paletizado"),
       motivosDesvioActivos(),
-      entregadosPorElHorno(hoy),
+      entregadosPorElHorno(fecha),
     ]);
 
   return (
@@ -51,7 +53,11 @@ export default async function PaginaPaletizado({
         Descargar
       </Titulo>
 
+      <SelectorDia rutaBase="/paletizado" fecha={fecha} hoy={hoy} />
+
       <PlanDelDia
+        fecha={fecha}
+        hoy={hoy}
         comparacion={plan}
         motivos={motivosDesvio.map((m) => ({ id: m.id, nombre: m.nombre }))}
         entregadosPorHorno={entregados}
@@ -77,13 +83,18 @@ export default async function PaginaPaletizado({
         etiquetaDisponibles="secaderos secos esperando"
       />
 
-      <Actividad
-        titulo="Descargado"
-        movimientos={descargas.items}
-        rango={rango}
-        rutaBase="/paletizado"
-        vacio="Todavía no se descargó ningún secadero en este período."
-      />
+      {!esFuturo && (
+        <Actividad
+          titulo="Descargado"
+          dia={etiquetaRelativa(fecha, hoy)}
+          movimientos={descargas.items}
+          vacio={
+            fecha === hoy
+              ? "Todavía no se descargó ningún secadero hoy."
+              : "Ese día no se descargó ningún secadero."
+          }
+        />
+      )}
     </div>
   );
 }

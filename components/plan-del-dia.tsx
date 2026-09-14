@@ -6,6 +6,7 @@ import { explicarDesvio } from "@/lib/acciones/plan";
 import type { ComparacionPlan, LineaPlan } from "@/lib/plan";
 import { COLOR_DESTINO, ETIQUETA_DESTINO } from "@/lib/estados";
 import { numero, porcentaje } from "@/lib/formato";
+import { etiquetaRelativa } from "@/lib/rangos";
 import { useAccion } from "@/components/usar-accion";
 import { Aviso } from "@/components/ui";
 
@@ -17,13 +18,21 @@ type Motivo = { id: number; nombre: string };
  * Va arriba de todo a proposito: si el plan vive solo en el panel del admin es
  * papeleo, y si lo ve mientras trabaja es una guia. El desvio no se carga, se
  * calcula; lo unico que se pide a mano es el motivo, y solo cuando falta algo.
+ *
+ * Un dia que todavia no llego muestra solo lo pedido: sin avance ni faltantes,
+ * porque todo figuraria en cero y cada linea pediria explicar un desvio que
+ * no existe.
  */
 export function PlanDelDia({
+  fecha,
+  hoy,
   comparacion,
   motivos,
   entregadosPorHorno,
   puedeExplicar,
 }: {
+  fecha: string;
+  hoy: string;
   comparacion: ComparacionPlan;
   motivos: Motivo[];
   /**
@@ -34,13 +43,19 @@ export function PlanDelDia({
   entregadosPorHorno?: number;
   puedeExplicar: boolean;
 }) {
+  const dia = etiquetaRelativa(fecha, hoy);
+  const esFuturo = fecha > hoy;
+
   if (!comparacion.hayPlan) {
     return (
       <section className="tarjeta border-l-4 border-slate-300 p-4">
-        <h2 className="text-sm font-bold text-slate-700">Sin plan para hoy</h2>
+        <h2 className="text-sm font-bold text-slate-700">Sin plan · {dia}</h2>
         <p className="mt-1 text-sm text-slate-500">
-          Todavía no se cargó la orden de producción del día. Podés trabajar
-          igual: lo que hagas queda registrado.
+          {fecha === hoy
+            ? "Todavía no se cargó la orden de producción del día. Podés trabajar igual: lo que hagas queda registrado."
+            : esFuturo
+              ? "Todavía no se cargó la orden de producción de ese día."
+              : "Ese día no tuvo orden de producción cargada."}
         </p>
       </section>
     );
@@ -52,19 +67,25 @@ export function PlanDelDia({
   return (
     <section className="tarjeta p-4">
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-base font-bold text-slate-900">Plan de hoy</h2>
-        <span
-          className={`text-sm font-bold tabular-nums ${
-            cumplimiento >= 1
-              ? "text-emerald-600"
-              : cumplimiento >= 0.7
-                ? "text-slate-700"
-                : "text-amber-700"
-          }`}
-        >
-          {numero(totalHecho)} de {numero(totalPedido)} secaderos ·{" "}
-          {porcentaje(totalHecho, totalPedido)}
-        </span>
+        <h2 className="text-base font-bold text-slate-900">Plan · {dia}</h2>
+        {esFuturo ? (
+          <span className="text-sm font-bold tabular-nums text-slate-700">
+            {numero(totalPedido)} secaderos pedidos
+          </span>
+        ) : (
+          <span
+            className={`text-sm font-bold tabular-nums ${
+              cumplimiento >= 1
+                ? "text-emerald-600"
+                : cumplimiento >= 0.7
+                  ? "text-slate-700"
+                  : "text-amber-700"
+            }`}
+          >
+            {numero(totalHecho)} de {numero(totalPedido)} secaderos ·{" "}
+            {porcentaje(totalHecho, totalPedido)}
+          </span>
+        )}
       </div>
 
       {comparacion.nota && (
@@ -73,7 +94,7 @@ export function PlanDelDia({
         </p>
       )}
 
-      {entregadosPorHorno !== undefined && (
+      {entregadosPorHorno !== undefined && !esFuturo && (
         <p className="mb-3 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
           El horno entregó <strong>{numero(entregadosPorHorno)}</strong>{" "}
           {entregadosPorHorno === 1 ? "secadero" : "secaderos"} en el día. Si te
@@ -82,14 +103,18 @@ export function PlanDelDia({
       )}
 
       <ul className="space-y-2">
-        {lineas.map((l) => (
-          <FilaPlan
-            key={l.lineaId}
-            linea={l}
-            motivos={motivos}
-            puedeExplicar={puedeExplicar}
-          />
-        ))}
+        {lineas.map((l) =>
+          esFuturo ? (
+            <FilaPedido key={l.lineaId} linea={l} />
+          ) : (
+            <FilaPlan
+              key={l.lineaId}
+              linea={l}
+              motivos={motivos}
+              puedeExplicar={puedeExplicar}
+            />
+          ),
+        )}
       </ul>
 
       {fueraDePlan.length > 0 && (
@@ -143,6 +168,29 @@ function Instruccion({
         </span>
       )}
     </div>
+  );
+}
+
+/** Una linea de un dia que todavia no llego: lo pedido y nada mas. */
+function FilaPedido({ linea }: { linea: LineaPlan }) {
+  return (
+    <li className="rounded-xl bg-slate-50 p-3 ring-1 ring-slate-200">
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="min-w-0 truncate text-sm font-semibold text-slate-800">
+          {linea.producto}
+        </span>
+        <span className="shrink-0 text-sm font-bold tabular-nums text-slate-700">
+          {numero(linea.pedidos)}{" "}
+          {linea.pedidos === 1 ? "secadero" : "secaderos"}
+        </span>
+      </div>
+      {linea.placasEsperadas !== null && (
+        <p className="mt-1 text-xs tabular-nums text-slate-500">
+          {numero(linea.placasEsperadas)} placas
+        </p>
+      )}
+      <Instruccion destino={linea.destino} cliente={linea.cliente} />
+    </li>
   );
 }
 

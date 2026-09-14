@@ -3,23 +3,12 @@ import { ZONA } from "./formato";
 /** La misma zona, para pasarsela a Postgres en un `at time zone`. */
 export const ZONA_SQL = ZONA;
 
-/**
- * Rangos rapidos para las pantallas de operario.
- *
+/*
  * El dia se calcula en hora de Argentina, no en la del servidor: si no, una
  * carga de las 22 h figuraria como del dia siguiente cuando el server corre en
  * UTC. Argentina no tiene horario de verano, asi que el offset fijo -03:00 es
  * correcto todo el año.
  */
-
-export const CLAVES_RANGO = ["hoy", "ayer", "semana"] as const;
-export type ClaveRango = (typeof CLAVES_RANGO)[number];
-
-export const ETIQUETA_RANGO: Record<ClaveRango, string> = {
-  hoy: "Hoy",
-  ayer: "Ayer",
-  semana: "7 días",
-};
 
 const soloFecha = new Intl.DateTimeFormat("en-CA", {
   timeZone: ZONA,
@@ -27,12 +16,6 @@ const soloFecha = new Intl.DateTimeFormat("en-CA", {
   month: "2-digit",
   day: "2-digit",
 });
-
-/** Medianoche argentina del dia indicado, desplazado `diasAtras` dias. */
-function inicioDelDia(diasAtras = 0): Date {
-  const base = new Date(Date.now() - diasAtras * 24 * 60 * 60 * 1000);
-  return new Date(`${soloFecha.format(base)}T00:00:00-03:00`);
-}
 
 /**
  * Fin del dia argentino de hoy. Es el corte superior de todos los rangos
@@ -52,31 +35,41 @@ export function finDeHoy(): Date {
   return new Date(`${soloFecha.format(new Date())}T23:59:59.999-03:00`);
 }
 
-export function esClaveRango(valor: string | undefined): valor is ClaveRango {
-  return !!valor && (CLAVES_RANGO as readonly string[]).includes(valor);
+/* -------------------------------------------------------------------------- */
+/* Fechas de plan y dia elegido                                               */
+/* -------------------------------------------------------------------------- */
+
+/** Si el valor es una fecha YYYY-MM-DD real (descarta un 2026-02-31). */
+export function esFecha(valor: string | undefined): valor is string {
+  if (!valor || !/^\d{4}-\d{2}-\d{2}$/.test(valor)) return false;
+  const d = new Date(`${valor}T12:00:00-03:00`);
+  return !Number.isNaN(d.getTime()) && soloFecha.format(d) === valor;
 }
 
-export function rangoPorClave(clave: ClaveRango): { desde: Date; hasta: Date } {
-  switch (clave) {
-    case "ayer":
-      // Hasta un milisegundo antes de la medianoche de hoy, no hasta la
-      // medianoche misma: si no, un movimiento de las 00:00:00.000 de hoy
-      // caeria en los dos rangos.
-      return {
-        desde: inicioDelDia(1),
-        hasta: new Date(inicioDelDia(0).getTime() - 1),
-      };
-    case "semana":
-      // Los ultimos 7 dias incluyendo hoy.
-      return { desde: inicioDelDia(6), hasta: finDeHoy() };
-    default:
-      return { desde: inicioDelDia(0), hasta: finDeHoy() };
-  }
+/** La fecha YYYY-MM-DD corrida `dias` dias, para adelante o para atras. */
+export function sumarDias(fecha: string, dias: number): string {
+  const base = new Date(`${fecha}T12:00:00-03:00`);
+  return soloFecha.format(new Date(base.getTime() + dias * 24 * 60 * 60 * 1000));
 }
 
-/* -------------------------------------------------------------------------- */
-/* Fechas de plan                                                             */
-/* -------------------------------------------------------------------------- */
+/**
+ * Los dias que se ofrecen de un toque en las pantallas de operario, en orden
+ * cronologico. Para cualquier otro esta el calendario.
+ */
+export const DIAS_RAPIDOS = [
+  { dias: -2, etiqueta: "Anteayer" },
+  { dias: -1, etiqueta: "Ayer" },
+  { dias: 0, etiqueta: "Hoy" },
+  { dias: 1, etiqueta: "Mañana" },
+  { dias: 2, etiqueta: "Pasado" },
+] as const;
+
+/** "Hoy", "Mañana"... o "lun 14/09" si queda fuera de los dias rapidos. */
+export function etiquetaRelativa(fecha: string, hoy: string): string {
+  const rapido = DIAS_RAPIDOS.find((d) => sumarDias(hoy, d.dias) === fecha);
+  if (!rapido) return etiquetaDia(fecha);
+  return rapido.dias === 2 ? "Pasado mañana" : rapido.etiqueta;
+}
 
 /** Fecha local argentina en formato YYYY-MM-DD, que es como se guarda el plan. */
 export function fechaLocal(d: Date = new Date()): string {
@@ -93,10 +86,7 @@ export function rangoDeFecha(fecha: string): { desde: Date; hasta: Date } {
 
 /** Los siete dias que arrancan en `desde` (YYYY-MM-DD), para la vista semanal. */
 export function semanaDesde(desde: string): string[] {
-  const base = new Date(`${desde}T12:00:00-03:00`);
-  return Array.from({ length: 7 }, (_, i) =>
-    soloFecha.format(new Date(base.getTime() + i * 24 * 60 * 60 * 1000)),
-  );
+  return Array.from({ length: 7 }, (_, i) => sumarDias(desde, i));
 }
 
 const nombresDia = new Intl.DateTimeFormat("es-AR", {

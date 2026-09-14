@@ -10,16 +10,16 @@ import {
 import { ETIQUETA_ROL } from "@/lib/permisos";
 import { compararPlan, motivosDesvioActivos } from "@/lib/plan";
 import {
-  ETIQUETA_RANGO,
-  esClaveRango,
+  esFecha,
+  etiquetaRelativa,
   fechaLocal,
-  rangoPorClave,
-  type ClaveRango,
+  rangoDeFecha,
 } from "@/lib/rangos";
 import { Actividad } from "@/components/actividad";
 import { PlanDelDia } from "@/components/plan-del-dia";
 import { BuscadorAccion } from "@/components/buscador-accion";
 import { RoturasCarrusel } from "@/components/roturas-carrusel";
+import { SelectorDia } from "@/components/selector-dia";
 import { YesoCarrusel } from "@/components/yeso-carrusel";
 import { Titulo } from "@/components/ui";
 
@@ -29,14 +29,18 @@ export const dynamic = "force-dynamic";
 export default async function PaginaCarrusel({
   searchParams,
 }: {
-  searchParams: Promise<{ rango?: string }>;
+  searchParams: Promise<{ dia?: string }>;
 }) {
   const sesion = await requerirRol("carrusel", "llenado_manual", "admin");
-  const { rango: rangoParam } = await searchParams;
-  const rango: ClaveRango = esClaveRango(rangoParam) ? rangoParam : "hoy";
-  const { desde, hasta } = rangoPorClave(rango);
-
+  const { dia } = await searchParams;
   const hoy = fechaLocal();
+  const fecha = esFecha(dia) ? dia : hoy;
+  const { desde, hasta } = rangoDeFecha(fecha);
+  const etiqueta = etiquetaRelativa(fecha, hoy);
+  // Un dia que no llego no tiene nada registrado: mostrar roturas, yeso y
+  // cargas vacias solo empuja el plan, que es lo que se vino a ver.
+  const esFuturo = fecha > hoy;
+
   const [
     secaderos,
     cargas,
@@ -55,7 +59,7 @@ export default async function PaginaCarrusel({
       porPagina: 200,
       orden: "asc",
     }),
-    compararPlan(hoy, "carrusel"),
+    compararPlan(fecha, "carrusel"),
     motivosDesvioActivos(),
     productosActivos(),
     motivosActivos(),
@@ -74,7 +78,11 @@ export default async function PaginaCarrusel({
         {sector}
       </Titulo>
 
+      <SelectorDia rutaBase="/carrusel" fecha={fecha} hoy={hoy} />
+
       <PlanDelDia
+        fecha={fecha}
+        hoy={hoy}
         comparacion={plan}
         motivos={motivosDesvio.map((m) => ({ id: m.id, nombre: m.nombre }))}
         puedeExplicar={sesion.rol !== "auditor"}
@@ -99,35 +107,44 @@ export default async function PaginaCarrusel({
         etiquetaDisponibles="secaderos vacíos disponibles"
       />
 
-      <RoturasCarrusel
-        productos={productos.map((p) => ({ id: p.id, nombre: p.nombre }))}
-        motivos={motivos.map((m) => ({ id: m.id, nombre: m.nombre }))}
-        roturas={roturas.map((r) => ({
-          ...r,
-          creadoEn: r.creadoEn.toISOString(),
-        }))}
-        puedeCargar={sesion.rol !== "auditor"}
-        puedeBorrar={sesion.rol === "admin"}
-        etiquetaRango={ETIQUETA_RANGO[rango].toLowerCase()}
-      />
+      {!esFuturo && (
+        <>
+          {/* Fuera de hoy se ve pero no se carga: lo registrado queda con la
+              hora de ahora, asi que no apareceria en la lista del dia mirado. */}
+          <RoturasCarrusel
+            productos={productos.map((p) => ({ id: p.id, nombre: p.nombre }))}
+            motivos={motivos.map((m) => ({ id: m.id, nombre: m.nombre }))}
+            roturas={roturas.map((r) => ({
+              ...r,
+              creadoEn: r.creadoEn.toISOString(),
+            }))}
+            puedeCargar={sesion.rol !== "auditor" && fecha === hoy}
+            puedeBorrar={sesion.rol === "admin"}
+            etiquetaRango={etiqueta.toLowerCase()}
+          />
 
-      <YesoCarrusel
-        registros={yeso.map((r) => ({
-          ...r,
-          creadoEn: r.creadoEn.toISOString(),
-        }))}
-        puedeCargar={sesion.rol !== "auditor"}
-        puedeBorrar={sesion.rol === "admin"}
-        etiquetaRango={ETIQUETA_RANGO[rango].toLowerCase()}
-      />
+          <YesoCarrusel
+            registros={yeso.map((r) => ({
+              ...r,
+              creadoEn: r.creadoEn.toISOString(),
+            }))}
+            puedeCargar={sesion.rol !== "auditor" && fecha === hoy}
+            puedeBorrar={sesion.rol === "admin"}
+            etiquetaRango={etiqueta.toLowerCase()}
+          />
 
-      <Actividad
-        titulo="Cargado"
-        movimientos={cargas.items}
-        rango={rango}
-        rutaBase="/carrusel"
-        vacio="Todavía no se cargó ningún secadero en este período."
-      />
+          <Actividad
+            titulo="Cargado"
+            dia={etiqueta}
+            movimientos={cargas.items}
+            vacio={
+              fecha === hoy
+                ? "Todavía no se cargó ningún secadero hoy."
+                : "Ese día no se cargó ningún secadero."
+            }
+          />
+        </>
+      )}
     </div>
   );
 }

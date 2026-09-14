@@ -6,13 +6,23 @@ import {
   secaderosEnReproceso,
 } from "@/lib/consultas";
 import { notasDelHorno } from "@/lib/plan";
-import { fechaLocal } from "@/lib/rangos";
+import { esFecha, fechaLocal } from "@/lib/rangos";
 import { PanelHorno } from "./panel";
 
 export const metadata = { title: "Horno · Secaderos" };
+export const dynamic = "force-dynamic";
 
-export default async function PaginaHorno() {
+export default async function PaginaHorno({
+  searchParams,
+}: {
+  searchParams: Promise<{ dia?: string }>;
+}) {
   await requerirRol("horno", "admin");
+  const { dia } = await searchParams;
+  const hoy = fechaLocal();
+  // El dia elegido solo cambia las notas: sacar y meter son siempre el estado
+  // de ahora del horno, no el de ese dia.
+  const fecha = esFecha(dia) ? dia : hoy;
 
   const [enHorno, humedos, motivos, cfg, reproceso, notas] = await Promise.all([
     secaderosConContenido(["horno"]),
@@ -20,7 +30,7 @@ export default async function PaginaHorno() {
     motivosActivos(),
     leerConfig(),
     secaderosEnReproceso(),
-    notasDelHorno(fechaLocal()),
+    notasDelHorno(fecha),
   ]);
 
   // Lo mas viejo primero: es el orden en que conviene trabajar.
@@ -48,6 +58,8 @@ export default async function PaginaHorno() {
       capacidadHorno={cfg.capacidad_horno}
       reproceso={[...reproceso]}
       notas={notas}
+      fecha={fecha}
+      hoy={hoy}
     />
   );
 }

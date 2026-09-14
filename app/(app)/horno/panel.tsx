@@ -12,6 +12,8 @@ import { duracion, minutosDesde, numero } from "@/lib/formato";
 import { useAccion } from "@/components/usar-accion";
 import { Aviso, ChipTipo, Titulo } from "@/components/ui";
 import { MarcasSecadero } from "@/components/marcas-secadero";
+import { SelectorDia } from "@/components/selector-dia";
+import { etiquetaRelativa } from "@/lib/rangos";
 import {
   EditorRoturas,
   convertirRoturas,
@@ -37,6 +39,8 @@ export function PanelHorno({
   capacidadHorno,
   reproceso,
   notas,
+  fecha,
+  hoy,
 }: {
   enHorno: SecaderoVista[];
   humedos: SecaderoVista[];
@@ -46,6 +50,9 @@ export function PanelHorno({
   reproceso: number[];
   /** Indicaciones del dia que dejo el admin. */
   notas: { carga: string | null; descarga: string | null };
+  /** El dia cuyas notas se muestran. */
+  fecha: string;
+  hoy: string;
 }) {
   const enReproceso = useMemo(() => new Set(reproceso), [reproceso]);
   const router = useRouter();
@@ -318,7 +325,13 @@ export function PanelHorno({
         Horno
       </Titulo>
 
-      <NotasDelDia descarga={notas.descarga} carga={notas.carga} />
+      <SelectorDia rutaBase="/horno" fecha={fecha} hoy={hoy} />
+
+      <NotasDelDia
+        dia={etiquetaRelativa(fecha, hoy)}
+        descarga={notas.descarga}
+        carga={notas.carga}
+      />
 
       {/* ---------------- Sacar ---------------- */}
       <section>
@@ -596,16 +609,18 @@ export function PanelHorno({
  * sabe que no se olvido de mirar sino que hoy no hay nada.
  */
 function NotasDelDia({
+  dia,
   descarga,
   carga,
 }: {
+  dia: string;
   descarga: string | null;
   carga: string | null;
 }) {
   if (!descarga && !carga) {
     return (
       <p className="-mt-4 text-sm text-slate-400">
-        Sin indicaciones para hoy.
+        Sin indicaciones · {dia}.
       </p>
     );
   }
@@ -613,7 +628,7 @@ function NotasDelDia({
   return (
     <section className="tarjeta space-y-3 border-l-4 border-orange-400 p-4">
       <h2 className="text-sm font-bold tracking-wide text-slate-500 uppercase">
-        Indicaciones de hoy
+        Indicaciones · {dia}
       </h2>
       {descarga && (
         <div>
