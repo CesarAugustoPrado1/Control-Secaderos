@@ -8,6 +8,7 @@ import {
 } from "@/lib/acciones/roturas";
 import { fechaHora, hora, numero } from "@/lib/formato";
 import { useAccion } from "@/components/usar-accion";
+import { Plegable } from "@/components/plegable";
 import { Aviso } from "@/components/ui";
 
 type Opcion = { id: number; nombre: string };
@@ -101,11 +102,13 @@ export function RoturasCarrusel({
   }
 
   return (
-    <section className="tarjeta p-4">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-base font-bold text-slate-900">
-          Roturas antes del secadero
-        </h2>
+    <Plegable
+      id="roturas-carrusel"
+      titulo="Roturas antes del secadero"
+      /* Cerrada, la seccion tiene que seguir diciendo el numero del dia: es el
+         dato que el operario mira de reojo, y esconderlo detras de un toque
+         seria cambiar espacio por informacion. */
+      resumen={
         <span
           className={`text-sm font-bold tabular-nums ${
             total > 0 ? "text-red-600" : "text-slate-400"
@@ -113,9 +116,9 @@ export function RoturasCarrusel({
         >
           {numero(total)} placas · {etiquetaRango}
         </span>
-      </div>
-
-      <p className="mt-1 text-xs text-slate-500">
+      }
+    >
+      <p className="text-xs text-slate-500">
         Lo que se rompe en la línea, antes de entrar al secadero. No descuenta
         de ninguna carga: el secadero se llena igual.
       </p>
@@ -280,7 +283,7 @@ export function RoturasCarrusel({
           ))}
         </ul>
       )}
-    </section>
+    </Plegable>
   );
 }
 

@@ -6,6 +6,7 @@ import { eliminarRegistroYeso, registrarYeso } from "@/lib/acciones/yeso";
 import type { TipoYeso } from "@/lib/db/schema";
 import { fechaHora, hora, kilos, numero, porcentaje } from "@/lib/formato";
 import { useAccion } from "@/components/usar-accion";
+import { Plegable } from "@/components/plegable";
 import { Aviso } from "@/components/ui";
 
 export type RegistroYesoVista = {
@@ -58,15 +59,34 @@ export function YesoCarrusel({
   const kgTirado = totales.balde_desperdicio.kg;
 
   return (
-    <section className="tarjeta p-4">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-base font-bold text-slate-900">Yeso</h2>
-        <span className="text-sm font-semibold text-slate-400">
-          {etiquetaRango}
+    <Plegable
+      id="yeso-carrusel"
+      titulo="Yeso"
+      /* Cerrada se leen igual las dos unidades del dia. Van en el encabezado y
+         no adentro por lo mismo que en roturas: el numero es lo que se mira de
+         paso, el formulario es lo que ocupa lugar. */
+      resumen={
+        <span className="text-sm font-semibold text-slate-500">
+          {totales.bolson.unidades === 0 &&
+          totales.balde_desperdicio.unidades === 0 ? (
+            <span className="text-slate-400">sin registros · {etiquetaRango}</span>
+          ) : (
+            <>
+              <span className="font-bold tabular-nums text-blue-700">
+                {numero(totales.bolson.unidades)}
+              </span>{" "}
+              {totales.bolson.unidades === 1 ? "bolsón" : "bolsones"} ·{" "}
+              <span className="font-bold tabular-nums text-amber-700">
+                {numero(totales.balde_desperdicio.unidades)}
+              </span>{" "}
+              {totales.balde_desperdicio.unidades === 1 ? "balde" : "baldes"} ·{" "}
+              {etiquetaRango}
+            </>
+          )}
         </span>
-      </div>
-
-      <p className="mt-1 text-xs text-slate-500">
+      }
+    >
+      <p className="text-xs text-slate-500">
         Lo que entra a la línea y lo que se tira. Se puede cargar en el momento
         o todo junto al final del día.
       </p>
@@ -152,7 +172,7 @@ export function YesoCarrusel({
           Todavía no se registró yeso en este período.
         </p>
       )}
-    </section>
+    </Plegable>
   );
 }
 
