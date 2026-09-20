@@ -94,8 +94,10 @@ otro, no para discutir con un proveedor.
   desperdicio y parámetros. Puede corregir el estado y el contenido de
   cualquier secadero.
 - **carrusel** — carga secaderos vacíos.
-- **llenado manual** — carga y descarga secaderos. Es el sector donde se arman
-  las guardas, pero puede operar cualquier tipo.
+- **llenado manual** — el puesto de las guardas. Llena el secadero a mano y
+  después lo descarga él mismo, las dos cosas en una sola pantalla. No ve los
+  secaderos del carrusel y el carrusel no ve los suyos; el horno es el único
+  tramo compartido.
 - **horno** — mete y saca secaderos del horno.
 - **paletizado** — descarga secaderos secos a producto terminado.
 - **auditor** — ve todo, no modifica nada.
@@ -103,6 +105,11 @@ otro, no para discutir con un proveedor.
 Se pueden crear tantos usuarios por rol como haga falta: si dos personas
 distintas paletizan guardas, son dos usuarios con rol *llenado manual*, y cada
 movimiento queda a nombre de quien lo hizo.
+
+Qué secaderos ve cada uno no depende del rol sino del **tipo**: en
+Administración → Tipos se marca *“se llena y se descarga a mano”*, y ese tipo
+pasa del circuito del carrusel al de llenado manual. Las guardas vienen así
+desde el seed; un tipo nuevo se cambia de circuito sin tocar código.
 
 Cada usuario entra con **usuario + PIN numérico**. Tras 5 PIN incorrectos
 seguidos queda bloqueado 5 minutos (un PIN de 4 dígitos son solo 10.000

@@ -3,11 +3,10 @@ import {
   consumoDeYeso,
   listarMovimientos,
   motivosActivos,
-  productosActivos,
+  productosDelCircuito,
   roturasDeCarrusel,
   secaderosConContenido,
 } from "@/lib/consultas";
-import { ETIQUETA_ROL } from "@/lib/permisos";
 import { compararPlan, motivosDesvioActivos } from "@/lib/plan";
 import {
   esFecha,
@@ -17,7 +16,7 @@ import {
 } from "@/lib/rangos";
 import { Actividad } from "@/components/actividad";
 import { PlanDelDia } from "@/components/plan-del-dia";
-import { BuscadorAccion } from "@/components/buscador-accion";
+import { BuscadorAccion, aBuscable } from "@/components/buscador-accion";
 import { RoturasCarrusel } from "@/components/roturas-carrusel";
 import { SelectorDia } from "@/components/selector-dia";
 import { YesoCarrusel } from "@/components/yeso-carrusel";
@@ -31,7 +30,7 @@ export default async function PaginaCarrusel({
 }: {
   searchParams: Promise<{ dia?: string }>;
 }) {
-  const sesion = await requerirRol("carrusel", "llenado_manual", "admin");
+  const sesion = await requerirRol("carrusel", "admin");
   const { dia } = await searchParams;
   const hoy = fechaLocal();
   const fecha = esFecha(dia) ? dia : hoy;
@@ -54,6 +53,7 @@ export default async function PaginaCarrusel({
     secaderosConContenido(),
     listarMovimientos({
       tipo: "carga",
+      llenadoManual: false,
       desde,
       hasta,
       porPagina: 200,
@@ -61,21 +61,16 @@ export default async function PaginaCarrusel({
     }),
     compararPlan(fecha, "carrusel"),
     motivosDesvioActivos(),
-    productosActivos(),
+    productosDelCircuito(false),
     motivosActivos(),
     roturasDeCarrusel(desde, hasta),
     consumoDeYeso(desde, hasta),
   ]);
 
-  const sector =
-    sesion.rol === "llenado_manual" || sesion.rol === "carrusel"
-      ? ETIQUETA_ROL[sesion.rol]
-      : "Cargar secaderos";
-
   return (
     <div className="space-y-6">
       <Titulo detalle="Escribí el número del secadero que vas a cargar">
-        {sector}
+        Carrusel
       </Titulo>
 
       <SelectorDia rutaBase="/carrusel" fecha={fecha} hoy={hoy} />
@@ -88,19 +83,11 @@ export default async function PaginaCarrusel({
         puedeExplicar={sesion.rol !== "auditor"}
       />
 
+      {/* Las guardas no las carga el carrusel: las llena a mano su propio
+          operario desde /llenado-manual, y por eso no aparecen ni siquiera
+          como ocupadas. */}
       <BuscadorAccion
-        secaderos={secaderos.map((s) => ({
-          id: s.id,
-          numero: s.numero,
-          tipoId: s.tipoId,
-          tipoNombre: s.tipoNombre,
-          capacidad: s.capacidad,
-          estado: s.estado,
-          estadoDesde: s.estadoDesde.toISOString(),
-          total: s.total,
-          contenido: s.contenido.map((c) => c.nombre).join(", "),
-          productos: s.contenido.length,
-        }))}
+        secaderos={secaderos.filter((s) => !s.llenadoManual).map(aBuscable)}
         estadoObjetivo="vacio"
         hrefBase="/carrusel"
         verbo="Cargar"

@@ -14,6 +14,7 @@ export default async function PaginaAdminTipos() {
         nombre: t.nombre,
         capacidad: t.capacidad,
         cupoHorno: t.cupoHorno,
+        llenadoManual: t.llenadoManual,
         orden: t.orden,
         activo: t.activo,
         secaderos: uso.get(t.id)?.secaderos ?? 0,

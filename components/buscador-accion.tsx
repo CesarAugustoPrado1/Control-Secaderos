@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { SecaderoVista } from "@/lib/consultas";
 import type { Estado } from "@/lib/db/schema";
 import { COLOR_ESTADO, ETIQUETA_ESTADO } from "@/lib/estados";
 import { duracion, minutosDesde, numero } from "@/lib/formato";
@@ -24,6 +25,26 @@ export type SecaderoBuscable = {
 };
 
 /**
+ * Lo que el buscador necesita de un secadero, serializable para cruzar del
+ * servidor al cliente. Las tres pantallas que lo usan -carrusel, paletizado y
+ * llenado manual- arman la lista igual, asi que la conversion vive una sola vez.
+ */
+export function aBuscable(s: SecaderoVista): SecaderoBuscable {
+  return {
+    id: s.id,
+    numero: s.numero,
+    tipoId: s.tipoId,
+    tipoNombre: s.tipoNombre,
+    capacidad: s.capacidad,
+    estado: s.estado,
+    estadoDesde: s.estadoDesde.toISOString(),
+    total: s.total,
+    contenido: s.contenido.map((c) => c.nombre).join(", "),
+    productos: s.contenido.length,
+  };
+}
+
+/**
  * Buscador por numero sobre TODOS los secaderos, no solo los disponibles.
  *
  * Es la diferencia importante: si buscara solo entre los disponibles, escribir
@@ -37,19 +58,26 @@ export function BuscadorAccion({
   hrefBase,
   verbo,
   etiquetaDisponibles,
+  autoFoco = true,
 }: {
   secaderos: SecaderoBuscable[];
   estadoObjetivo: Estado;
   hrefBase: string;
   verbo: string;
   etiquetaDisponibles: string;
+  /**
+   * En las pantallas de un solo buscador conviene: el operario llega, escribe
+   * el numero y listo. Se apaga cuando hay dos en la misma pantalla -llenado
+   * manual- porque se pelearian por el foco y el teclado taparia el de arriba.
+   */
+  autoFoco?: boolean;
 }) {
   const [busqueda, setBusqueda] = useState("");
   const campo = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    campo.current?.focus();
-  }, []);
+    if (autoFoco) campo.current?.focus();
+  }, [autoFoco]);
 
   const disponibles = useMemo(
     () => secaderos.filter((s) => s.estado === estadoObjetivo).length,

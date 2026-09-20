@@ -20,11 +20,17 @@ export function FormularioDescarga({
   secaderoNumero,
   contenido,
   motivos,
+  volverA,
 }: {
   secaderoId: number;
   secaderoNumero: number;
   contenido: LineaContenido[];
   motivos: Motivo[];
+  /**
+   * La pantalla desde la que se entro. El mismo formulario lo usan paletizado
+   * y el llenado manual, y cada operario tiene que volver a la suya.
+   */
+  volverA: string;
 }) {
   const router = useRouter();
   const { ejecutar, enviando, error, setError } = useAccion();
@@ -63,7 +69,7 @@ export function FormularioDescarga({
           nota: nota.trim() || undefined,
         }),
       () => {
-        router.push("/paletizado");
+        router.push(volverA);
         router.refresh();
       },
     );
@@ -81,7 +87,7 @@ export function FormularioDescarga({
           nota: notaDevolucion.trim() || undefined,
         }),
       () => {
-        router.push("/paletizado");
+        router.push(volverA);
         router.refresh();
       },
     );

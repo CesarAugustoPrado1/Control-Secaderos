@@ -1,4 +1,4 @@
-import { productosActivos } from "@/lib/consultas";
+import { productosDelCircuito } from "@/lib/consultas";
 import {
   compararPlan,
   lineasDeSemana,
@@ -38,7 +38,10 @@ export default async function PaginaAdminPlan({
 
   const [productos, resumen, notasSemana, comparacion, semanaDelSector, notas] =
     await Promise.all([
-      productosActivos(),
+      // Solo los del circuito principal: el plan es del carrusel y de
+      // paletizado, y lo que hace el operario de guardas no se compara contra
+      // esta orden. Pedir guardas acá dejaría una línea que nunca se cumple.
+      productosDelCircuito(false),
       planesDeFechas(fechas),
       notasHornoDeFechas(fechas),
       diaElegido && !esHorno

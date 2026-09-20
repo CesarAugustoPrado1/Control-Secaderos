@@ -148,6 +148,26 @@ export const tipos = pgTable("tipos", {
    * caliente: atar la regla a un nombre la rompe el dia que alguien lo cambie.
    */
   cupoHorno: integer("cupo_horno"),
+  /**
+   * El tipo se llena y se descarga por fuera del circuito principal.
+   *
+   * Las guardas no las hace el carrusel: las carga a mano el operario de
+   * guardas, y el mismo las descarga en paletizado. Solo el paso por el horno
+   * es compartido, porque ahi las mete y las saca el hornero como a todo lo
+   * demas.
+   *
+   * Marcado, el tipo desaparece de las listas de carrusel y de paletizado y
+   * aparece en la pantalla de llenado manual. No bloquea la accion del
+   * servidor: en la planta las guardas las puede sacar quien las cargo o
+   * cualquier otro, y lo que el sistema garantiza es la atribucion del
+   * movimiento, no una ruta rigida. Lo que cambia es que cada pantalla muestra
+   * solo lo que le toca.
+   *
+   * Es una bandera por tipo y no una regla por nombre, por lo mismo que
+   * `cupoHorno`: "Guarda" es editable desde el panel y atar la logica al nombre
+   * la rompe en silencio el dia que alguien lo cambie.
+   */
+  llenadoManual: boolean("llenado_manual").notNull().default(false),
   activo: boolean("activo").notNull().default(true),
   /** Para controlar en que orden aparecen en los selectores. */
   orden: integer("orden").notNull().default(0),

@@ -69,6 +69,15 @@ tildes**. Los mensajes de commit, en español sin tildes.
 | **Horno** | Horno | Saca los que terminaron; puede dejar adentro el que no secó → **seco** |
 | **Seco** | Paletizado / Llenado manual | Descarga: sanas a producto terminado, rotas a desperdicio → **vacío** |
 
+**Dos circuitos, un solo horno.** El carril principal lo llena el carrusel y lo
+descarga paletizado: dos puestos distintos en las dos puntas. El circuito
+manual —hoy las guardas— tiene **un solo operario que hace las dos puntas**:
+llena el secadero a mano y, cuando el horno se lo devuelve seco, lo descarga él
+mismo. El tramo del horno es el único compartido: el hornero mete y saca todo.
+
+Qué secaderos van por cada circuito lo define `tipos.llenado_manual`, no el
+nombre del tipo ni el rol del usuario. Ver 4.4.
+
 Dos salidas del carril principal, y **cada una tiene su propio tipo de
 movimiento**, no una nota ni una corrección:
 
@@ -100,16 +109,20 @@ automáticamente, que es el comportamiento correcto por defecto.
 | --- | --- |
 | `admin` | Todo. ABM completo y corrección de estado/contenido de cualquier secadero |
 | `carrusel` | Carga secaderos vacíos |
-| `llenado_manual` | Carga **y** descarga. Es el sector de guardas, pero opera cualquier tipo |
+| `llenado_manual` | Carga **y** descarga, en una sola pantalla. Es el puesto de las guardas |
 | `horno` | Mete y saca del horno; decide el secado al sol |
 | `paletizado` | Descarga secaderos secos |
 | `administrativo` | Ve el resumen de producción del día. No opera |
 | `auditor` | Ve todo, no modifica nada |
 
-**No se restringe por tipo de secadero quién carga o descarga qué.** En la
-planta las guardas las saca quien las cargó o cualquier otro. Lo que el sistema
-garantiza no es una ruta rígida sino que **cada movimiento quede atribuido a
-quien lo hizo**, y con eso las estadísticas se abren por persona y por tipo.
+**Lo que se separa es la navegación, no el permiso de mover un secadero.** Cada
+pantalla lista solo los secaderos de su circuito —carrusel y paletizado no ven
+las guardas, llenado manual no ve el resto—, pero las server actions de carga y
+descarga **no miran el tipo**. En la planta las guardas las saca quien las cargó
+o cualquier otro, y el sistema no garantiza una ruta rígida sino que **cada
+movimiento quede atribuido a quien lo hizo**; con eso las estadísticas se abren
+por persona y por tipo. Filtrar las listas alcanza para que nadie se equivoque
+de pantalla sin convertir un imprevisto de piso en un error del sistema.
 
 Sí se restringe una cosa, porque es responsabilidad y no preferencia:
 **paletizado nunca mete ni saca del horno**. Si detecta que algo no secó, lo
@@ -125,7 +138,8 @@ el horno la hace el hornero.
 ```
 usuarios              usuario, nombre, pin_hash, rol, activo,
                       intentos_fallidos, bloqueado_hasta
-tipos                 nombre, capacidad, cupo_horno, activo, orden
+tipos                 nombre, capacidad, cupo_horno, llenado_manual,
+                      activo, orden
 productos             nombre, tipo_id, activo
 secaderos             numero, tipo_id, estado, activo, estado_desde
 secadero_contenido    secadero_id, producto_id, cantidad     (snapshot vivo)
@@ -210,6 +224,47 @@ cupo propio a otro tipo sin tocar código.
 
 El mismo razonamiento explica por qué las capacidades **no** están en `config`:
 son propias del tipo y los tipos se agregan en caliente.
+
+### 4.4 `tipos.llenado_manual`: de qué circuito es el tipo
+
+Bandera por tipo, con el mismo razonamiento que `cupo_horno`: atar la lógica al
+nombre “Guarda” la rompe en silencio el día que alguien lo renombre desde el
+panel.
+
+Marcado, el tipo sale del circuito del carrusel:
+
+| | Carrusel | Paletizado | Llenado manual | Horno |
+| --- | --- | --- | --- | --- |
+| Tipos normales | llena | descarga | — | mete y saca |
+| Tipos manuales | — | — | llena **y** descarga | mete y saca |
+
+Qué se filtra con la bandera:
+
+- **Buscadores de secadero** de las tres pantallas de piso. Un número del otro
+  circuito no aparece ni siquiera como ocupado: para ese operario no existe.
+- **Actividad del día** de cada pantalla.
+- **Productos** ofrecidos al reportar roturas de línea y al cargar el plan.
+- **Comparación contra el plan** (`compararPlan`): el plan es del carrusel y de
+  paletizado, así que lo hecho a mano no cuenta ni como cumplido ni como fuera
+  de plan. Contarlo le acreditaría al carrusel secaderos que no cargó.
+- **Resumen de producción**: sectores propios. Ver abajo.
+
+Qué **no** filtra: el horno, el tablero, el historial de movimientos, las
+estadísticas y las server actions de carga y descarga.
+
+**Los sectores del resumen son cinco, no cuatro.** Llenar y descargar son dos
+operaciones sobre la misma placa: meterlas en una sola tarjeta “Llenado manual”
+contaría cada placa dos veces y el total del sector no querría decir nada. Van
+como `llenado_manual` y `descarga_manual`, espejo de carrusel y paletizado. El
+horno no se parte porque procesa los dos circuitos. Los dos sectores manuales
+**se omiten los días sin movimiento**: las guardas se hacen de vez en cuando y
+dos tarjetas vacías todos los días tapan lo que importa.
+
+**De qué lado cae un movimiento lo decide la bandera de HOY**, no un snapshot
+en la fila. Es una decisión de cómo está organizada la planta, no un dato del
+movimiento: el día que las guardas vuelvan al carrusel, el histórico tiene que
+leerse con la organización nueva. Es la excepción deliberada a la convención de
+snapshots de 4.2.
 
 ---
 
@@ -475,11 +530,15 @@ app. Dos lecciones:
 columna la deja en `null` para todas las filas existentes; cambiar una columna a
 nullable **no vacía** los valores que ya estaban.
 
-Pasó dos veces:
+Pasó tres veces:
 - `capacidad` pasó a nullable, pero Guarda y Especial siguieron con el `50` que
   había puesto el seed. Hubo que vaciarlas desde el panel.
 - `cupo_horno` se creó en `null`, así que las guardas siguieron compitiendo por
   el cupo general hasta cargarles el 4 a mano.
+- `llenado_manual` se creó en `false` para todos, así que las guardas siguieron
+  apareciendo en carrusel y en paletizado hasta marcar el tipo desde el panel.
+  Hasta ese momento la pantalla de llenado manual se ve vacía, que es
+  exactamente lo que dice el cartel que muestra.
 
 Además el **seed es idempotente y no pisa lo existente**: volver a correrlo no
 arregla filas viejas.

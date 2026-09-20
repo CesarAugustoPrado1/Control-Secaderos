@@ -38,13 +38,22 @@ const TIPOS: {
   nombre: string;
   capacidad: number | null;
   cupoHorno: number | null;
+  llenadoManual?: boolean;
   orden: number;
 }[] = [
   { nombre: "Grande", capacidad: 102, cupoHorno: null, orden: 10 },
   { nombre: "Chico", capacidad: 204, cupoHorno: null, orden: 20 },
   // Las guardas van en su propia estructura adentro del horno: entran 4 y no
   // ocupan ninguno de los lugares que se reparten grandes, chicos y especiales.
-  { nombre: "Guarda", capacidad: null, cupoHorno: 4, orden: 30 },
+  // Las guardas salen del circuito del carrusel: las llena y las descarga su
+  // propio operario. Solo el horno es compartido.
+  {
+    nombre: "Guarda",
+    capacidad: null,
+    cupoHorno: 4,
+    llenadoManual: true,
+    orden: 30,
+  },
   { nombre: "Especial", capacidad: null, cupoHorno: null, orden: 40 },
 ];
 

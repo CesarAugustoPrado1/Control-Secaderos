@@ -7,16 +7,23 @@ import type { Rol } from "./db/schema";
  * Ojo: esto controla la NAVEGACION. Cada server action revalida permisos por su
  * cuenta, porque el middleware no es una frontera de seguridad suficiente.
  *
- * Sobre llenado manual: carga y descarga cualquier tipo de secadero, igual que
- * carrusel y paletizado. El piso de planta es flexible -las guardas las puede
- * sacar quien las cargo o cualquier otro-, asi que no se restringe por tipo:
- * lo que importa es que cada movimiento quede atribuido a quien lo hizo.
+ * Sobre llenado manual: es el puesto de las guardas, y hace las DOS puntas del
+ * circuito -llenar el secadero y despues descargarlo- en una sola pantalla,
+ * porque es la misma persona. Por eso tiene ruta propia y no entra ni a
+ * carrusel ni a paletizado: el punto de separarlo fue justamente que cada
+ * pantalla muestre un solo puesto.
+ *
+ * Lo que se separa es la NAVEGACION, no el permiso de mover un secadero. Las
+ * server actions de carga y descarga no miran el tipo: el piso de planta es
+ * flexible y una guarda la puede sacar quien la cargo o cualquier otro. Lo que
+ * importa es que cada movimiento quede atribuido a quien lo hizo.
  */
 const REGLAS: Array<{ prefijo: string; roles: Rol[] }> = [
   { prefijo: "/admin", roles: ["admin"] },
-  { prefijo: "/carrusel", roles: ["carrusel", "llenado_manual", "admin"] },
+  { prefijo: "/carrusel", roles: ["carrusel", "admin"] },
+  { prefijo: "/llenado-manual", roles: ["llenado_manual", "admin"] },
   { prefijo: "/horno", roles: ["horno", "admin"] },
-  { prefijo: "/paletizado", roles: ["paletizado", "llenado_manual", "admin"] },
+  { prefijo: "/paletizado", roles: ["paletizado", "admin"] },
   { prefijo: "/produccion", roles: ["administrativo", "admin", "auditor"] },
   { prefijo: "/movimientos", roles: ["admin", "auditor"] },
   { prefijo: "/estadisticas", roles: ["admin", "auditor"] },
@@ -46,8 +53,9 @@ export function puedeVer(rol: Rol, ruta: string): boolean {
 export function rutaInicial(rol: Rol): string {
   switch (rol) {
     case "carrusel":
-    case "llenado_manual":
       return "/carrusel";
+    case "llenado_manual":
+      return "/llenado-manual";
     case "horno":
       return "/horno";
     case "paletizado":
@@ -91,6 +99,11 @@ const NAV: ItemNav[] = [
   { href: "/carrusel", etiqueta: "Cargar", icono: "carrusel" },
   { href: "/horno", etiqueta: "Horno", icono: "horno" },
   { href: "/paletizado", etiqueta: "Descargar", icono: "pallet" },
+  // Despues de las dos del circuito principal y no en el medio: para el rol de
+  // llenado manual el orden da igual -ve dos items- y asi el admin conserva en
+  // la barra del celular las cuatro de siempre, sin que Descargar se le caiga
+  // al cajon de "Más".
+  { href: "/llenado-manual", etiqueta: "Llenado manual", icono: "mano" },
   { href: "/produccion", etiqueta: "Producción", icono: "resumen" },
   { href: "/movimientos", etiqueta: "Movimientos", icono: "lista" },
   { href: "/estadisticas", etiqueta: "Estadísticas", icono: "grafico" },

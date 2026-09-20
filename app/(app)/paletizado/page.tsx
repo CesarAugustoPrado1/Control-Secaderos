@@ -13,7 +13,7 @@ import {
 } from "@/lib/rangos";
 import { Actividad } from "@/components/actividad";
 import { PlanDelDia } from "@/components/plan-del-dia";
-import { BuscadorAccion } from "@/components/buscador-accion";
+import { BuscadorAccion, aBuscable } from "@/components/buscador-accion";
 import { SelectorDia } from "@/components/selector-dia";
 import { Titulo } from "@/components/ui";
 
@@ -25,7 +25,7 @@ export default async function PaginaPaletizado({
 }: {
   searchParams: Promise<{ dia?: string }>;
 }) {
-  const sesion = await requerirRol("paletizado", "llenado_manual", "admin");
+  const sesion = await requerirRol("paletizado", "admin");
   const { dia } = await searchParams;
   const hoy = fechaLocal();
   const fecha = esFecha(dia) ? dia : hoy;
@@ -37,6 +37,7 @@ export default async function PaginaPaletizado({
       secaderosConContenido(),
       listarMovimientos({
         tipo: "descarga",
+        llenadoManual: false,
         desde,
         hasta,
         porPagina: 200,
@@ -64,19 +65,10 @@ export default async function PaginaPaletizado({
         puedeExplicar={sesion.rol !== "auditor"}
       />
 
+      {/* Las guardas las descarga el mismo operario que las llenó, desde
+          /llenado-manual. Acá no se ven, ni siquiera como ocupadas. */}
       <BuscadorAccion
-        secaderos={secaderos.map((s) => ({
-          id: s.id,
-          numero: s.numero,
-          tipoId: s.tipoId,
-          tipoNombre: s.tipoNombre,
-          capacidad: s.capacidad,
-          estado: s.estado,
-          estadoDesde: s.estadoDesde.toISOString(),
-          total: s.total,
-          contenido: s.contenido.map((c) => c.nombre).join(", "),
-          productos: s.contenido.length,
-        }))}
+        secaderos={secaderos.filter((s) => !s.llenadoManual).map(aBuscable)}
         estadoObjetivo="seco"
         hrefBase="/paletizado"
         verbo="Descargar"

@@ -53,6 +53,8 @@ export type SecaderoVista = {
   capacidad: number | null;
   /** null = comparte el cupo general del horno. */
   cupoHorno: number | null;
+  /** El tipo se llena y se descarga a mano, fuera del carrusel y paletizado. */
+  llenadoManual: boolean;
   estado: Estado;
   activo: boolean;
   estadoDesde: Date;
@@ -79,6 +81,7 @@ export async function secaderosConContenido(
       tipoNombre: tipos.nombre,
       capacidad: tipos.capacidad,
       cupoHorno: tipos.cupoHorno,
+      llenadoManual: tipos.llenadoManual,
       estado: secaderos.estado,
       activo: secaderos.activo,
       estadoDesde: secaderos.estadoDesde,
@@ -137,6 +140,7 @@ export async function secaderoPorId(id: number): Promise<SecaderoVista | null> {
       tipoNombre: tipos.nombre,
       capacidad: tipos.capacidad,
       cupoHorno: tipos.cupoHorno,
+      llenadoManual: tipos.llenadoManual,
       estado: secaderos.estado,
       activo: secaderos.activo,
       estadoDesde: secaderos.estadoDesde,
@@ -163,6 +167,28 @@ export async function secaderoPorId(id: number): Promise<SecaderoVista | null> {
     contenido,
     total: contenido.reduce((a, c) => a + c.cantidad, 0),
   };
+}
+
+/**
+ * Productos activos de un circuito: el manual -las guardas- o el principal.
+ *
+ * Cada pantalla ofrece solo los suyos. Que el carrusel pueda reportar roturas
+ * de un modelo de guarda, o que el admin pueda pedirle guardas al carrusel en
+ * el plan, son cargas que despues nunca van a tener con que compararse: ese
+ * movimiento lo hace otro puesto y cuenta en otro sector.
+ */
+export async function productosDelCircuito(llenadoManual: boolean) {
+  return db
+    .select({ id: productos.id, nombre: productos.nombre })
+    .from(productos)
+    .innerJoin(tipos, eq(tipos.id, productos.tipoId))
+    .where(
+      and(
+        eq(productos.activo, true),
+        eq(tipos.llenadoManual, llenadoManual),
+      ),
+    )
+    .orderBy(asc(productos.nombre));
 }
 
 export async function productosActivos(tipoId?: number) {
@@ -313,6 +339,12 @@ export type FiltroMovimientos = {
   secaderoId?: number;
   usuarioId?: number;
   tipo?: string;
+  /**
+   * Acota a un circuito: `true` solo los tipos de llenado manual, `false` solo
+   * los del principal. Sin definir, los dos, que es lo que quiere el historial
+   * completo del admin.
+   */
+  llenadoManual?: boolean;
   desde?: Date;
   hasta?: Date;
   pagina?: number;
@@ -340,11 +372,21 @@ export async function listarMovimientos(filtro: FiltroMovimientos = {}) {
     );
   if (filtro.desde) condiciones.push(gte(movimientos.creadoEn, filtro.desde));
   if (filtro.hasta) condiciones.push(lte(movimientos.creadoEn, filtro.hasta));
+  // coalesce y no eq a secas: el join del tipo es izquierdo -el tipo pudo
+  // haberse borrado- y en ese caso el movimiento es del circuito principal.
+  if (filtro.llenadoManual !== undefined) {
+    condiciones.push(
+      sql`coalesce(${tipos.llenadoManual}, false) = ${filtro.llenadoManual}`,
+    );
+  }
   const where = condiciones.length ? and(...condiciones) : undefined;
 
+  // El conteo tambien pasa por el tipo: sin el join, filtrar por circuito
+  // daria un total distinto al de las filas que se muestran.
   const [{ total }] = await db
     .select({ total: sql<number>`count(*)::int` })
     .from(movimientos)
+    .leftJoin(tipos, eq(tipos.id, movimientos.secaderoTipoId))
     .where(where);
 
   const ordenar =

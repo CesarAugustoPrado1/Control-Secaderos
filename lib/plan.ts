@@ -105,7 +105,16 @@ export async function compararPlan(
         .orderBy(asc(productos.nombre))
     : [];
 
-  // Lo hecho: secaderos distintos y placas, por producto.
+  /**
+   * Lo hecho: secaderos distintos y placas, por producto.
+   *
+   * Se excluyen los tipos de llenado manual. El plan es del carrusel y de
+   * paletizado, y las guardas las llena y las descarga otro puesto: contarlas
+   * aca le acreditaria al carrusel secaderos que no cargo, y encima
+   * apareciendo como "fuera de plan", que es la columna que se mira para
+   * entender un desvio. El leftJoin es porque el tipo pudo haberse borrado, y
+   * en ese caso el movimiento es del circuito principal.
+   */
   const realizado = await db
     .select({
       productoId: movimientoLineas.productoId,
@@ -118,12 +127,14 @@ export async function compararPlan(
       movimientoLineas,
       eq(movimientoLineas.movimientoId, movimientos.id),
     )
+    .leftJoin(tipos, eq(tipos.id, movimientos.secaderoTipoId))
     .where(
       and(
         eq(movimientos.tipo, tipoMovimiento),
         gte(movimientos.creadoEn, desde),
         lte(movimientos.creadoEn, hasta),
         sql`${movimientoLineas.cantidad} > 0`,
+        sql`coalesce(${tipos.llenadoManual}, false) = false`,
       ),
     )
     .groupBy(movimientoLineas.productoId, movimientoLineas.productoNombre);

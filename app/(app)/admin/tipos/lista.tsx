@@ -23,6 +23,8 @@ type Fila = {
   capacidad: number | null;
   /** null = comparte el cupo general del horno. */
   cupoHorno: number | null;
+  /** Sale del circuito del carrusel y paletizado. */
+  llenadoManual: boolean;
   orden: number;
   activo: boolean;
   secaderos: number;
@@ -44,6 +46,7 @@ export function ListaTipos({ tipos }: { tipos: Fila[] }) {
               nombre: "",
               capacidad: 100,
               cupoHorno: null,
+              llenadoManual: false,
               orden: siguienteOrden,
             }}
             alGuardar={cerrar}
@@ -93,6 +96,11 @@ export function ListaTipos({ tipos }: { tipos: Fila[] }) {
                       {t.cupoHorno !== null && (
                         <span className="chip bg-orange-100 text-orange-800">
                           {t.cupoHorno} en el horno, aparte
+                        </span>
+                      )}
+                      {t.llenadoManual && (
+                        <span className="chip bg-violet-100 text-violet-900">
+                          Llenado manual
                         </span>
                       )}
                       {!t.activo && (
@@ -155,6 +163,14 @@ export function ListaTipos({ tipos }: { tipos: Fila[] }) {
         esos lugares y no ocupan ninguno de los del cupo general. Dejalo vacío
         si el tipo comparte los lugares con los demás, que es lo normal.
       </p>
+      <p className="mt-2 text-xs text-slate-500">
+        <strong className="text-slate-700">Llenado manual</strong> saca al tipo
+        del circuito del carrusel: deja de aparecer en Cargar y en Descargar, y
+        pasa a la pantalla de Llenado manual, donde el mismo operario lo llena y
+        lo descarga. El horno no cambia: sigue metiéndolos y sacándolos el
+        hornero. En el resumen de producción esos secaderos se cuentan en sus
+        propios sectores y no en carrusel ni en paletizado.
+      </p>
     </>
   );
 }
@@ -168,6 +184,7 @@ function FormularioTipo({
     nombre: string;
     capacidad: number | null;
     cupoHorno: number | null;
+    llenadoManual: boolean;
     orden: number;
   };
   alGuardar: () => void;
@@ -179,6 +196,7 @@ function FormularioTipo({
   const [cupoHorno, setCupoHorno] = useState(
     inicial.cupoHorno === null ? "" : String(inicial.cupoHorno),
   );
+  const [llenadoManual, setLlenadoManual] = useState(inicial.llenadoManual);
   const [orden, setOrden] = useState(String(inicial.orden));
 
   // El campo vacio es "sin tope fijo". Se distingue del cero a proposito: no se
@@ -196,6 +214,7 @@ function FormularioTipo({
           nombre,
           capacidad: sinTope ? null : Number(capacidad),
           cupoHorno: sinCupoPropio ? null : Number(cupoHorno),
+          llenadoManual,
           orden: Number(orden),
         })
       }
@@ -255,6 +274,24 @@ function FormularioTipo({
           />
         </Campo>
       </div>
+
+      <label className="mt-3 flex items-start gap-2.5 text-sm text-slate-700">
+        <input
+          type="checkbox"
+          checked={llenadoManual}
+          onChange={(e) => setLlenadoManual(e.target.checked)}
+          className="mt-0.5 h-5 w-5 shrink-0 rounded border-slate-300"
+        />
+        <span>
+          <strong className="font-semibold text-slate-900">
+            Se llena y se descarga a mano
+          </strong>
+          <span className="block text-xs text-slate-500">
+            Fuera del carrusel y de paletizado. Va a la pantalla de Llenado
+            manual. El horno no cambia.
+          </span>
+        </span>
+      </label>
     </FormularioAbm>
   );
 }

@@ -14,12 +14,18 @@ export function FormularioCarga({
   secaderoNumero,
   capacidad,
   modelos,
+  volverA,
 }: {
   secaderoId: number;
   secaderoNumero: number;
   /** null = el tipo no tiene tope fijo: se carga a mano y sin controles. */
   capacidad: number | null;
   modelos: Producto[];
+  /**
+   * La pantalla desde la que se entro. El mismo formulario lo usan el carrusel
+   * y el llenado manual, y cada operario tiene que volver a la suya.
+   */
+  volverA: string;
 }) {
   const router = useRouter();
   const { ejecutar, enviando, error, setError } = useAccion();
@@ -110,7 +116,7 @@ export function FormularioCarga({
           nota: nota.trim() || undefined,
         }),
       () => {
-        router.push("/carrusel");
+        router.push(volverA);
         router.refresh();
       },
     );

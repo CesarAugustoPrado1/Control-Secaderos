@@ -1,9 +1,14 @@
 import "server-only";
 import { and, eq, gte, inArray, lte, sql, sum } from "drizzle-orm";
 import { db } from "./db";
-import { movimientoLineas, movimientos, roturasCarrusel } from "./db/schema";
+import {
+  movimientoLineas,
+  movimientos,
+  roturasCarrusel,
+  tipos,
+} from "./db/schema";
 import { rangoDeFecha, ZONA_SQL } from "./rangos";
-import { SECTORES, type SectorResumen } from "./sectores";
+import { SECTORES, SECTORES_MANUALES, type SectorResumen } from "./sectores";
 
 /**
  * Resumen de produccion de un dia, sector por sector.
@@ -26,6 +31,17 @@ import { SECTORES, type SectorResumen } from "./sectores";
  *
  *  - Paletizado: las placas que mando a producto terminado (`descarga`) mas
  *    las que rompio al descargar.
+ *
+ *  - Llenado manual y Descarga manual: exactamente lo mismo que carrusel y
+ *    paletizado, pero de los tipos marcados como de llenado manual -las
+ *    guardas-. Son otro puesto y otra persona, asi que sumarlos al carrusel lo
+ *    mostraria produciendo secaderos que no llenó. El horno no se parte: las
+ *    guardas las mete y las saca el hornero como todo lo demas.
+ *
+ *    De que lado cae un movimiento se decide por la bandera ACTUAL del tipo, no
+ *    por un snapshot. Es una decision de como esta organizada la planta hoy, no
+ *    un dato del movimiento: el dia que las guardas vuelvan al carrusel, el
+ *    historico tiene que leerse con la organizacion nueva y no con la vieja.
  *
  * Un secadero mixto cuenta para cada uno de los productos que lleva adentro,
  * igual que en la comparacion contra el plan.
@@ -72,10 +88,16 @@ const nuevo = (): Acumulado => ({ buenas: 0, rotas: 0, secaderos: 0 });
 export async function resumenDelDia(fecha: string): Promise<ResumenDelDia> {
   const { desde, hasta } = rangoDeFecha(fecha);
 
+  // El tipo entra con leftJoin porque `secadero_tipo_id` puede haber quedado en
+  // null si el tipo se borro. En ese caso `manual` viene null y se lee como
+  // false: el circuito principal es el caso por defecto.
+  const esManual = sql<boolean>`coalesce(${tipos.llenadoManual}, false)`;
+
   const [porMovimiento, roturasLinea, secaderosPorSector] = await Promise.all([
     db
       .select({
         tipo: movimientos.tipo,
+        manual: esManual,
         producto: movimientoLineas.productoNombre,
         buenas: sum(movimientoLineas.cantidad),
         rotas: sum(movimientoLineas.desperdicio),
@@ -86,6 +108,7 @@ export async function resumenDelDia(fecha: string): Promise<ResumenDelDia> {
         movimientos,
         eq(movimientos.id, movimientoLineas.movimientoId),
       )
+      .leftJoin(tipos, eq(tipos.id, movimientos.secaderoTipoId))
       .where(
         and(
           gte(movimientos.creadoEn, desde),
@@ -98,7 +121,7 @@ export async function resumenDelDia(fecha: string): Promise<ResumenDelDia> {
           ]),
         ),
       )
-      .groupBy(movimientos.tipo, movimientoLineas.productoNombre),
+      .groupBy(movimientos.tipo, esManual, movimientoLineas.productoNombre),
     db
       .select({
         producto: roturasCarrusel.productoNombre,
@@ -117,9 +140,11 @@ export async function resumenDelDia(fecha: string): Promise<ResumenDelDia> {
     db
       .select({
         tipo: movimientos.tipo,
+        manual: esManual,
         secaderos: sql<string>`count(distinct ${movimientos.id})`,
       })
       .from(movimientos)
+      .leftJoin(tipos, eq(tipos.id, movimientos.secaderoTipoId))
       .where(
         and(
           gte(movimientos.creadoEn, desde),
@@ -127,7 +152,7 @@ export async function resumenDelDia(fecha: string): Promise<ResumenDelDia> {
           inArray(movimientos.tipo, ["carga", "salida_horno", "descarga"]),
         ),
       )
-      .groupBy(movimientos.tipo),
+      .groupBy(movimientos.tipo, esManual),
   ]);
 
   const porSector = new Map<SectorResumen, Map<string, Acumulado>>(
@@ -152,7 +177,10 @@ export async function resumenDelDia(fecha: string): Promise<ResumenDelDia> {
 
     switch (f.tipo) {
       case "carga": {
-        const fila = asegurar("carrusel", f.producto);
+        const fila = asegurar(
+          f.manual ? "llenado_manual" : "carrusel",
+          f.producto,
+        );
         fila.buenas += buenas;
         fila.secaderos += secaderos;
         break;
@@ -172,7 +200,10 @@ export async function resumenDelDia(fecha: string): Promise<ResumenDelDia> {
         break;
       }
       case "descarga": {
-        const fila = asegurar("paletizado", f.producto);
+        const fila = asegurar(
+          f.manual ? "descarga_manual" : "paletizado",
+          f.producto,
+        );
         fila.buenas += buenas;
         fila.rotas += rotas;
         fila.secaderos += secaderos;
@@ -186,14 +217,29 @@ export async function resumenDelDia(fecha: string): Promise<ResumenDelDia> {
     asegurar("carrusel", f.producto).rotas += aNumero(f.rotas);
   }
 
-  const MOVIMIENTO_DEL_SECTOR: Record<SectorResumen, string> = {
-    carrusel: "carga",
-    horno: "salida_horno",
-    paletizado: "descarga",
+  /**
+   * Que movimiento y de que circuito cuenta los secaderos de cada sector. El
+   * horno lleva `null`: cuenta los suyos sin mirar el circuito, porque procesa
+   * los dos.
+   */
+  const MOVIMIENTO_DEL_SECTOR: Record<
+    SectorResumen,
+    { tipo: string; manual: boolean | null }
+  > = {
+    carrusel: { tipo: "carga", manual: false },
+    llenado_manual: { tipo: "carga", manual: true },
+    horno: { tipo: "salida_horno", manual: null },
+    paletizado: { tipo: "descarga", manual: false },
+    descarga_manual: { tipo: "descarga", manual: true },
   };
-  const distintos = new Map(
-    secaderosPorSector.map((f) => [f.tipo as string, Number(f.secaderos)]),
-  );
+
+  const distintos = (tipo: string, manual: boolean | null) =>
+    secaderosPorSector
+      .filter(
+        (f) =>
+          f.tipo === tipo && (manual === null || !!f.manual === manual),
+      )
+      .reduce((a, f) => a + Number(f.secaderos), 0);
 
   const sectores: ResumenSector[] = SECTORES.map((sector) => {
     const productos = [...porSector.get(sector)!.entries()]
@@ -213,13 +259,25 @@ export async function resumenDelDia(fecha: string): Promise<ResumenDelDia> {
       buenas: productos.reduce((a, p) => a + p.buenas, 0),
       rotas: productos.reduce((a, p) => a + p.rotas, 0),
       total: productos.reduce((a, p) => a + p.total, 0),
-      secaderos: distintos.get(MOVIMIENTO_DEL_SECTOR[sector]) ?? 0,
+      secaderos: distintos(
+        MOVIMIENTO_DEL_SECTOR[sector].tipo,
+        MOVIMIENTO_DEL_SECTOR[sector].manual,
+      ),
     };
   });
 
   return {
     fecha,
-    sectores,
+    sectores: sectores.filter(
+      // Los sectores del circuito principal se muestran siempre, aunque esten
+      // en cero: que el carrusel no haya cargado nada es informacion. Los
+      // manuales solo cuando hubo algo, porque las guardas se hacen de vez en
+      // cuando y dos tarjetas vacias todos los dias tapan lo que importa.
+      (s) =>
+        !SECTORES_MANUALES.includes(s.sector) ||
+        s.productos.length > 0 ||
+        s.secaderos > 0,
+    ),
     hayMovimiento: sectores.some((s) => s.productos.length > 0),
   };
 }

@@ -55,6 +55,11 @@ const esquemaTipo = z.object({
     .positive("El cupo de horno tiene que ser mayor a cero.")
     .max(1000)
     .nullable(),
+  /**
+   * El tipo sale del circuito del carrusel y paletizado y pasa al de llenado
+   * manual. Ver el comentario de `tipos` en el esquema.
+   */
+  llenadoManual: z.boolean().default(false),
   orden: z.number().int().min(0).max(999).default(0),
 });
 
@@ -85,6 +90,7 @@ export async function guardarTipo(
           nombre: datos.nombre,
           capacidad: datos.capacidad,
           cupoHorno: datos.cupoHorno,
+          llenadoManual: datos.llenadoManual,
           orden: datos.orden,
         })
         .where(eq(tipos.id, datos.id));

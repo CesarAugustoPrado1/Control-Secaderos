@@ -10,6 +10,7 @@ const ICONOS: Record<string, string> = {
   carrusel: "⟳",
   horno: "🔥",
   pallet: "📦",
+  mano: "✋",
   lista: "☰",
   resumen: "📋",
   grafico: "📈",
