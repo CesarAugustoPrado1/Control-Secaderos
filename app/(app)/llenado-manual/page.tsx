@@ -7,7 +7,8 @@ import {
   rangoDeFecha,
 } from "@/lib/rangos";
 import { Actividad } from "@/components/actividad";
-import { BuscadorAccion, aBuscable } from "@/components/buscador-accion";
+import { aBuscable } from "@/lib/buscables";
+import { BuscadorAccion } from "@/components/buscador-accion";
 import { SelectorDia } from "@/components/selector-dia";
 import { Titulo } from "@/components/ui";
 

@@ -2,47 +2,12 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { SecaderoVista } from "@/lib/consultas";
+import type { SecaderoBuscable } from "@/lib/buscables";
 import type { Estado } from "@/lib/db/schema";
 import { COLOR_ESTADO, ETIQUETA_ESTADO } from "@/lib/estados";
 import { duracion, minutosDesde, numero } from "@/lib/formato";
 import { MarcasSecadero } from "@/components/marcas-secadero";
 import { ChipTipo } from "@/components/ui";
-
-export type SecaderoBuscable = {
-  id: number;
-  numero: number;
-  tipoId: number;
-  tipoNombre: string;
-  /** null = el tipo no tiene tope fijo. */
-  capacidad: number | null;
-  estado: Estado;
-  estadoDesde: string;
-  total: number;
-  contenido: string;
-  /** Cuantos productos distintos tiene adentro. */
-  productos: number;
-};
-
-/**
- * Lo que el buscador necesita de un secadero, serializable para cruzar del
- * servidor al cliente. Las tres pantallas que lo usan -carrusel, paletizado y
- * llenado manual- arman la lista igual, asi que la conversion vive una sola vez.
- */
-export function aBuscable(s: SecaderoVista): SecaderoBuscable {
-  return {
-    id: s.id,
-    numero: s.numero,
-    tipoId: s.tipoId,
-    tipoNombre: s.tipoNombre,
-    capacidad: s.capacidad,
-    estado: s.estado,
-    estadoDesde: s.estadoDesde.toISOString(),
-    total: s.total,
-    contenido: s.contenido.map((c) => c.nombre).join(", "),
-    productos: s.contenido.length,
-  };
-}
 
 /**
  * Buscador por numero sobre TODOS los secaderos, no solo los disponibles.
