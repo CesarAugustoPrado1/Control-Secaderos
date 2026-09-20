@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { requerirRol } from "@/lib/auth";
 import { listarMovimientos, secaderosConContenido } from "@/lib/consultas";
 import {
@@ -34,7 +35,7 @@ export default async function PaginaLlenadoManual({
 }: {
   searchParams: Promise<{ dia?: string }>;
 }) {
-  await requerirRol("llenado_manual", "admin");
+  const sesion = await requerirRol("llenado_manual", "admin");
   const { dia } = await searchParams;
   const hoy = fechaLocal();
   const fecha = esFecha(dia) ? dia : hoy;
@@ -79,11 +80,7 @@ export default async function PaginaLlenadoManual({
       <SelectorDia rutaBase="/llenado-manual" fecha={fecha} hoy={hoy} />
 
       {mios.length === 0 ? (
-        <p className="tarjeta px-4 py-10 text-center text-sm text-slate-500">
-          No hay ningún secadero de llenado manual. Un administrador tiene que
-          marcar el tipo como “se llena y se descarga a mano” desde
-          Administración → Tipos.
-        </p>
+        <SinSecaderos esAdmin={sesion.rol === "admin"} />
       ) : (
         <>
           <section>
@@ -148,4 +145,42 @@ export default async function PaginaLlenadoManual({
  */
 function Encabezado({ titulo }: { titulo: string }) {
   return <h2 className="mb-2 text-base font-bold text-slate-900">{titulo}</h2>;
+}
+
+/**
+ * Que hacer cuando no hay ningun secadero en el circuito manual.
+ *
+ * No es un error ni una pantalla vacia cualquiera: es una pantalla sin
+ * configurar, y quien la mira puede o no ser quien la configura. Al admin se le
+ * dice que lo tiene que hacer EL y se le deja el link; al operario, a quien
+ * pedirselo. Un solo texto que hable de "un administrador" en tercera persona
+ * deja al admin leyendo una instruccion para otro y buscando un boton que no
+ * existe.
+ */
+function SinSecaderos({ esAdmin }: { esAdmin: boolean }) {
+  return (
+    <div className="tarjeta space-y-3 px-4 py-8 text-center">
+      <p className="text-sm font-semibold text-slate-700">
+        Todavía no hay ningún secadero de llenado manual.
+      </p>
+      {esAdmin ? (
+        <>
+          <p className="text-sm text-slate-500">
+            Entrá al tipo de secadero que se llena a mano —las guardas— y
+            marcale <strong className="text-slate-700">“se llena y se
+            descarga a mano”</strong>. Desde ese momento sus secaderos
+            desaparecen de Cargar y de Descargar y se operan acá.
+          </p>
+          <Link href="/admin/tipos" className="boton-primario inline-block">
+            Ir a Administración → Tipos
+          </Link>
+        </>
+      ) : (
+        <p className="text-sm text-slate-500">
+          Pedile al administrador que marque el tipo como “se llena y se
+          descarga a mano” desde Administración → Tipos.
+        </p>
+      )}
+    </div>
+  );
 }
