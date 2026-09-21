@@ -10,7 +10,7 @@ import {
 import type { SecaderoVista } from "@/lib/consultas";
 import { duracion, minutosDesde, numero } from "@/lib/formato";
 import { useAccion } from "@/components/usar-accion";
-import { Aviso, ChipTipo, Titulo } from "@/components/ui";
+import { Aviso, ChipTipo, Modelos, Titulo } from "@/components/ui";
 import { MarcasSecadero } from "@/components/marcas-secadero";
 import { SelectorDia } from "@/components/selector-dia";
 import { etiquetaRelativa } from "@/lib/rangos";
@@ -777,12 +777,13 @@ function FilaSecadero({
         </span>
 
         <span className="min-w-0 flex-1">
-          <span className="flex flex-wrap items-center gap-1.5 text-sm font-semibold text-slate-800">
-            {numero(secadero.total)} placas
+          {/* Que hay adentro, al mismo tamano que el numero: el hornero elige
+              la hornada por modelo, asi que es lo que tiene que leer de un
+              golpe. Las placas y el tipo son contexto. */}
+          <Modelos nombres={secadero.contenido.map((c) => c.nombre)} />
+          <span className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-xs text-slate-500">
+            <span className="tabular-nums">{numero(secadero.total)} placas</span>
             <ChipTipo id={secadero.tipoId} nombre={secadero.tipoNombre} />
-          </span>
-          <span className="block truncate text-xs text-slate-500">
-            {secadero.contenido.map((c) => c.nombre).join(", ") || "sin placas"}
           </span>
           <MarcasSecadero
             total={secadero.total}
@@ -798,7 +799,7 @@ function FilaSecadero({
                 : "NO SECÓ · va de nuevo al horno"}
             </span>
           )}
-          <span className="block text-xs font-medium text-slate-500">
+          <span className="block text-[11px] font-medium text-slate-500">
             hace {duracion(minutosDesde(secadero.estadoDesde))}
           </span>
         </span>

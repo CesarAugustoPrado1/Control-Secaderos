@@ -14,6 +14,47 @@ export function ChipTipo({ id, nombre }: { id: number; nombre: string }) {
   return <span className={`chip ${colorTipo(id)}`}>{nombre}</span>;
 }
 
+/**
+ * Los modelos que tiene adentro un secadero, en el mismo cuerpo de letra que
+ * su numero.
+ *
+ * Son los dos unicos datos que el operario busca de lejos -que secadero y de
+ * que- y todo lo demas (placas, tipo, hace cuanto, quien lo cargo, la hora) es
+ * contexto que se lee despues, con el telefono ya en la mano. Antes el numero
+ * iba en 16 o 20 px y el modelo en 12: la pantalla gritaba el dato que ya
+ * sabias y susurraba el que ibas a buscar.
+ *
+ * Las clases van literales y no armadas con el tamano: Tailwind las descubre
+ * leyendo el archivo, y una interpolada no llega al CSS.
+ */
+export function Modelos({
+  nombres,
+  tamano = "base",
+  /** Que decir cuando el secadero no tiene nada adentro. */
+  vacio = "Sin placas",
+}: {
+  nombres: string[];
+  tamano?: "base" | "lg" | "xl";
+  vacio?: string;
+}) {
+  const medida =
+    tamano === "xl" ? "text-xl" : tamano === "lg" ? "text-lg" : "text-base";
+
+  if (nombres.length === 0) {
+    return (
+      <p className={`${medida} leading-tight font-semibold text-slate-400`}>
+        {vacio}
+      </p>
+    );
+  }
+
+  return (
+    <p className={`${medida} leading-tight font-bold text-slate-900`}>
+      {nombres.join(", ")}
+    </p>
+  );
+}
+
 export function Aviso({
   tono = "error",
   children,

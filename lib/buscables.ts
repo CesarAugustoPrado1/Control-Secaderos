@@ -26,7 +26,8 @@ export type SecaderoBuscable = {
   /** Serializado: cruza del servidor al cliente. */
   estadoDesde: string;
   total: number;
-  contenido: string;
+  /** Los modelos que tiene adentro, por nombre. */
+  modelos: string[];
   /** Cuantos productos distintos tiene adentro. */
   productos: number;
 };
@@ -58,7 +59,7 @@ export function aBuscable(s: FilaSecadero): SecaderoBuscable {
     estado: s.estado,
     estadoDesde: s.estadoDesde.toISOString(),
     total: s.total,
-    contenido: s.contenido.map((c) => c.nombre).join(", "),
+    modelos: s.contenido.map((c) => c.nombre),
     productos: s.contenido.length,
   };
 }

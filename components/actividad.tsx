@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import type { MovimientoVista } from "@/lib/consultas";
 import { hora, numero } from "@/lib/formato";
 import { MarcasSecadero } from "@/components/marcas-secadero";
-import { ChipTipo } from "@/components/ui";
+import { ChipTipo, Modelos } from "@/components/ui";
 
 /**
  * Lo hecho en el periodo, en la propia pantalla del operario.
@@ -127,6 +127,7 @@ function PorNumero({ movimientos }: { movimientos: MovimientoVista[] }) {
       {movimientos.map((m, i) => {
         const placas = m.lineas.reduce((a, l) => a + l.cantidad, 0);
         const rotas = m.lineas.reduce((a, l) => a + l.desperdicio, 0);
+        const cargados = m.lineas.filter((l) => l.cantidad > 0);
         // La lista viene del mas viejo al mas nuevo, en el mismo orden en que
         // fueron saliendo del carrusel.
         const orden = i + 1;
@@ -140,15 +141,25 @@ function PorNumero({ movimientos }: { movimientos: MovimientoVista[] }) {
             </span>
 
             <div className="min-w-0 flex-1">
-              <p className="flex flex-wrap items-center gap-2 text-sm font-semibold text-slate-800">
-                <span>
-                  {numero(placas)} placas
-                  {rotas > 0 && (
-                    <span className="ml-2 text-xs font-bold text-red-600">
-                      −{numero(rotas)}
-                    </span>
-                  )}
-                </span>
+              <Modelos nombres={cargados.map((l) => l.productoNombre)} />
+
+              <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-xs text-slate-500">
+                <span className="tabular-nums">{numero(placas)} placas</span>
+                {rotas > 0 && (
+                  <span className="font-bold text-red-600">
+                    · −{numero(rotas)} rotas
+                  </span>
+                )}
+                {/* El desglose solo cuando hay mas de un modelo: con uno solo
+                    repetiria el nombre de arriba y el total de al lado. */}
+                {cargados.length > 1 && (
+                  <span className="tabular-nums">
+                    ·{" "}
+                    {cargados
+                      .map((l) => `${l.productoNombre} ${numero(l.cantidad)}`)
+                      .join(", ")}
+                  </span>
+                )}
                 {/* Snapshot del tipo al momento del movimiento, no el actual:
                     si al secadero le cambiaron el tipo despues, el historial
                     tiene que seguir diciendo la verdad. */}
@@ -157,23 +168,18 @@ function PorNumero({ movimientos }: { movimientos: MovimientoVista[] }) {
                   nombre={m.secaderoTipoNombre}
                 />
               </p>
-              <p className="truncate text-xs text-slate-500">
-                {m.lineas
-                  .filter((l) => l.cantidad > 0)
-                  .map((l) => `${l.productoNombre} (${numero(l.cantidad)})`)
-                  .join(", ")}
-              </p>
+
               {m.capacidad != null && (
                 <MarcasSecadero
                   total={placas}
                   capacidad={m.capacidad}
-                  productos={m.lineas.filter((l) => l.cantidad > 0).length}
+                  productos={cargados.length}
                 />
               )}
-              <p className="text-xs text-slate-400">{m.usuarioNombre}</p>
+              <p className="text-[11px] text-slate-400">{m.usuarioNombre}</p>
             </div>
 
-            <span className="shrink-0 text-xs tabular-nums text-slate-400">
+            <span className="shrink-0 text-[11px] tabular-nums text-slate-400">
               {hora(m.creadoEn)}
             </span>
           </li>

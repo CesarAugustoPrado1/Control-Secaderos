@@ -10,7 +10,7 @@ import {
   colorTipo,
 } from "@/lib/estados";
 import { duracion, minutosDesde, numero } from "@/lib/formato";
-import { ChipEstado, ChipTipo } from "@/components/ui";
+import { ChipEstado, ChipTipo, Modelos } from "@/components/ui";
 import { MarcasSecadero } from "@/components/marcas-secadero";
 
 /**
@@ -339,21 +339,29 @@ export function PanelTablero({
                       {s.numero}
                     </span>
                     <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-1.5">
+                      {/* Numero y modelo al mismo tamano; los chips, las
+                          placas y el tiempo son contexto. Un vacio no tiene
+                          modelo, asi que ahi el renglon grande dice eso. */}
+                      <Modelos
+                        nombres={s.contenido.map((c) => c.nombre)}
+                        vacio={s.estado === "vacio" ? "Vacío" : "Sin placas"}
+                      />
+                      <div className="mt-1 flex flex-wrap items-center gap-1.5">
                         {!estado && <ChipEstado estado={s.estado} />}
                         <ChipTipo id={s.tipoId} nombre={s.tipoNombre} />
                       </div>
                       <p className="mt-1 text-xs text-slate-600">
-                        {s.total > 0 ? `${numero(s.total)} placas` : "sin placas"} ·
-                        hace {duracion(minutosDesde(s.estadoDesde))}
+                        {s.total > 0
+                          ? `${numero(s.total)} placas`
+                          : "sin placas"}{" "}
+                        · hace {duracion(minutosDesde(s.estadoDesde))}
+                        {/* El desglose solo cuando hay mezcla: con un modelo
+                            solo repetiria el nombre de arriba. */}
+                        {s.contenido.length > 1 &&
+                          ` · ${s.contenido
+                            .map((c) => `${c.nombre} ${numero(c.cantidad)}`)
+                            .join(", ")}`}
                       </p>
-                      {s.contenido.length > 0 && (
-                        <p className="truncate text-xs text-slate-500">
-                          {s.contenido
-                            .map((c) => `${c.nombre} (${numero(c.cantidad)})`)
-                            .join(", ")}
-                        </p>
-                      )}
                       <MarcasSecadero
                         total={s.total}
                         capacidad={s.capacidad}

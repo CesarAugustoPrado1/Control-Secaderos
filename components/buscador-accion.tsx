@@ -7,7 +7,7 @@ import type { Estado } from "@/lib/db/schema";
 import { COLOR_ESTADO, ETIQUETA_ESTADO } from "@/lib/estados";
 import { duracion, minutosDesde, numero } from "@/lib/formato";
 import { MarcasSecadero } from "@/components/marcas-secadero";
-import { ChipTipo } from "@/components/ui";
+import { ChipTipo, Modelos } from "@/components/ui";
 
 /**
  * Buscador por numero sobre TODOS los secaderos, no solo los disponibles.
@@ -109,40 +109,52 @@ export function BuscadorAccion({
 
               const cuerpo = (
                 <>
+                  {/* 18px y no 20: el modelo va al mismo cuerpo que el
+                      numero, y un nombre largo -"Laja, Travertino Clasico"- en
+                      20px se partia en tres renglones contra el boton de la
+                      derecha. Dos puntos menos en los dos lados mantienen la
+                      paridad y devuelven el ancho. */}
                   <span
-                    className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-xl text-xl font-bold tabular-nums ${color.chip}`}
+                    className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-lg font-bold tabular-nums ${color.chip}`}
                   >
                     {s.numero}
                   </span>
                   <span className="min-w-0 flex-1">
-                    {/* El cuadrado del numero va con el color del ESTADO, que
-                        en esta pantalla es siempre el mismo. Sin este chip,
-                        grande y chico se veian identicos. */}
-                    <span className="block text-sm font-semibold text-slate-800">
+                    {/* Lo que el operario busca: de que es este secadero. Un
+                        vacio no tiene modelo, asi que en su lugar va el estado
+                        -que es justamente lo que lo hace elegible- y no un
+                        "Sin placas" repetido en toda la lista. */}
+                    <Modelos
+                      tamano="lg"
+                      nombres={s.modelos}
+                      vacio={s.estado === "vacio" ? "Vacío" : "Sin placas"}
+                    />
+
+                    {/* Todo lo demas es contexto y va chico. El chip de tipo
+                        se queda porque el cuadrado del numero lleva el color
+                        del ESTADO, que en esta pantalla es siempre el mismo:
+                        sin el, grande y chico se ven identicos. */}
+                    <span className="mt-1 flex flex-wrap items-center gap-x-1.5 text-xs text-slate-500">
                       <ChipTipo id={s.tipoId} nombre={s.tipoNombre} />
                       {s.total > 0 && (
-                        <span className="ml-1.5 tabular-nums">
+                        <span className="tabular-nums">
                           · {numero(s.total)} placas
                         </span>
                       )}
+                      {disponible ? (
+                        <span>
+                          · {ETIQUETA_ESTADO[s.estado]} hace{" "}
+                          {duracion(minutosDesde(new Date(s.estadoDesde)))}
+                        </span>
+                      ) : (
+                        // Lo importante del caso ocupado: por que no se puede usar.
+                        <span className="font-semibold text-slate-600">
+                          · Está <strong>{ETIQUETA_ESTADO[s.estado]}</strong>{" "}
+                          hace {duracion(minutosDesde(new Date(s.estadoDesde)))}
+                        </span>
+                      )}
                     </span>
-                    {disponible ? (
-                      <span className="block text-xs text-slate-500">
-                        {ETIQUETA_ESTADO[s.estado]} hace{" "}
-                        {duracion(minutosDesde(new Date(s.estadoDesde)))}
-                      </span>
-                    ) : (
-                      // Lo importante del caso ocupado: por que no se puede usar.
-                      <span className="block text-xs font-medium text-slate-600">
-                        Está <strong>{ETIQUETA_ESTADO[s.estado]}</strong> hace{" "}
-                        {duracion(minutosDesde(new Date(s.estadoDesde)))}
-                      </span>
-                    )}
-                    {s.contenido && (
-                      <span className="block truncate text-xs text-slate-400">
-                        {s.contenido}
-                      </span>
-                    )}
+
                     <MarcasSecadero
                       total={s.total}
                       capacidad={s.capacidad}
