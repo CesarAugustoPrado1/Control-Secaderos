@@ -8,6 +8,7 @@ import { COLOR_DESTINO, ETIQUETA_DESTINO } from "@/lib/estados";
 import { numero, porcentaje } from "@/lib/formato";
 import { etiquetaRelativa } from "@/lib/rangos";
 import { useAccion } from "@/components/usar-accion";
+import { Plegable } from "@/components/plegable";
 import { Aviso } from "@/components/ui";
 
 type Motivo = { id: number; nombre: string };
@@ -63,31 +64,66 @@ export function PlanDelDia({
 
   const { lineas, fueraDePlan, totalPedido, totalHecho } = comparacion;
   const cumplimiento = totalPedido > 0 ? totalHecho / totalPedido : 1;
+  const faltantes = lineas.filter((l) => l.hechos < l.pedidos);
+
+  /**
+   * Lo que se lee sin abrir la seccion.
+   *
+   * El avance solo no alcanza: "3 de 18" dice que falta, no QUE falta. Un
+   * operario que cierra el plan para ganar lugar tendria que volver a abrirlo
+   * cada vez que termina una tanda. Por eso el encabezado nombra lo que queda
+   * pendiente, producto por producto: es la instruccion en un renglon. Abrir
+   * queda para el detalle en placas, la instruccion de paletizado y explicar
+   * un desvio.
+   */
+  const resumen = (
+    <>
+      {esFuturo ? (
+        <span className="text-sm font-bold tabular-nums text-slate-700">
+          {numero(totalPedido)} secaderos pedidos
+        </span>
+      ) : (
+        <span
+          className={`text-sm font-bold tabular-nums ${
+            cumplimiento >= 1
+              ? "text-emerald-600"
+              : cumplimiento >= 0.7
+                ? "text-slate-700"
+                : "text-amber-700"
+          }`}
+        >
+          {numero(totalHecho)} de {numero(totalPedido)} secaderos ·{" "}
+          {porcentaje(totalHecho, totalPedido)}
+        </span>
+      )}
+
+      {esFuturo ? (
+        lineas.length > 0 && (
+          <span className="mt-0.5 block text-xs text-slate-500">
+            {lineas.map((l) => `${l.producto} ${numero(l.pedidos)}`).join(" · ")}
+          </span>
+        )
+      ) : faltantes.length > 0 ? (
+        <span className="mt-0.5 block text-xs font-semibold text-amber-800">
+          Falta:{" "}
+          {faltantes
+            .map((l) => `${l.producto} ${numero(l.pedidos - l.hechos)}`)
+            .join(" · ")}
+        </span>
+      ) : (
+        <span className="mt-0.5 block text-xs font-semibold text-emerald-700">
+          Todo lo pedido está hecho.
+        </span>
+      )}
+    </>
+  );
 
   return (
-    <section className="tarjeta p-4">
-      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-base font-bold text-slate-900">Plan · {dia}</h2>
-        {esFuturo ? (
-          <span className="text-sm font-bold tabular-nums text-slate-700">
-            {numero(totalPedido)} secaderos pedidos
-          </span>
-        ) : (
-          <span
-            className={`text-sm font-bold tabular-nums ${
-              cumplimiento >= 1
-                ? "text-emerald-600"
-                : cumplimiento >= 0.7
-                  ? "text-slate-700"
-                  : "text-amber-700"
-            }`}
-          >
-            {numero(totalHecho)} de {numero(totalPedido)} secaderos ·{" "}
-            {porcentaje(totalHecho, totalPedido)}
-          </span>
-        )}
-      </div>
-
+    <Plegable
+      id={`plan-${comparacion.sector}`}
+      titulo={`Plan · ${dia}`}
+      resumen={resumen}
+    >
       {comparacion.nota && (
         <p className="mb-3 rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-600 italic">
           {comparacion.nota}
@@ -129,7 +165,7 @@ export function PlanDelDia({
           </p>
         </div>
       )}
-    </section>
+    </Plegable>
   );
 }
 
