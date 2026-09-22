@@ -24,6 +24,13 @@ const REGLAS: Array<{ prefijo: string; roles: Rol[] }> = [
   { prefijo: "/llenado-manual", roles: ["llenado_manual", "admin"] },
   { prefijo: "/horno", roles: ["horno", "admin"] },
   { prefijo: "/paletizado", roles: ["paletizado", "admin"] },
+  // Corregir un movimiento propio. Entran todos los que operan; si ESTE
+  // movimiento lo puede tocar lo decide la regla de lib/correccion.ts, del
+  // lado del servidor. No esta en la barra: se llega desde la lista del dia.
+  {
+    prefijo: "/corregir",
+    roles: ["carrusel", "llenado_manual", "horno", "paletizado", "admin"],
+  },
   { prefijo: "/produccion", roles: ["administrativo", "admin", "auditor"] },
   { prefijo: "/movimientos", roles: ["admin", "auditor"] },
   { prefijo: "/estadisticas", roles: ["admin", "auditor"] },

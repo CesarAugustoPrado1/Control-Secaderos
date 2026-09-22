@@ -14,6 +14,7 @@ import {
   type Sector,
 } from "./db/schema";
 import { rangoDeFecha } from "./rangos";
+import { vigente } from "./vigencia";
 
 /** El movimiento que cuenta como "hecho" para cada sector. */
 const MOVIMIENTO_DEL_SECTOR = {
@@ -135,6 +136,7 @@ export async function compararPlan(
         lte(movimientos.creadoEn, hasta),
         sql`${movimientoLineas.cantidad} > 0`,
         sql`coalesce(${tipos.llenadoManual}, false) = false`,
+        vigente(),
       ),
     )
     .groupBy(movimientoLineas.productoId, movimientoLineas.productoNombre);
@@ -201,6 +203,7 @@ export async function entregadosPorElHorno(fecha: string) {
         eq(movimientos.tipo, "salida_horno"),
         gte(movimientos.creadoEn, desde),
         lte(movimientos.creadoEn, hasta),
+        vigente(),
       ),
     );
 

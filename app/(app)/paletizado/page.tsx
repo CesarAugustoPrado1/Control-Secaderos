@@ -1,5 +1,9 @@
 import { requerirRol } from "@/lib/auth";
-import { listarMovimientos, secaderosConContenido } from "@/lib/consultas";
+import {
+  corregiblesPara,
+  listarMovimientos,
+  secaderosConContenido,
+} from "@/lib/consultas";
 import {
   compararPlan,
   entregadosPorElHorno,
@@ -33,7 +37,7 @@ export default async function PaginaPaletizado({
   const { desde, hasta } = rangoDeFecha(fecha);
   const esFuturo = fecha > hoy;
 
-  const [secaderos, descargas, plan, motivosDesvio, entregados] =
+  const [secaderos, descargas, devoluciones, plan, motivosDesvio, entregados] =
     await Promise.all([
       secaderosConContenido(),
       listarMovimientos({
@@ -44,10 +48,25 @@ export default async function PaginaPaletizado({
         porPagina: 200,
         orden: "asc",
       }),
+      // Aparte y no mezcladas con las descargas: una devolucion no es producto
+      // terminado, y sumarla al total de lo descargado lo inflaria.
+      listarMovimientos({
+        tipo: "devolucion_horno",
+        llenadoManual: false,
+        desde,
+        hasta,
+        porPagina: 200,
+        orden: "asc",
+      }),
       compararPlan(fecha, "paletizado"),
       motivosDesvioActivos(),
       entregadosPorElHorno(fecha),
     ]);
+
+  const corregibles = await corregiblesPara(
+    [...descargas.items, ...devoluciones.items],
+    { uid: sesion.uid, rol: sesion.rol },
+  );
 
   return (
     <div className="space-y-6">
@@ -77,16 +96,32 @@ export default async function PaginaPaletizado({
       />
 
       {!esFuturo && (
-        <Actividad
-          titulo="Descargado"
-          dia={etiquetaRelativa(fecha, hoy)}
-          movimientos={descargas.items}
-          vacio={
-            fecha === hoy
-              ? "Todavía no se descargó ningún secadero hoy."
-              : "Ese día no se descargó ningún secadero."
-          }
-        />
+        <>
+          <Actividad
+            titulo="Descargado"
+            dia={etiquetaRelativa(fecha, hoy)}
+            movimientos={descargas.items}
+            corregibles={corregibles}
+            volverA="/paletizado"
+            vacio={
+              fecha === hoy
+                ? "Todavía no se descargó ningún secadero hoy."
+                : "Ese día no se descargó ningún secadero."
+            }
+          />
+          {/* Solo si hubo: una lista vacia de devoluciones todos los dias es
+              ruido, y es la excepcion, no la regla. */}
+          {devoluciones.items.length > 0 && (
+            <Actividad
+              titulo="Devueltos al horno"
+              dia={etiquetaRelativa(fecha, hoy)}
+              movimientos={devoluciones.items}
+              corregibles={corregibles}
+              volverA="/paletizado"
+              vacio=""
+            />
+          )}
+        </>
       )}
     </div>
   );

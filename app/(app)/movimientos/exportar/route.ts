@@ -22,6 +22,10 @@ const COLUMNAS = [
   "Desperdicio",
   "Motivo",
   "Nota",
+  "Anulado",
+  "Anulado por",
+  "Motivo de anulación",
+  "Corrige al movimiento",
 ];
 
 /** Mismo criterio que la pantalla: el dia completo en hora de Argentina. */
@@ -53,6 +57,9 @@ export async function GET(req: NextRequest) {
     desde: comoFecha(q.get("desde"), false),
     hasta: comoFecha(q.get("hasta"), true),
     porPagina: MAXIMO_FILAS,
+    // El CSV es el historial completo: lo anulado sale marcado, para que quien
+    // lo tabule pueda filtrarlo o contar los errores.
+    incluirAnulados: true,
   });
 
   const fmtFecha = new Intl.DateTimeFormat("en-CA", {
@@ -85,9 +92,21 @@ export async function GET(req: NextRequest) {
       m.duracionMin ?? "",
       m.usuarioNombre,
     ];
+    // Al final de la fila, para no correr las columnas que ya usan las
+    // planillas armadas sobre este CSV.
+    const anulacion = [
+      m.anuladoEn
+        ? `${fmtFecha.format(m.anuladoEn)} ${fmtHora.format(m.anuladoEn)}`
+        : "",
+      m.anuladoPorNombre ?? "",
+      m.motivoAnulacion ?? "",
+      m.reemplazaA ?? "",
+    ];
 
     if (m.lineas.length === 0) {
-      filas.push([...comunes, "", "", "", "", m.nota].map(celda).join(";"));
+      filas.push(
+        [...comunes, "", "", "", "", m.nota, ...anulacion].map(celda).join(";"),
+      );
       continue;
     }
 
@@ -100,6 +119,7 @@ export async function GET(req: NextRequest) {
           l.desperdicio,
           l.motivoNombre ?? "",
           m.nota,
+          ...anulacion,
         ]
           .map(celda)
           .join(";"),

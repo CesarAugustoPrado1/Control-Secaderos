@@ -1,6 +1,10 @@
 import Link from "next/link";
 import { requerirRol } from "@/lib/auth";
-import { listarMovimientos, secaderosConContenido } from "@/lib/consultas";
+import {
+  corregiblesPara,
+  listarMovimientos,
+  secaderosConContenido,
+} from "@/lib/consultas";
 import {
   esFecha,
   etiquetaRelativa,
@@ -43,7 +47,7 @@ export default async function PaginaLlenadoManual({
   const etiqueta = etiquetaRelativa(fecha, hoy);
   const esFuturo = fecha > hoy;
 
-  const [secaderos, cargas, descargas] = await Promise.all([
+  const [secaderos, cargas, descargas, devoluciones] = await Promise.all([
     secaderosConContenido(),
     listarMovimientos({
       tipo: "carga",
@@ -61,7 +65,20 @@ export default async function PaginaLlenadoManual({
       porPagina: 200,
       orden: "asc",
     }),
+    listarMovimientos({
+      tipo: "devolucion_horno",
+      llenadoManual: true,
+      desde,
+      hasta,
+      porPagina: 200,
+      orden: "asc",
+    }),
   ]);
+
+  const corregibles = await corregiblesPara(
+    [...cargas.items, ...descargas.items, ...devoluciones.items],
+    { uid: sesion.uid, rol: sesion.rol },
+  );
 
   /**
    * El buscador busca sobre TODOS los secaderos que le pasen, no solo los
@@ -115,6 +132,8 @@ export default async function PaginaLlenadoManual({
             titulo="Llenado"
             dia={etiqueta}
             movimientos={cargas.items}
+            corregibles={corregibles}
+            volverA="/llenado-manual"
             vacio={
               fecha === hoy
                 ? "Todavía no llenaste ningún secadero hoy."
@@ -126,12 +145,25 @@ export default async function PaginaLlenadoManual({
             titulo="Descargado"
             dia={etiqueta}
             movimientos={descargas.items}
+            corregibles={corregibles}
+            volverA="/llenado-manual"
             vacio={
               fecha === hoy
                 ? "Todavía no descargaste ningún secadero hoy."
                 : "Ese día no se descargó ningún secadero a mano."
             }
           />
+
+          {devoluciones.items.length > 0 && (
+            <Actividad
+              titulo="Devueltos al horno"
+              dia={etiqueta}
+              movimientos={devoluciones.items}
+              corregibles={corregibles}
+              volverA="/llenado-manual"
+              vacio=""
+            />
+          )}
         </>
       )}
     </div>

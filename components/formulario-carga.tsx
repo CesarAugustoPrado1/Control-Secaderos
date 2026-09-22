@@ -1,7 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { corregirMovimiento } from "@/lib/acciones/correcciones";
 import { cargarSecadero } from "@/lib/acciones/flujo";
 import { numero } from "@/lib/formato";
 import { useAccion } from "@/components/usar-accion";
@@ -15,6 +16,7 @@ export function FormularioCarga({
   capacidad,
   modelos,
   volverA,
+  correccion,
 }: {
   secaderoId: number;
   secaderoNumero: number;
@@ -26,9 +28,17 @@ export function FormularioCarga({
    * y el llenado manual, y cada operario tiene que volver a la suya.
    */
   volverA: string;
+  /**
+   * Corregir una carga ya hecha, en vez de cargar. Es el mismo formulario a
+   * proposito: el operario corrige con la misma pantalla con la que cargo, y
+   * lo que se valida es exactamente lo mismo. Cambia que arranca con lo que se
+   * habia cargado y que la nota pasa a ser el motivo, obligatorio.
+   */
+  correccion?: { movimientoId: number; inicial: Record<number, number> };
 }) {
   const router = useRouter();
   const { ejecutar, enviando, error, setError } = useAccion();
+  const corrigiendo = correccion !== undefined;
 
   /**
    * El caso normal es secadero completo con un solo producto, asi que arranca
@@ -39,16 +49,33 @@ export function FormularioCarga({
    * Sin tope fijo no existe "completo", asi que el atajo no aplica y el
    * formulario arranca -y se queda- en carga a mano.
    */
-  const [completo, setCompleto] = useState(capacidad !== null);
-  const [cantidades, setCantidades] = useState<Record<number, number>>({});
+  const [completo, setCompleto] = useState(() => {
+    if (capacidad === null) return false;
+    if (!correccion) return true;
+    // Al corregir, arranca en completo solo si lo que se cargo ya era eso: un
+    // producto con la capacidad entera. Si no, en modo a mano, que es donde
+    // se ven las cantidades que hay que arreglar.
+    const cargado = Object.values(correccion.inicial);
+    return cargado.length === 1 && cargado[0] === capacidad;
+  });
+  const [cantidades, setCantidades] = useState<Record<number, number>>(
+    () => correccion?.inicial ?? {},
+  );
   const [nota, setNota] = useState("");
   const [filtro, setFiltro] = useState("");
+  /**
+   * Segundo paso antes de guardar una carga incompleta. Ver `confirmar`.
+   * Cualquier cambio en las cantidades lo apaga: lo que se confirma tiene que
+   * ser lo que se ve.
+   */
+  const [confirmando, setConfirmando] = useState(false);
 
   const total = useMemo(
     () => Object.values(cantidades).reduce((a, n) => a + (n || 0), 0),
     [cantidades],
   );
   const restante = capacidad === null ? 0 : capacidad - total;
+  const incompleta = capacidad !== null && total > 0 && total < capacidad;
 
   const visibles = useMemo(() => {
     const q = filtro.trim().toLowerCase();
@@ -60,11 +87,13 @@ export function FormularioCarga({
   function elegirUnico(id: number) {
     if (capacidad === null) return;
     setError(null);
+    setConfirmando(false);
     setCantidades(cantidades[id] === capacidad ? {} : { [id]: capacidad });
   }
 
   function setCantidad(id: number, valor: number) {
     setError(null);
+    setConfirmando(false);
     const limpio = Math.max(0, Math.floor(valor) || 0);
     setCantidades((prev) => {
       const siguiente = { ...prev, [id]: limpio };
@@ -76,6 +105,7 @@ export function FormularioCarga({
   function alternarCompleto() {
     if (capacidad === null) return;
     setError(null);
+    setConfirmando(false);
     setCompleto((antes) => {
       const ahora = !antes;
       if (ahora) {
@@ -105,21 +135,48 @@ export function FormularioCarga({
         `El secadero admite ${capacidad} placas y estás cargando ${total}.`,
       );
     }
+    if (corrigiendo && nota.trim().length < 3) {
+      return setError("Escribí en pocas palabras qué pasó.");
+    }
+
+    /**
+     * Una carga incompleta pide confirmacion antes de guardarse.
+     *
+     * Es donde vive el error de tipeo: 36 en vez de 136 es una carga valida
+     * -entra en el secadero- y sin esta pregunta pasaba de largo. La completa,
+     * que es casi todo el dia, no pregunta nada: una confirmacion en cada
+     * movimiento se termina tocando sin leer, y entonces ya no frena nada.
+     * Sin tope fijo no hay "incompleto"; ahi el numero va en el boton mismo.
+     */
+    if (incompleta && !confirmando) {
+      setConfirmando(true);
+      return;
+    }
+
+    const items = Object.entries(cantidades).map(([productoId, cantidad]) => ({
+      productoId: Number(productoId),
+      cantidad,
+    }));
+
     await ejecutar(
       () =>
-        cargarSecadero({
-          secaderoId,
-          items: Object.entries(cantidades).map(([productoId, cantidad]) => ({
-            productoId: Number(productoId),
-            cantidad,
-          })),
-          nota: nota.trim() || undefined,
-        }),
+        correccion
+          ? corregirMovimiento({
+              movimientoId: correccion.movimientoId,
+              motivo: nota.trim(),
+              items,
+            })
+          : cargarSecadero({
+              secaderoId,
+              items,
+              nota: nota.trim() || undefined,
+            }),
       () => {
         router.push(volverA);
         router.refresh();
       },
     );
+    setConfirmando(false);
   }
 
   return (
@@ -301,33 +358,139 @@ export function FormularioCarga({
 
       <div className="tarjeta p-4">
         <label htmlFor="nota" className="etiqueta">
-          Nota (opcional)
+          {corrigiendo ? "¿Qué pasó?" : "Nota (opcional)"}
         </label>
         <textarea
           id="nota"
           className="campo min-h-20"
           value={nota}
-          maxLength={500}
+          maxLength={corrigiendo ? 300 : 500}
           disabled={enviando}
-          onChange={(e) => setNota(e.target.value)}
-          placeholder="Algo para dejar asentado…"
+          onChange={(e) => {
+            setError(null);
+            setNota(e.target.value);
+          }}
+          placeholder={
+            corrigiendo
+              ? "Por ejemplo: puse 36 y eran 136"
+              : "Algo para dejar asentado…"
+          }
         />
       </div>
 
       {error && <Aviso>{error}</Aviso>}
 
-      <button
-        type="button"
-        onClick={() => void confirmar()}
-        disabled={enviando || total === 0}
-        className="boton-primario w-full"
+      {confirmando && capacidad !== null ? (
+        <Confirmacion
+          total={total}
+          capacidad={capacidad}
+          secaderoNumero={secaderoNumero}
+          corrigiendo={corrigiendo}
+          enviando={enviando}
+          alConfirmar={() => void confirmar()}
+          alVolver={() => setConfirmando(false)}
+        />
+      ) : (
+        <button
+          type="button"
+          onClick={() => void confirmar()}
+          disabled={enviando || total === 0}
+          className="boton-primario w-full"
+        >
+          {/* El total y el numero de secadero van en el boton siempre: es lo
+              ultimo que se lee antes de tocar, y ahi se ve el 36 que tenia que
+              ser 136, o el 45 que tenia que ser el 54. */}
+          {enviando
+            ? "Guardando…"
+            : total === 0
+              ? `Elegí el producto del secadero ${secaderoNumero}`
+              : corrigiendo
+                ? `Guardar corrección: ${numero(total)} placas en el ${secaderoNumero}`
+                : `Cargar ${numero(total)} placas en el ${secaderoNumero}`}
+        </button>
+      )}
+    </div>
+  );
+}
+
+/**
+ * La pregunta antes de guardar una carga incompleta, con el numero grande.
+ *
+ * Va en el lugar del boton y no en un `window.confirm`: el cartel nativo no
+ * deja agrandar el numero, y el numero grande es justamente lo que tiene que
+ * saltar a la vista. "Si" es el boton ancho porque una incompleta tambien
+ * puede ser correcta -fin de tanda, la ultima del turno-: la pregunta es para
+ * que se lea, no para complicar el caso legitimo.
+ */
+function Confirmacion({
+  total,
+  capacidad,
+  secaderoNumero,
+  corrigiendo,
+  enviando,
+  alConfirmar,
+  alVolver,
+}: {
+  total: number;
+  capacidad: number;
+  secaderoNumero: number;
+  corrigiendo: boolean;
+  enviando: boolean;
+  alConfirmar: () => void;
+  alVolver: () => void;
+}) {
+  // Aparece en el lugar del boton, al pie de la pantalla, y es mas alto que
+  // el: en el celular quedaba cortada abajo y el operario no veia la pregunta.
+  const caja = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    caja.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, []);
+
+  return (
+    <div
+      ref={caja}
+      role="alertdialog"
+      aria-labelledby="confirmar-carga"
+      className="tarjeta space-y-3 p-4 ring-2 ring-amber-400"
+    >
+      <p
+        id="confirmar-carga"
+        className="text-center text-sm font-semibold text-slate-600"
       >
-        {enviando
-          ? "Guardando…"
-          : total === 0
-            ? `Elegí el producto del secadero ${secaderoNumero}`
-            : `Cargar ${numero(total)} placas y pasar a húmedo`}
-      </button>
+        {corrigiendo ? "Vas a dejar la carga en" : "Vas a cargar"}
+      </p>
+      <p className="text-center leading-none">
+        <span className="text-5xl font-bold tabular-nums text-slate-900">
+          {numero(total)}
+        </span>
+        <span className="text-2xl font-semibold tabular-nums text-slate-400">
+          {" "}
+          de {numero(capacidad)}
+        </span>
+      </p>
+      <p className="text-center text-sm text-slate-600">
+        en el secadero{" "}
+        <strong className="text-base text-slate-900">{secaderoNumero}</strong>.
+        Queda incompleto. <strong className="text-slate-900">¿Es correcto?</strong>
+      </p>
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={alVolver}
+          disabled={enviando}
+          className="boton-secundario"
+        >
+          No, corregir
+        </button>
+        <button
+          type="button"
+          onClick={alConfirmar}
+          disabled={enviando}
+          className="boton-primario flex-1"
+        >
+          {enviando ? "Guardando…" : `Sí, son ${numero(total)}`}
+        </button>
+      </div>
     </div>
   );
 }

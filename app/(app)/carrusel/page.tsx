@@ -1,6 +1,7 @@
 import { requerirRol } from "@/lib/auth";
 import {
   consumoDeYeso,
+  corregiblesPara,
   listarMovimientos,
   motivosActivos,
   productosDelCircuito,
@@ -68,6 +69,11 @@ export default async function PaginaCarrusel({
     consumoDeYeso(desde, hasta),
   ]);
 
+  const corregibles = await corregiblesPara(cargas.items, {
+    uid: sesion.uid,
+    rol: sesion.rol,
+  });
+
   return (
     <div className="space-y-6">
       <Titulo detalle="Escribí el número del secadero que vas a cargar">
@@ -125,6 +131,8 @@ export default async function PaginaCarrusel({
             titulo="Cargado"
             dia={etiqueta}
             movimientos={cargas.items}
+            corregibles={corregibles}
+            volverA="/carrusel"
             vacio={
               fecha === hoy
                 ? "Todavía no se cargó ningún secadero hoy."

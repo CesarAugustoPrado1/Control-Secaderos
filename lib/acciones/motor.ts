@@ -1,5 +1,5 @@
 import "server-only";
-import { eq, inArray } from "drizzle-orm";
+import { and, count, eq, inArray, isNotNull, notInArray } from "drizzle-orm";
 import {
   motivosDesperdicio,
   movimientoLineas,
@@ -244,6 +244,28 @@ export type Movida = {
    * medido de ese secadero.
    */
   conservarInicioDeEstado?: boolean;
+  /**
+   * Si el movimiento reemplaza a otro que se acaba de anular. Ver `Reemplazo`.
+   */
+  reemplazo?: Reemplazo;
+};
+
+/**
+ * Lo que un movimiento corregido hereda del original que reemplaza.
+ *
+ * La hora y el autor son los del original: la carga paso a las 10:14 y la hizo
+ * Juan, aunque se haya corregido a las 10:42 o la haya corregido el admin.
+ * Para cualquier reporte es la carga de ese dia, de esa persona. Quien corrigio
+ * y cuando queda en el original anulado.
+ *
+ * Con la hora del original, la duracion del tramo sale sola y da lo mismo que
+ * daba: el secadero se restaura al inicio de su estado anterior antes de
+ * rehacer el movimiento.
+ */
+export type Reemplazo = {
+  creadoEn: Date;
+  autor: { uid: number; nombre: string };
+  reemplazaA: number;
 };
 
 export async function aplicarMovida(
@@ -261,9 +283,11 @@ export async function aplicarMovida(
     roturas,
     nota,
     conservarInicioDeEstado,
+    reemplazo,
   } = movida;
 
-  const ahora = new Date();
+  const ahora = reemplazo?.creadoEn ?? new Date();
+  const autor = reemplazo?.autor ?? { uid: sesion.uid, nombre: sesion.nombre };
   const duracionMin = conservarInicioDeEstado
     ? null
     : Math.max(
@@ -281,11 +305,12 @@ export async function aplicarMovida(
       tipo,
       estadoDesde: secadero.estado,
       estadoHasta,
-      usuarioId: sesion.uid,
-      usuarioNombre: sesion.nombre,
+      usuarioId: autor.uid,
+      usuarioNombre: autor.nombre,
       duracionMin,
       nota,
       creadoEn: ahora,
+      reemplazaA: reemplazo?.reemplazaA ?? null,
     })
     .returning({ id: movimientos.id });
 
@@ -388,4 +413,141 @@ export function descontarRoturas(
     resultado.set(r.productoId, Math.max(0, actual - r.cantidad));
   }
   return resultado;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Transiciones y cupo del horno                                              */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Transicion de un secadero ya cargado: se descuentan las roturas del contenido
+ * y el resto sigue viaje. Comun a horno (entrada y salida), secado al sol,
+ * paletizado y devolucion, y a la correccion de cualquiera de ellos, que es
+ * rehacer la misma transicion sobre el secadero restaurado.
+ */
+export async function procesarTransicion(
+  tx: Tx,
+  sesion: Sesion,
+  opciones: {
+    secadero: SecaderoConTipo;
+    roturas: Rotura[];
+    tipo:
+      | "entrada_horno"
+      | "salida_horno"
+      | "descarga"
+      | "devolucion_horno"
+      | "secado_natural";
+    estadoHasta: Estado;
+    vaciar: boolean;
+    nota: string | null;
+    reemplazo?: Reemplazo;
+  },
+) {
+  const { secadero, roturas, tipo, estadoHasta, vaciar, nota, reemplazo } =
+    opciones;
+
+  const contenido = await contenidoActual(tx, secadero.id);
+  if (contenido.size === 0) {
+    fallar(
+      `El secadero ${secadero.numero} figura sin placas. Corregilo desde administración.`,
+    );
+  }
+
+  const catalogo = await cargarCatalogo(
+    tx,
+    [...new Set([...contenido.keys(), ...roturas.map((r) => r.productoId)])],
+    [...new Set(roturas.map((r) => r.motivoId))],
+  );
+
+  validarRoturasContraContenido(secadero, roturas, contenido, catalogo);
+
+  const quedan = descontarRoturas(contenido, roturas);
+
+  await aplicarMovida(tx, sesion, catalogo, {
+    secadero,
+    tipo,
+    estadoHasta,
+    cantidades: quedan,
+    contenidoFinal: vaciar ? new Map() : quedan,
+    roturas,
+    nota,
+    reemplazo,
+  });
+}
+
+/**
+ * Que los secaderos que entran al horno quepan.
+ *
+ * El horno no es un solo cupo. Los tipos con estructura propia -las guardas-
+ * tienen sus lugares y no compiten con los grandes y chicos, asi que un horno
+ * lleno de guardas no puede bloquear la entrada de un grande. Cada tipo con
+ * `cupoHorno` se valida contra el suyo; los que lo tienen en null comparten el
+ * cupo general.
+ *
+ * Lo usan meter al horno y anular una salida, que es lo mismo visto desde el
+ * horno: un secadero que vuelve a ocupar un lugar.
+ */
+export async function validarCupoHorno(
+  tx: Tx,
+  entrantes: SecaderoConTipo[],
+  capacidadGeneral: number,
+  /**
+   * El final del mensaje cuando no entra. Por defecto, el de meter al horno,
+   * que es el texto que el hornero ya conoce.
+   */
+  detalle: (entrando: number) => string = (n) =>
+    `estás metiendo ${n}. Sacá los secos primero.`,
+) {
+  // Los que se estan validando no cuentan como ocupacion aunque ya figuren
+  // en horno. Al anular una salida, el secadero ya se restauro a `horno`
+  // adentro de la misma transaccion antes de llegar aca: sin esta exclusion
+  // se contaba dos veces, como adentro y como entrando, y la anulacion se
+  // rechazaba con el horno vacio.
+  const ocupacion = await tx
+    .select({ tipoId: secaderos.tipoId, dentro: count() })
+    .from(secaderos)
+    .where(
+      and(
+        eq(secaderos.estado, "horno"),
+        eq(secaderos.activo, true),
+        notInArray(
+          secaderos.id,
+          entrantes.map((s) => s.id),
+        ),
+      ),
+    )
+    .groupBy(secaderos.tipoId);
+
+  const conCupoPropio = await tx
+    .select({ id: tipos.id, nombre: tipos.nombre, cupo: tipos.cupoHorno })
+    .from(tipos)
+    .where(isNotNull(tipos.cupoHorno));
+  const cupoPropio = new Map(
+    conCupoPropio.map((t) => [t.id, { nombre: t.nombre, cupo: t.cupo! }]),
+  );
+
+  // Los que ya estan adentro, repartidos entre el cupo general y los propios.
+  const dentroPorCupo = new Map<number | null, number>();
+  for (const o of ocupacion) {
+    const clave = cupoPropio.has(o.tipoId) ? o.tipoId : null;
+    dentroPorCupo.set(clave, (dentroPorCupo.get(clave) ?? 0) + o.dentro);
+  }
+
+  const entrandoPorCupo = new Map<number | null, number>();
+  for (const s of entrantes) {
+    const clave = s.cupoHorno === null ? null : s.tipoId;
+    entrandoPorCupo.set(clave, (entrandoPorCupo.get(clave) ?? 0) + 1);
+  }
+
+  for (const [clave, entrando] of entrandoPorCupo) {
+    const dentro = dentroPorCupo.get(clave) ?? 0;
+    const tope = clave === null ? capacidadGeneral : cupoPropio.get(clave)!.cupo;
+    if (dentro + entrando <= tope) continue;
+
+    const donde =
+      clave === null
+        ? "En el horno entran"
+        : `Para ${cupoPropio.get(clave)!.nombre} hay`;
+    fallar(`${donde} ${tope} secaderos. Ya hay ${dentro} adentro y ${detalle(entrando)}`);
+  }
 }

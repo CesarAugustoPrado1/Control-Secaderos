@@ -1,10 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { eq, and, count, isNotNull } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db";
-import { secaderos, tipos, type Estado } from "../db/schema";
 import { autorizar } from "../auth";
 import { leerConfig } from "../consultas";
 import {
@@ -19,11 +17,10 @@ import {
   aplicarMovida,
   bloquearSecaderos,
   cargarCatalogo,
-  contenidoActual,
-  descontarRoturas,
   exigirEstado,
+  procesarTransicion,
   validarCarga,
-  validarRoturasContraContenido,
+  validarCupoHorno,
 } from "./motor";
 
 function revalidar() {
@@ -122,55 +119,8 @@ export async function entrarAHorno(
       const ids = datos.seleccion.map((s) => s.secaderoId);
       const filas = await bloquearSecaderos(tx, ids);
 
-      /**
-       * El horno no es un solo cupo. Los tipos con estructura propia -las
-       * guardas- tienen sus lugares y no compiten con los grandes y chicos, asi
-       * que un horno lleno de guardas no puede bloquear la entrada de un grande.
-       * Cada tipo con `cupoHorno` se valida contra el suyo; los que lo tienen en
-       * null comparten el cupo general.
-       */
-      const ocupacion = await tx
-        .select({ tipoId: secaderos.tipoId, dentro: count() })
-        .from(secaderos)
-        .where(and(eq(secaderos.estado, "horno"), eq(secaderos.activo, true)))
-        .groupBy(secaderos.tipoId);
-
-      const conCupoPropio = await tx
-        .select({ id: tipos.id, nombre: tipos.nombre, cupo: tipos.cupoHorno })
-        .from(tipos)
-        .where(isNotNull(tipos.cupoHorno));
-      const cupoPropio = new Map(
-        conCupoPropio.map((t) => [t.id, { nombre: t.nombre, cupo: t.cupo! }]),
-      );
-
-      // Los que ya estan adentro, repartidos entre el cupo general y los propios.
-      const dentroPorCupo = new Map<number | null, number>();
-      for (const o of ocupacion) {
-        const clave = cupoPropio.has(o.tipoId) ? o.tipoId : null;
-        dentroPorCupo.set(clave, (dentroPorCupo.get(clave) ?? 0) + o.dentro);
-      }
-
-      const entrandoPorCupo = new Map<number | null, number>();
-      for (const s of filas) {
-        const clave = s.cupoHorno === null ? null : s.tipoId;
-        entrandoPorCupo.set(clave, (entrandoPorCupo.get(clave) ?? 0) + 1);
-      }
-
-      for (const [clave, entrando] of entrandoPorCupo) {
-        const dentro = dentroPorCupo.get(clave) ?? 0;
-        const tope =
-          clave === null ? cfg.capacidad_horno : cupoPropio.get(clave)!.cupo;
-        if (dentro + entrando <= tope) continue;
-
-        const donde =
-          clave === null
-            ? "En el horno entran"
-            : `Para ${cupoPropio.get(clave)!.nombre} hay`;
-        fallar(
-          `${donde} ${tope} secaderos. Ya hay ${dentro} adentro y estás ` +
-            `metiendo ${entrando}. Sacá los secos primero.`,
-        );
-      }
+      // El horno no es un solo cupo: ver `validarCupoHorno`.
+      await validarCupoHorno(tx, filas, cfg.capacidad_horno);
 
       for (const secadero of filas) {
         const seleccion = datos.seleccion.find((s) => s.secaderoId === secadero.id)!;
@@ -408,62 +358,5 @@ export async function corregirSecadero(
     });
 
     revalidar();
-  });
-}
-
-/* -------------------------------------------------------------------------- */
-/* Interno                                                                    */
-/* -------------------------------------------------------------------------- */
-
-type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
-
-/**
- * Transicion de un secadero ya cargado: se descuentan las roturas del contenido
- * y el resto sigue viaje. Comun a horno (entrada y salida) y a paletizado.
- */
-async function procesarTransicion(
-  tx: Tx,
-  sesion: Awaited<ReturnType<typeof autorizar>>,
-  opciones: {
-    secadero: Awaited<ReturnType<typeof bloquearSecaderos>>[number];
-    roturas: z.infer<typeof esquemaRotura>[];
-    tipo:
-      | "entrada_horno"
-      | "salida_horno"
-      | "descarga"
-      | "devolucion_horno"
-      | "secado_natural";
-    estadoHasta: Estado;
-    vaciar: boolean;
-    nota: string | null;
-  },
-) {
-  const { secadero, roturas, tipo, estadoHasta, vaciar, nota } = opciones;
-
-  const contenido = await contenidoActual(tx, secadero.id);
-  if (contenido.size === 0) {
-    fallar(
-      `El secadero ${secadero.numero} figura sin placas. Corregilo desde administración.`,
-    );
-  }
-
-  const catalogo = await cargarCatalogo(
-    tx,
-    [...new Set([...contenido.keys(), ...roturas.map((r) => r.productoId)])],
-    [...new Set(roturas.map((r) => r.motivoId))],
-  );
-
-  validarRoturasContraContenido(secadero, roturas, contenido, catalogo);
-
-  const quedan = descontarRoturas(contenido, roturas);
-
-  await aplicarMovida(tx, sesion, catalogo, {
-    secadero,
-    tipo,
-    estadoHasta,
-    cantidades: quedan,
-    contenidoFinal: vaciar ? new Map() : quedan,
-    roturas,
-    nota,
   });
 }

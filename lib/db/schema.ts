@@ -1,4 +1,5 @@
 import {
+  type AnyPgColumn,
   boolean,
   date,
   index,
@@ -268,11 +269,48 @@ export const movimientos = pgTable(
     creadoEn: timestamp("creado_en", { withTimezone: true })
       .notNull()
       .defaultNow(),
+
+    /**
+     * Anulacion: el movimiento se registro mal y quien lo hizo lo deshizo.
+     *
+     * La fila NO se borra ni se edita. Sus datos siguen siendo lo que se
+     * registro en su momento, y estas columnas agregan quien lo anulo, cuando
+     * y por que. Es la regla de toda la app: el historial no miente, y un
+     * error corregido tambien es un dato -cuantos hay, en que puesto, de que
+     * tipo- que se pierde si se pisa el numero.
+     *
+     * Toda consulta que SUME -produccion, plan, estadisticas, reproceso-
+     * tiene que ignorar los anulados (ver `vigente` en consultas). Las que
+     * MUESTRAN historia -el listado de movimientos, el CSV- los traen
+     * marcados.
+     *
+     * Quien anula no siempre es el autor: el admin puede anular el de otro.
+     * Por eso va aparte de `usuarioId`, que sigue siendo quien hizo el trabajo.
+     */
+    anuladoEn: timestamp("anulado_en", { withTimezone: true }),
+    anuladoPorId: integer("anulado_por_id").references(() => usuarios.id),
+    anuladoPorNombre: text("anulado_por_nombre"),
+    motivoAnulacion: text("motivo_anulacion"),
+
+    /**
+     * En una correccion, el movimiento anulado al que este reemplaza.
+     *
+     * Corregir es anular y rehacer en un solo paso: el original queda anulado
+     * y este ocupa su lugar con los datos correctos. Lleva el mismo tipo, el
+     * mismo autor y la misma hora que el original -la carga paso a las 10:14,
+     * aunque se haya corregido a las 10:42-, asi que para cualquier reporte es
+     * sencillamente la carga de ese dia. La hora de la correccion queda en el
+     * `anuladoEn` del original.
+     */
+    reemplazaA: integer("reemplaza_a").references(
+      (): AnyPgColumn => movimientos.id,
+    ),
   },
   (t) => [
     index("movimientos_secadero_idx").on(t.secaderoId),
     index("movimientos_creado_idx").on(t.creadoEn),
     index("movimientos_tipo_idx").on(t.tipo),
+    index("movimientos_reemplaza_idx").on(t.reemplazaA),
   ],
 );
 

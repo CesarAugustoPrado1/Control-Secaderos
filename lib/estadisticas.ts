@@ -24,6 +24,7 @@ import {
 } from "./db/schema";
 import { ETIQUETA_MOVIMIENTO } from "./estados";
 import { finDeHoy } from "./rangos";
+import { vigente } from "./vigencia";
 
 export type Rango = { desde: Date; hasta: Date };
 
@@ -39,8 +40,19 @@ export function rangoDeDias(dias: number): Rango {
   return { desde, hasta };
 }
 
+/**
+ * Rango de fechas de los movimientos, y solo los vigentes: ver lib/vigencia.ts.
+ *
+ * Va aca adentro y no repetido en cada consulta porque TODAS las de este
+ * archivo suman, y el filtro de anulados que se olvida en una sola alcanza
+ * para que una carga corregida cuente dos veces en esa estadistica.
+ */
 const enRango = (r: Rango) =>
-  and(gte(movimientos.creadoEn, r.desde), lte(movimientos.creadoEn, r.hasta));
+  and(
+    gte(movimientos.creadoEn, r.desde),
+    lte(movimientos.creadoEn, r.hasta),
+    vigente(),
+  );
 
 const enRangoCarrusel = (r: Rango) =>
   and(
@@ -642,6 +654,8 @@ export async function usoDelHorno(
              end as arranca
       from movimientos
       where tipo = 'entrada_horno'
+        -- Vigentes solamente: ver lib/vigencia.ts.
+        and anulado_en is null
         and creado_en >= ${rango.desde.toISOString()}::timestamptz
         and creado_en <= ${rango.hasta.toISOString()}::timestamptz
     ),
@@ -664,6 +678,7 @@ export async function usoDelHorno(
                select distinct on (m.secadero_id) m.estado_hasta
                from movimientos m
                where m.creado_en < h.inicio
+                 and m.anulado_en is null
                order by m.secadero_id, m.creado_en desc, m.id desc
              ) u where u.estado_hasta = 'humedo'
            )::text as habia_esperando
@@ -778,6 +793,10 @@ export async function resumenDevoluciones(
       select id, secadero_id, tipo, duracion_min, creado_en,
              lead(tipo) over (partition by secadero_id order by id) as siguiente
       from movimientos
+      -- Los anulados se sacan ANTES de calcular el siguiente, no despues: si
+      -- no, una salida seguida de una devolucion anulada contaria como
+      -- devuelta. Ver lib/vigencia.ts.
+      where anulado_en is null
     )
     select
       count(*) filter (where siguiente = 'devolucion_horno')::text as ciclos_devueltos,

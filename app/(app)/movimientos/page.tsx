@@ -1,5 +1,7 @@
+import Link from "next/link";
 import { requerirRol } from "@/lib/auth";
 import {
+  corregiblesPara,
   listarMovimientos,
   todosLosSecaderos,
   todosLosUsuarios,
@@ -48,7 +50,7 @@ export default async function PaginaMovimientos({
 }: {
   searchParams: Promise<Busqueda>;
 }) {
-  await requerirRol("admin", "auditor");
+  const sesion = await requerirRol("admin", "auditor");
   const q = await searchParams;
 
   const [{ items, total, pagina, paginas }, secaderos, usuarios] =
@@ -60,10 +62,17 @@ export default async function PaginaMovimientos({
         desde: comoFecha(q.desde, false),
         hasta: comoFecha(q.hasta, true),
         pagina: q.pagina ? Number(q.pagina) : 1,
+        // El historial es la constancia completa: lo anulado se muestra,
+        // tachado y con quien lo anulo, en lugar de desaparecer.
+        incluirAnulados: true,
       }),
       todosLosSecaderos(),
       todosLosUsuarios(),
     ]);
+
+  const corregibles = new Set(
+    await corregiblesPara(items, { uid: sesion.uid, rol: sesion.rol }),
+  );
 
   const parametros = new URLSearchParams(
     Object.entries(q).filter(([k, v]) => v && k !== "pagina") as [
@@ -193,10 +202,33 @@ export default async function PaginaMovimientos({
             {items.map((m) => {
               const placas = m.lineas.reduce((a, l) => a + l.cantidad, 0);
               const rotas = m.lineas.reduce((a, l) => a + l.desperdicio, 0);
+              const anulado = m.anuladoEn !== null;
 
               return (
-                <li key={m.id} className="tarjeta p-3.5">
-                  <div className="flex flex-wrap items-center gap-2">
+                <li
+                  key={m.id}
+                  className={`tarjeta p-3.5 ${anulado ? "bg-slate-50 opacity-70" : ""}`}
+                >
+                  {/* El anulado queda a la vista y tachado, no borrado: el
+                      error tambien es un dato, y sin el no se entiende por
+                      que su reemplazo dice otra cosa. */}
+                  {anulado && (
+                    <p className="mb-2 rounded-lg bg-red-50 px-3 py-1.5 text-xs text-red-800 ring-1 ring-red-200">
+                      <strong className="font-bold">ANULADO</strong> por{" "}
+                      {m.anuladoPorNombre} · {fechaHora(m.anuladoEn!)}
+                      {m.motivoAnulacion && <> · “{m.motivoAnulacion}”</>}
+                    </p>
+                  )}
+                  {m.corrige && (
+                    <p className="mb-2 rounded-lg bg-amber-50 px-3 py-1.5 text-xs text-amber-900 ring-1 ring-amber-200">
+                      <strong className="font-bold">Corrección</strong> de un
+                      movimiento anulado: antes {numero(m.corrige.placas)} placas
+                      {m.corrige.rotas > 0 && ` y ${numero(m.corrige.rotas)} rotas`}
+                    </p>
+                  )}
+                  <div
+                    className={`flex flex-wrap items-center gap-2 ${anulado ? "line-through decoration-slate-400" : ""}`}
+                  >
                     <span
                       className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-900 text-sm font-bold tabular-nums text-white`}
                     >
@@ -255,6 +287,14 @@ export default async function PaginaMovimientos({
                         {numero(placas)} placas
                         {rotas > 0 && ` · ${numero(rotas)} rotas`}
                       </p>
+                      {corregibles.has(m.id) && (
+                        <Link
+                          href={`/corregir/${m.id}?volver=/movimientos`}
+                          className="mt-1.5 inline-block rounded-lg px-2.5 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-300 hover:bg-slate-50"
+                        >
+                          Corregir
+                        </Link>
+                      )}
                     </div>
                   </div>
 

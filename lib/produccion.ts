@@ -8,6 +8,7 @@ import {
   tipos,
 } from "./db/schema";
 import { rangoDeFecha, ZONA_SQL } from "./rangos";
+import { vigente } from "./vigencia";
 import { SECTORES, SECTORES_MANUALES, type SectorResumen } from "./sectores";
 
 /**
@@ -113,6 +114,7 @@ export async function resumenDelDia(fecha: string): Promise<ResumenDelDia> {
         and(
           gte(movimientos.creadoEn, desde),
           lte(movimientos.creadoEn, hasta),
+          vigente(),
           inArray(movimientos.tipo, [
             "carga",
             "entrada_horno",
@@ -149,6 +151,7 @@ export async function resumenDelDia(fecha: string): Promise<ResumenDelDia> {
         and(
           gte(movimientos.creadoEn, desde),
           lte(movimientos.creadoEn, hasta),
+          vigente(),
           inArray(movimientos.tipo, ["carga", "salida_horno", "descarga"]),
         ),
       )
@@ -298,6 +301,9 @@ export async function diasConMovimiento(dias = 14): Promise<string[]> {
     select fecha::text as fecha from (
       select (creado_en at time zone ${ZONA_SQL})::date as fecha
         from movimientos where creado_en >= ${desde.toISOString()}::timestamptz
+          -- Vigentes solamente: ver lib/vigencia.ts. Un dia cuyo unico
+          -- movimiento se anulo no tuvo actividad.
+          and anulado_en is null
       union
       select (creado_en at time zone ${ZONA_SQL})::date as fecha
         from roturas_carrusel where creado_en >= ${desde.toISOString()}::timestamptz

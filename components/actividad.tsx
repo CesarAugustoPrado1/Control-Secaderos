@@ -1,7 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import type { MovimientoVista } from "@/lib/consultas";
+import type { TipoMovimiento } from "@/lib/db/schema";
+import { COLOR_MOVIMIENTO, ETIQUETA_MOVIMIENTO_CORTA } from "@/lib/estados";
 import { hora, numero } from "@/lib/formato";
 import { MarcasSecadero } from "@/components/marcas-secadero";
 import { ChipTipo, Modelos } from "@/components/ui";
@@ -28,6 +31,11 @@ import { ChipTipo, Modelos } from "@/components/ui";
  * Por tipo no hace falta: el tipo ya se ve en cada fila, y saber cuantos
  * grandes y cuantos chicos se cargaron no cambia nada de lo que el puesto
  * decide.
+ *
+ * Es tambien donde se corrige: cada movimiento propio que todavia se puede
+ * tocar lleva su boton, y lo ya corregido muestra lo que decia antes. La
+ * regla de quien y hasta cuando vive en lib/correccion.ts; esta lista solo
+ * recibe los ids que el servidor ya habilito.
  */
 
 type Vista = "numero" | "modelo";
@@ -42,14 +50,32 @@ export function Actividad({
   dia,
   movimientos,
   vacio,
+  corregibles = [],
+  volverA,
+  mixta = false,
+  sinTitulo = false,
 }: {
   titulo: string;
   /** "Hoy", "Ayer", "lun 14/09": el dia que se esta mirando. */
   dia: string;
   movimientos: MovimientoVista[];
   vacio: string;
+  /** Ids que este usuario puede corregir ahora. Ver `corregiblesPara`. */
+  corregibles?: number[];
+  /** A que pantalla vuelve el operario despues de corregir. */
+  volverA?: string;
+  /**
+   * La lista junta movimientos de distinto tipo -el horno: entradas, salidas y
+   * secados al sol-. Cada fila lleva su tipo, y el total no suma placas: sumar
+   * lo que entro con lo que salio no es ningun numero. Tampoco hay vista por
+   * modelo, por la misma razon.
+   */
+  mixta?: boolean;
+  /** Para cuando la lista va adentro de algo que ya tiene titulo. */
+  sinTitulo?: boolean;
 }) {
   const [vista, setVista] = useState<Vista>("numero");
+  const habilitados = useMemo(() => new Set(corregibles), [corregibles]);
 
   const totalPlacas = movimientos.reduce(
     (a, m) => a + m.lineas.reduce((b, l) => b + l.cantidad, 0),
@@ -60,11 +86,19 @@ export function Actividad({
     0,
   );
 
+  const porTipo = useMemo(() => {
+    const m = new Map<TipoMovimiento, number>();
+    for (const mov of movimientos) m.set(mov.tipo, (m.get(mov.tipo) ?? 0) + 1);
+    return [...m.entries()];
+  }, [movimientos]);
+
   return (
     <section>
-      <h2 className="mb-3 text-base font-bold text-slate-900">
-        {titulo} · {dia}
-      </h2>
+      {!sinTitulo && (
+        <h2 className="mb-3 text-base font-bold text-slate-900">
+          {titulo} · {dia}
+        </h2>
+      )}
 
       {movimientos.length === 0 ? (
         <p className="tarjeta px-4 py-10 text-center text-sm text-slate-500">
@@ -73,18 +107,33 @@ export function Actividad({
       ) : (
         <>
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-            <p className="text-sm text-slate-500">
-              {movimientos.length}{" "}
-              {movimientos.length === 1 ? "secadero" : "secaderos"} ·{" "}
-              {numero(totalPlacas)} placas
-              {totalRotas > 0 && (
-                <span className="font-semibold text-red-600">
-                  {" "}
-                  · {numero(totalRotas)} rotas
-                </span>
-              )}
-            </p>
+            {mixta ? (
+              <p className="text-sm text-slate-500">
+                {porTipo
+                  .map(([tipo, n]) => `${n} ${ETIQUETA_MOVIMIENTO_CORTA[tipo].toLowerCase()}`)
+                  .join(" · ")}
+                {totalRotas > 0 && (
+                  <span className="font-semibold text-red-600">
+                    {" "}
+                    · {numero(totalRotas)} rotas
+                  </span>
+                )}
+              </p>
+            ) : (
+              <p className="text-sm text-slate-500">
+                {movimientos.length}{" "}
+                {movimientos.length === 1 ? "secadero" : "secaderos"} ·{" "}
+                {numero(totalPlacas)} placas
+                {totalRotas > 0 && (
+                  <span className="font-semibold text-red-600">
+                    {" "}
+                    · {numero(totalRotas)} rotas
+                  </span>
+                )}
+              </p>
+            )}
 
+            {!mixta && (
             <div
               role="tablist"
               aria-label="Cómo ver lo hecho"
@@ -107,10 +156,16 @@ export function Actividad({
                 </button>
               ))}
             </div>
+            )}
           </div>
 
-          {vista === "numero" ? (
-            <PorNumero movimientos={movimientos} />
+          {vista === "numero" || mixta ? (
+            <PorNumero
+              movimientos={movimientos}
+              habilitados={habilitados}
+              volverA={volverA}
+              mixta={mixta}
+            />
           ) : (
             <PorModelo movimientos={movimientos} />
           )}
@@ -121,7 +176,17 @@ export function Actividad({
 }
 
 /** Secadero por secadero, en el orden en que salieron. */
-function PorNumero({ movimientos }: { movimientos: MovimientoVista[] }) {
+function PorNumero({
+  movimientos,
+  habilitados,
+  volverA,
+  mixta,
+}: {
+  movimientos: MovimientoVista[];
+  habilitados: Set<number>;
+  volverA?: string;
+  mixta: boolean;
+}) {
   return (
     <ul className="space-y-2">
       {movimientos.map((m, i) => {
@@ -141,6 +206,11 @@ function PorNumero({ movimientos }: { movimientos: MovimientoVista[] }) {
             </span>
 
             <div className="min-w-0 flex-1">
+              {mixta && (
+                <span className={`chip mb-1 ${COLOR_MOVIMIENTO[m.tipo]}`}>
+                  {ETIQUETA_MOVIMIENTO_CORTA[m.tipo]}
+                </span>
+              )}
               <Modelos nombres={cargados.map((l) => l.productoNombre)} />
 
               <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-xs text-slate-500">
@@ -176,16 +246,62 @@ function PorNumero({ movimientos }: { movimientos: MovimientoVista[] }) {
                   productos={cargados.length}
                 />
               )}
+              {m.corrige && <MarcaCorregido antes={m.corrige} placas={placas} rotas={rotas} />}
               <p className="text-[11px] text-slate-400">{m.usuarioNombre}</p>
             </div>
 
-            <span className="shrink-0 text-[11px] tabular-nums text-slate-400">
-              {hora(m.creadoEn)}
-            </span>
+            <div className="flex shrink-0 flex-col items-end gap-2">
+              <span className="text-[11px] tabular-nums text-slate-400">
+                {hora(m.creadoEn)}
+              </span>
+              {habilitados.has(m.id) && (
+                <Link
+                  href={`/corregir/${m.id}${volverA ? `?volver=${encodeURIComponent(volverA)}` : ""}`}
+                  className="rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-600 ring-1 ring-slate-300 hover:bg-slate-50"
+                >
+                  Corregir
+                </Link>
+              )}
+            </div>
           </li>
         );
       })}
     </ul>
+  );
+}
+
+/**
+ * Lo que decia el movimiento antes de corregirse: "antes 36 placas".
+ *
+ * Va a la vista en la lista del dia, y no solo en el historial del admin, para
+ * que la correccion sea creible de un vistazo. Un numero que cambio sin dejar
+ * rastro es lo que hace desconfiar de todos los demas.
+ */
+function MarcaCorregido({
+  antes,
+  placas,
+  rotas,
+}: {
+  antes: NonNullable<MovimientoVista["corrige"]>;
+  placas: number;
+  rotas: number;
+}) {
+  const cambios: string[] = [];
+  if (antes.placas !== placas) cambios.push(`${numero(antes.placas)} placas`);
+  if (antes.rotas !== rotas) {
+    cambios.push(
+      antes.rotas === 0
+        ? "sin rotas"
+        : `${numero(antes.rotas)} ${antes.rotas === 1 ? "rota" : "rotas"}`,
+    );
+  }
+  return (
+    <p className="mt-1 rounded-md bg-amber-50 px-2 py-1 text-[11px] text-amber-900 ring-1 ring-amber-200">
+      <strong className="font-bold">Corregido</strong>
+      {cambios.length > 0 && <> · antes {cambios.join(" y ")}</>}
+      {antes.motivo && <> · “{antes.motivo}”</>}
+      {antes.por && <span className="text-amber-700"> ({antes.por})</span>}
+    </p>
   );
 }
 

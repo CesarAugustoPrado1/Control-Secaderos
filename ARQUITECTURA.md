@@ -103,7 +103,71 @@ Corolario práctico: las consultas de estadística **filtran explícitamente por
 tipo de movimiento**. Agregar un tipo nuevo lo deja fuera de los cálculos viejos
 automáticamente, que es el comportamiento correcto por defecto.
 
-### 3.3 Roles
+### 3.3 Corregir un error: quién, cuándo, cómo
+
+Todo movimiento del piso se puede corregir, con **una sola regla**, que es la
+que se le explica al operario:
+
+> **Cada uno puede corregir lo último que hizo con un secadero, mientras nadie
+> lo haya tocado después, y en el mismo día.**
+
+- **Solo el autor.** Si dos operarios comparten turno y uno corrige la carga
+  del otro, la responsabilidad se diluye.
+- **Mientras nadie lo tocó después.** La ventana se cierra sola cuando el
+  siguiente puesto trabaja encima: si el hornero ya metió el secadero, registró
+  roturas sobre ese contenido, y cambiar la carga es reescribir su trabajo. Se
+  mide como "es el último movimiento **vigente** del secadero", por id y con el
+  secadero bloqueado.
+- **Mismo día.** Cambiar los números de ayer después de que el administrativo
+  leyó el resumen es justo lo que no hay que permitir.
+- **El admin** no tiene las restricciones de autor ni de día. La de "nadie lo
+  tocó después" no la saltea nadie: no es un permiso, es lo que hace que
+  deshacer un paso tenga sentido. Pasado ese punto queda la corrección forzada
+  de Administración (`correccion`), que arregla el secadero pero **no** los
+  reportes.
+
+Vale para los seis tipos del piso: carga, entrada y salida de horno, secado al
+sol, descarga y devolución. En la carga se corrige qué y cuánto se cargó; en
+todos los demás, las roturas (el contenido de entrada vino del paso anterior,
+que es de otro). Y cualquiera se puede **anular** entero: es para lo que no se
+arregla cambiando un número, como cargar el 45 cuando era el 54.
+
+**Cómo funciona.** Corregir es anular y rehacer en una sola transacción:
+
+1. El original **no se borra ni se edita**: queda con `anulado_en`,
+   `anulado_por` y `motivo_anulacion`. Sus datos siguen diciendo lo que se
+   registró (el 36), porque el error también es un dato.
+2. El secadero se restaura a como estaba **antes** de ese movimiento. No hace
+   falta mirar nada más que el propio movimiento, gracias a la convención de
+   `movimiento_lineas`: lo que había antes es `cantidad + desperdicio`, producto
+   por producto. El reloj se restaura con `creado_en − duracion_min`.
+3. Si es una corrección, se rehace el mismo movimiento con los datos buenos,
+   pasando por las **mismas validaciones** que la primera vez. El reemplazo
+   lleva el mismo tipo, **la hora y el autor del original**, y `reemplaza_a`
+   apuntando a él.
+
+Por el punto 3, para cualquier reporte el reemplazo es sencillamente la carga
+de ese día, de esa persona. Por eso **toda consulta que sume movimientos filtra
+los anulados** con `vigente()` (`lib/vigencia.ts`), o con `anulado_en is null`
+en el SQL crudo. Si una consulta nueva se lo olvida, una carga corregida cuenta
+dos veces. Las que muestran historia —el listado del admin, el CSV— los traen
+marcados, con `incluirAnulados`.
+
+Anular una salida de horno valida el cupo, porque devuelve el secadero al
+horno. Una corrección que no cambia nada se rechaza, para no dejar en el
+historial un error que no existió.
+
+**Prevenir antes que corregir.** Una carga incompleta pide confirmación con el
+número grande (*"Vas a cargar 36 de 204 en el secadero 3. ¿Es correcto?"*). La
+completa, que es casi todo el día, no pregunta: una confirmación en cada
+movimiento se termina tocando sin leer. El botón lleva siempre el total y el
+número de secadero.
+
+La regla vive en `lib/correccion.ts` (puro, sin base), la mecánica en
+`lib/acciones/motor-correccion.ts` y las acciones en
+`lib/acciones/correcciones.ts`.
+
+### 3.4 Roles
 
 | Rol | Qué hace |
 | --- | --- |
@@ -144,7 +208,8 @@ productos             nombre, tipo_id, activo
 secaderos             numero, tipo_id, estado, activo, estado_desde
 secadero_contenido    secadero_id, producto_id, cantidad     (snapshot vivo)
 movimientos           secadero_id + snapshots, tipo, estado_desde, estado_hasta,
-                      usuario_id + nombre, duracion_min, nota, creado_en
+                      usuario_id + nombre, duracion_min, nota, creado_en,
+                      anulado_en + anulado_por + motivo_anulacion, reemplaza_a
 movimiento_lineas     movimiento_id, producto_id + nombre,
                       cantidad, desperdicio, motivo_id + nombre
 roturas_carrusel      producto_id + nombre, cantidad, motivo, usuario, creado_en
@@ -545,6 +610,12 @@ arregla filas viejas.
 
 → Después de toda migración, preguntarse explícitamente: *¿qué filas ya
 existentes quedan con el valor equivocado?*
+
+Un caso donde la respuesta es "ninguna": las columnas de anulación
+(`anulado_en` y compañía) nacen en `null` para todo el historial, y `null`
+significa justamente "vigente", que es lo que todos esos movimientos son. Hay
+que pensar la pregunta igual: que no haga falta rellenar nada es una propiedad
+de cómo se eligió el valor por defecto, no una casualidad.
 
 ### 9.5 Orden de despliegue
 

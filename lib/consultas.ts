@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, desc, eq, inArray, gte, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, gte, lte, max, sql } from "drizzle-orm";
 import { db } from "./db";
 import {
   CONFIG_POR_DEFECTO,
@@ -19,8 +19,12 @@ import {
   tipos,
   usuarios,
   type Estado,
+  type TipoMovimiento,
   type TipoYeso,
 } from "./db/schema";
+import { esCorregible, puedeCorregir, type Quien } from "./correccion";
+import { fechaLocal } from "./rangos";
+import { vigente } from "./vigencia";
 
 /**
  * Lee los parametros de la base y completa con los valores por defecto lo que
@@ -318,13 +322,17 @@ export async function conteoPorEstado(): Promise<Record<Estado, number>> {
  * Como los ids son seriales, comparar ids alcanza para ordenar en el tiempo.
  */
 export async function secaderosEnReproceso(): Promise<Set<number>> {
+  // Vigentes solamente, en las dos puntas: una devolucion anulada no marca el
+  // secadero, y una carga anulada no corta la marca. Ver lib/vigencia.ts.
   const filas = await db.execute<{ secadero_id: number }>(sql`
     select d.secadero_id
     from movimientos d
     where d.tipo = 'devolucion_horno'
+      and d.anulado_en is null
       and d.id > coalesce((
         select max(c.id) from movimientos c
         where c.secadero_id = d.secadero_id and c.tipo = 'carga'
+          and c.anulado_en is null
       ), 0)
     group by d.secadero_id
   `);
@@ -338,7 +346,14 @@ export type MovimientoVista = Awaited<
 export type FiltroMovimientos = {
   secaderoId?: number;
   usuarioId?: number;
-  tipo?: string;
+  /** Uno o varios: la actividad del horno junta entradas, salidas y al sol. */
+  tipo?: string | string[];
+  /**
+   * El historial completo -el listado del admin, el CSV- los trae marcados.
+   * Las pantallas del piso no: ahi la lista es lo que cuenta, y un renglon
+   * anulado al lado de su reemplazo confunde mas de lo que informa.
+   */
+  incluirAnulados?: boolean;
   /**
    * Acota a un circuito: `true` solo los tipos de llenado manual, `false` solo
    * los del principal. Sin definir, los dos, que es lo que quiere el historial
@@ -366,10 +381,14 @@ export async function listarMovimientos(filtro: FiltroMovimientos = {}) {
     condiciones.push(eq(movimientos.secaderoId, filtro.secaderoId));
   if (filtro.usuarioId)
     condiciones.push(eq(movimientos.usuarioId, filtro.usuarioId));
-  if (filtro.tipo)
-    condiciones.push(
-      eq(movimientos.tipo, filtro.tipo as (typeof movimientos.tipo.enumValues)[number]),
-    );
+  type TipoMov = (typeof movimientos.tipo.enumValues)[number];
+  if (Array.isArray(filtro.tipo)) {
+    if (filtro.tipo.length)
+      condiciones.push(inArray(movimientos.tipo, filtro.tipo as TipoMov[]));
+  } else if (filtro.tipo) {
+    condiciones.push(eq(movimientos.tipo, filtro.tipo as TipoMov));
+  }
+  if (!filtro.incluirAnulados) condiciones.push(vigente());
   if (filtro.desde) condiciones.push(gte(movimientos.creadoEn, filtro.desde));
   if (filtro.hasta) condiciones.push(lte(movimientos.creadoEn, filtro.hasta));
   // coalesce y no eq a secas: el join del tipo es izquierdo -el tipo pudo
@@ -427,6 +446,46 @@ export async function listarMovimientos(filtro: FiltroMovimientos = {}) {
     porMovimiento.set(l.movimientoId, lista);
   }
 
+  // De cada reemplazo, lo que decia el original: "antes 36 placas". Es lo que
+  // hace creible la correccion a simple vista, sin ir a buscar el historial.
+  const reemplazados = filas
+    .map((f) => f.reemplazaA)
+    .filter((id): id is number => id !== null);
+  const originales = new Map<
+    number,
+    {
+      placas: number;
+      rotas: number;
+      motivo: string | null;
+      por: string | null;
+      en: Date | null;
+    }
+  >();
+  if (reemplazados.length) {
+    const orig = await db
+      .select({
+        id: movimientos.id,
+        motivo: movimientos.motivoAnulacion,
+        por: movimientos.anuladoPorNombre,
+        en: movimientos.anuladoEn,
+        placas: sql<string>`coalesce(sum(${movimientoLineas.cantidad}), 0)`,
+        rotas: sql<string>`coalesce(sum(${movimientoLineas.desperdicio}), 0)`,
+      })
+      .from(movimientos)
+      .leftJoin(movimientoLineas, eq(movimientoLineas.movimientoId, movimientos.id))
+      .where(inArray(movimientos.id, reemplazados))
+      .groupBy(movimientos.id);
+    for (const o of orig) {
+      originales.set(o.id, {
+        placas: Number(o.placas),
+        rotas: Number(o.rotas),
+        motivo: o.motivo,
+        por: o.por,
+        en: o.en,
+      });
+    }
+  }
+
   return {
     total,
     pagina,
@@ -435,8 +494,63 @@ export async function listarMovimientos(filtro: FiltroMovimientos = {}) {
     items: filas.map((m) => ({
       ...m,
       lineas: porMovimiento.get(m.id) ?? [],
+      corrige: m.reemplazaA !== null ? (originales.get(m.reemplazaA) ?? null) : null,
     })),
   };
+}
+
+/**
+ * Cuales de estos movimientos puede corregir `quien`, ahora.
+ *
+ * Se calcula en el servidor y viaja como lista de ids: la regla necesita saber
+ * cual es el ultimo movimiento vigente de cada secadero, y eso no lo tiene la
+ * pantalla. Es una sugerencia para mostrar el boton, no un permiso: la accion
+ * lo vuelve a validar con el secadero bloqueado, porque entre que se dibujo la
+ * pantalla y el toque el hornero pudo haber metido el secadero.
+ */
+export async function corregiblesPara(
+  movs: {
+    id: number;
+    secaderoId: number;
+    tipo: TipoMovimiento;
+    usuarioId: number;
+    creadoEn: Date;
+    anuladoEn: Date | null;
+  }[],
+  quien: Quien,
+): Promise<number[]> {
+  const candidatos = movs.filter((m) => m.anuladoEn === null && esCorregible(m.tipo));
+  if (candidatos.length === 0) return [];
+
+  const ultimos = await db
+    .select({ secaderoId: movimientos.secaderoId, id: max(movimientos.id) })
+    .from(movimientos)
+    .where(
+      and(
+        inArray(movimientos.secaderoId, [...new Set(candidatos.map((m) => m.secaderoId))]),
+        vigente(),
+      ),
+    )
+    .groupBy(movimientos.secaderoId);
+  const ultimoDe = new Map(ultimos.map((u) => [u.secaderoId, u.id]));
+
+  const hoy = fechaLocal();
+  return candidatos
+    .filter(
+      (m) =>
+        puedeCorregir(
+          {
+            tipo: m.tipo,
+            usuarioId: m.usuarioId,
+            fecha: fechaLocal(m.creadoEn),
+            anulado: false,
+            esUltimo: ultimoDe.get(m.secaderoId) === m.id,
+          },
+          quien,
+          hoy,
+        ).ok,
+    )
+    .map((m) => m.id);
 }
 
 /** Ultimos movimientos de un secadero, para el detalle. */
@@ -530,4 +644,65 @@ export async function consumoDeYeso(
     )
     .orderBy(desc(consumoYeso.creadoEn))
     .limit(limite);
+}
+
+/**
+ * Todo lo que necesita la pantalla de corregir un movimiento.
+ *
+ * Devuelve el permiso con su motivo en vez de fallar: si el operario llega por
+ * un link viejo -la pantalla estuvo abierta y el hornero ya metio el
+ * secadero-, lo que sirve es decirle por que ya no se puede, no un error.
+ */
+export async function datosDeCorreccion(id: number, quien: Quien) {
+  const [mov] = await db
+    .select()
+    .from(movimientos)
+    .where(eq(movimientos.id, id))
+    .limit(1);
+  if (!mov) return null;
+
+  const [lineas, secadero, [ultimo]] = await Promise.all([
+    db
+      .select()
+      .from(movimientoLineas)
+      .where(eq(movimientoLineas.movimientoId, id))
+      .orderBy(asc(movimientoLineas.id)),
+    secaderoPorId(mov.secaderoId),
+    db
+      .select({ id: max(movimientos.id) })
+      .from(movimientos)
+      .where(and(eq(movimientos.secaderoId, mov.secaderoId), vigente())),
+  ]);
+  if (!secadero) return null;
+
+  const permiso = puedeCorregir(
+    {
+      tipo: mov.tipo,
+      usuarioId: mov.usuarioId,
+      fecha: fechaLocal(mov.creadoEn),
+      anulado: mov.anuladoEn !== null,
+      esUltimo: ultimo?.id === mov.id,
+    },
+    quien,
+    fechaLocal(),
+  );
+
+  // Para corregir una carga: los activos del tipo, mas los que ya estaban en
+  // la carga aunque se hayan suspendido despues. Sin esos, el formulario no
+  // podria mostrar lo que se cargo.
+  const activos = await productosActivos(secadero.tipoId);
+  const nombres = new Map(activos.map((p) => [p.id, p.nombre]));
+  for (const l of lineas) {
+    if (!nombres.has(l.productoId)) nombres.set(l.productoId, l.productoNombre);
+  }
+
+  return {
+    movimiento: mov,
+    lineas,
+    secadero,
+    permiso,
+    modelos: [...nombres.entries()]
+      .map(([id, nombre]) => ({ id, nombre }))
+      .sort((a, b) => a.nombre.localeCompare(b.nombre, "es")),
+  };
 }
