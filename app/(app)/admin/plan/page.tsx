@@ -18,7 +18,7 @@ import {
 import { EditorNotasHorno } from "./notas-horno";
 import { EditorPlan } from "./editor";
 import { Semana, type Fila } from "./semana";
-import { RepetirDia } from "./repetir";
+import { RepetirDia, type Parte } from "./repetir";
 
 export const metadata = { title: "Plan · Administración" };
 export const dynamic = "force-dynamic";
@@ -87,27 +87,33 @@ export default async function PaginaAdminPlan({
         : Promise.resolve(undefined),
     ]);
 
-  /** Lo que tiene un dia de la semana, en renglones cortos para "Repetir". */
-  function contenidoDelDia(f: string): string[] {
+  /** Las partes que tiene un dia de la semana, para elegir que copiar. */
+  function partesDelDia(f: string): { parte: Parte; detalle: string }[] {
     const r = (sector: Sector) =>
       resumen.find((x) => x.fecha === f && x.sector === sector);
     const car = r("carrusel");
     const pal = r("paletizado");
-    const partes: string[] = [];
-    if (car || moldesSemana.includes(f)) {
-      partes.push(
-        "Carrusel" +
-          (car ? ` ${car.secaderos} sec.` : "") +
-          (moldesSemana.includes(f) ? " + moldes" : ""),
-      );
+    const partes: { parte: Parte; detalle: string }[] = [];
+    if (moldesSemana.includes(f)) {
+      partes.push({ parte: "moldes", detalle: "El set de moldes pedido ese día" });
     }
-    if (notasSemana.some((n) => n.fecha === f)) partes.push("Horno notas");
+    if (car) {
+      partes.push({ parte: "carrusel", detalle: `${car.secaderos} secaderos pedidos` });
+    }
+    if (notasSemana.some((n) => n.fecha === f)) {
+      partes.push({ parte: "horno", detalle: "Indicaciones para cargar y descargar" });
+    }
     if (pal) {
-      partes.push(
-        "Paletizado" +
-          (pal.secaderos ? ` ${pal.secaderos} sec.` : "") +
-          (pal.palets ? ` ${pal.palets} palets` : ""),
-      );
+      partes.push({
+        parte: "paletizado",
+        detalle:
+          [
+            pal.secaderos ? `${pal.secaderos} secaderos` : null,
+            pal.palets ? `${pal.palets} palets` : null,
+          ]
+            .filter(Boolean)
+            .join(" · ") || "Plan de paletizado",
+      });
     }
     return partes;
   }
@@ -130,7 +136,7 @@ export default async function PaginaAdminPlan({
           key={`repetir-${diaElegido}`}
           origen={diaElegido}
           hoy={hoy}
-          contenido={contenidoDelDia(diaElegido)}
+          disponibles={partesDelDia(diaElegido)}
         />
       )}
 

@@ -8,27 +8,36 @@ import { useAccion } from "@/components/usar-accion";
 import { Plegable } from "@/components/plegable";
 import { Aviso } from "@/components/ui";
 
+export type Parte = "moldes" | "carrusel" | "horno" | "paletizado";
+
+const ETIQUETA_PARTE: Record<Parte, string> = {
+  moldes: "Set de moldes",
+  carrusel: "Secaderos del carrusel",
+  horno: "Notas del horno",
+  paletizado: "Paletizado",
+};
+
 /**
- * Repetir el dia que se esta mirando en otros dias: mañana, pasado, el resto
- * de la semana o una fecha suelta.
+ * Repetir partes del dia que se esta mirando en otros dias: mañana, pasado,
+ * el resto de la semana o una fecha suelta.
  *
- * Copia el dia completo -carrusel con sus moldes, notas del horno y
- * paletizado con sus palets-, que es lo que se quiere cuando "mañana es igual
- * que hoy" o cuando se vuelve a un objetivo de hace unas semanas: se navega
- * hasta ese dia y se lo repite.
+ * Cada parte se elige por separado y ninguna viene marcada: lo normal es
+ * dejar el mismo set de moldes toda la semana y pedirle a paletizado algo
+ * distinto cada dia, asi que copiar "todo" de un toque haria justo lo que no
+ * se quiere. En el dia destino se reemplaza solo lo elegido.
  *
- * Si algun dia elegido ya tiene algo cargado, se pregunta antes de pisarlo,
- * dia por dia.
+ * Si algun dia elegido ya tiene cargado algo de eso, se pregunta antes de
+ * pisarlo, dia por dia.
  */
 export function RepetirDia({
   origen,
   hoy,
-  contenido,
+  disponibles,
 }: {
   origen: string;
   hoy: string;
-  /** Lo que tiene el dia de origen, en renglones cortos. Vacio = nada. */
-  contenido: string[];
+  /** Las partes que tiene el dia de origen, con un detalle corto. */
+  disponibles: { parte: Parte; detalle: string }[];
 }) {
   const router = useRouter();
   const { ejecutar, enviando, error, setError } = useAccion();
@@ -42,6 +51,8 @@ export function RepetirDia({
   const [ocupados, setOcupados] = useState<string[] | null>(null);
   const [pisar, setPisar] = useState<Set<string>>(new Set());
   const [aviso, setAviso] = useState<string | null>(null);
+  const [partes, setPartes] = useState<Set<Parte>>(new Set());
+  const listaPartes = disponibles.map((d) => d.parte).filter((p) => partes.has(p));
 
   const lista = [...elegidos].sort();
   const aCopiar = ocupados ? lista.filter((f) => !ocupados.includes(f) || pisar.has(f)) : lista;
@@ -61,7 +72,7 @@ export function RepetirDia({
   async function revisar() {
     let conAlgo = null as string[] | null;
     const ok = await ejecutar(
-      () => revisarDestinos(lista),
+      () => revisarDestinos(lista, listaPartes),
       (d) => {
         conAlgo = d;
       },
@@ -79,7 +90,7 @@ export function RepetirDia({
       return;
     }
     await ejecutar(
-      () => repetirDia({ origen, destinos, pisar: pisarDias }),
+      () => repetirDia({ origen, destinos, partes: listaPartes, pisar: pisarDias }),
       ({ dias, omitidos }) => {
         setAviso(
           `Copiado a ${dias} ${dias === 1 ? "día" : "días"}.` +
@@ -94,22 +105,61 @@ export function RepetirDia({
     );
   }
 
-  if (contenido.length === 0) return null;
+  if (disponibles.length === 0) return null;
 
   return (
     <Plegable
       id="plan-repetir"
-      titulo={`Repetir ${etiquetaDia(origen)} en otros días`}
+      titulo={`Copiar de ${etiquetaDia(origen)} a otros días`}
       resumen={
         <span className="text-xs text-slate-500">
-          Copia el día completo: {contenido.join(" · ")}
+          Elegís qué copiar: {disponibles.map((d) => ETIQUETA_PARTE[d.parte].toLowerCase()).join(", ")}
         </span>
       }
     >
-      <p className="text-xs text-slate-500">
-        Cada día elegido queda igual a este. Las explicaciones de desvío no se
-        copian.
+      <p className="text-xs font-bold text-slate-700">1. ¿Qué copiás?</p>
+      <div className="mt-1.5 space-y-1.5">
+        {disponibles.map((d) => (
+          <label
+            key={d.parte}
+            className={`flex items-center gap-2.5 rounded-lg px-3 py-2.5 ring-1 ${
+              partes.has(d.parte)
+                ? "bg-blue-50 ring-blue-300"
+                : "bg-white ring-slate-200"
+            }`}
+          >
+            <input
+              type="checkbox"
+              className="h-5 w-5"
+              checked={partes.has(d.parte)}
+              disabled={enviando}
+              onChange={() => {
+                setError(null);
+                setAviso(null);
+                setOcupados(null);
+                setPartes((prev) => {
+                  const s = new Set(prev);
+                  if (s.has(d.parte)) s.delete(d.parte);
+                  else s.add(d.parte);
+                  return s;
+                });
+              }}
+            />
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-semibold text-slate-800">
+                {ETIQUETA_PARTE[d.parte]}
+              </span>
+              <span className="block text-xs text-slate-500">{d.detalle}</span>
+            </span>
+          </label>
+        ))}
+      </div>
+      <p className="mt-1.5 text-xs text-slate-500">
+        En cada día elegido se reemplaza sólo lo que tildes; lo demás de ese día
+        queda como está. Las explicaciones de desvío no se copian.
       </p>
+
+      <p className="mt-4 text-xs font-bold text-slate-700">2. ¿A qué días?</p>
 
       <div className="mt-3 flex flex-wrap gap-1.5">
         {proximos.map((f) => (
@@ -198,8 +248,9 @@ export function RepetirDia({
       {ocupados && ocupados.length > 0 && (
         <div className="mt-3 space-y-2 rounded-lg bg-amber-50 p-3 ring-1 ring-amber-300">
           <p className="text-xs font-bold text-amber-900">
-            Estos días ya tienen algo cargado. Tildá los que querés pisar; los
-            demás se dejan como están.
+            Estos días ya tienen cargado{" "}
+            {listaPartes.map((p) => ETIQUETA_PARTE[p].toLowerCase()).join(" o ")}.
+            Tildá los que querés pisar; los demás se dejan como están.
           </p>
           {ocupados.map((f) => (
             <label key={f} className="flex items-center gap-2 text-sm">
@@ -236,7 +287,7 @@ export function RepetirDia({
 
       <button
         type="button"
-        disabled={enviando || lista.length === 0}
+        disabled={enviando || lista.length === 0 || listaPartes.length === 0}
         onClick={() =>
           void (ocupados ? copiar([...pisar], aCopiar) : revisar())
         }
@@ -244,8 +295,10 @@ export function RepetirDia({
       >
         {enviando
           ? "Copiando…"
-          : lista.length === 0
-            ? "Elegí los días"
+          : listaPartes.length === 0
+            ? "Elegí qué copiar"
+            : lista.length === 0
+              ? "Elegí los días"
             : ocupados
               ? `Copiar a ${aCopiar.length} ${aCopiar.length === 1 ? "día" : "días"}`
               : `Repetir en ${lista.length} ${lista.length === 1 ? "día" : "días"}`}
