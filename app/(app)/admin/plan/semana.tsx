@@ -9,6 +9,7 @@ type Resumen = {
   sector: Sector;
   lineas: number;
   secaderos: number;
+  palets: number;
 };
 
 /** Las filas de la semana: los sectores con plan, mas las notas del horno. */
@@ -38,6 +39,7 @@ export function Semana({
   hoy,
   resumen,
   notasHorno,
+  moldes,
   diaElegido,
   filaElegida,
 }: {
@@ -47,12 +49,15 @@ export function Semana({
   resumen: Resumen[];
   /** Fechas de la semana que tienen notas para el horno. */
   notasHorno: string[];
+  /** Fechas de la semana con un set de moldes pedido. */
+  moldes: string[];
   diaElegido: string | null;
   filaElegida: Fila;
 }) {
   const buscar = (fecha: string, sector: Sector) =>
     resumen.find((r) => r.fecha === fecha && r.sector === sector);
   const conNotas = new Set(notasHorno);
+  const conMoldes = new Set(moldes);
 
   const correr = (dias: number) => {
     const d = new Date(`${inicio}T12:00:00-03:00`);
@@ -132,10 +137,27 @@ export function Semana({
                         : { valor: "—", detalle: "sin notas", color: null }
                       : (() => {
                           const r = buscar(f, s.clave);
+                          const cambiaMoldes =
+                            s.clave === "carrusel" && conMoldes.has(f);
+                          if (!r && cambiaMoldes) {
+                            return {
+                              valor: "⟳",
+                              detalle: "moldes",
+                              color:
+                                "bg-blue-50 text-blue-800 ring-1 ring-blue-300 hover:bg-blue-100",
+                            };
+                          }
+                          const soloPalets = r && r.secaderos === 0 && r.palets > 0;
                           return r
                             ? {
-                                valor: `${r.secaderos}`,
-                                detalle: "secaderos",
+                                valor: `${soloPalets ? r.palets : r.secaderos}`,
+                                detalle: soloPalets
+                                  ? "palets"
+                                  : cambiaMoldes
+                                    ? "sec. + moldes"
+                                    : r.palets > 0
+                                      ? `sec. + ${r.palets} pal.`
+                                      : "secaderos",
                                 color:
                                   "bg-emerald-50 text-emerald-800 ring-1 ring-emerald-300 hover:bg-emerald-100",
                               }
@@ -170,7 +192,8 @@ export function Semana({
         Tocá un día para cargar o editar su orden. Un día sin plan no se mide
         como incumplimiento: queda marcado como sin plan. En Horno se cargan
         las indicaciones para cargar y descargar, que el hornero ve arriba de
-        su pantalla.
+        su pantalla. En Carrusel, «moldes» marca los días con cambio de moldes
+        pedido.
       </p>
     </section>
   );

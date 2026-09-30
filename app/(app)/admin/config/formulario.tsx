@@ -15,6 +15,9 @@ export function FormularioConfig({ inicial }: { inicial: Configuracion }) {
   );
   const [kgBolson, setKgBolson] = useState(String(inicial.kg_por_bolson));
   const [kgBalde, setKgBalde] = useState(String(inicial.kg_por_balde_yeso));
+  const [lugaresMoldes, setLugaresMoldes] = useState(
+    String(inicial.moldes_carrusel),
+  );
 
   return (
     <div className="max-w-xl space-y-4">
@@ -26,6 +29,7 @@ export function FormularioConfig({ inicial }: { inicial: Configuracion }) {
               minutos_horno_objetivo: Number(objetivo),
               kg_por_bolson: Number(kgBolson),
               kg_por_balde_yeso: Number(kgBalde),
+              moldes_carrusel: Number(lugaresMoldes),
             })
           }
         >
@@ -106,6 +110,33 @@ export function FormularioConfig({ inicial }: { inicial: Configuracion }) {
             acá en adelante: cada registro se queda con el peso que regía ese
             día, así que el histórico no se recalcula.
           </p>
+
+          <div>
+            <Campo etiqueta={ETIQUETA_CONFIG.moldes_carrusel}>
+              <input
+                type="number"
+                inputMode="numeric"
+                min={1}
+                className="campo"
+                value={lugaresMoldes}
+                onChange={(e) => setLugaresMoldes(e.target.value)}
+                required
+              />
+            </Campo>
+            <p className="mt-1 text-xs text-slate-500">
+              Lo normal es que estén todos ocupados. Si el carrusel queda con
+              menos moldes, el operario tiene que decir por qué y la pantalla lo
+              muestra en un cartel. Cuántos moldes hay de cada modelo se carga
+              en{" "}
+              <Link
+                href="/admin/moldes"
+                className="font-semibold text-slate-900 underline"
+              >
+                Moldes
+              </Link>
+              .
+            </p>
+          </div>
         </FormularioAbm>
       </div>
 

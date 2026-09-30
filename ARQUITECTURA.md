@@ -204,7 +204,7 @@ usuarios              usuario, nombre, pin_hash, rol, activo,
                       intentos_fallidos, bloqueado_hasta
 tipos                 nombre, capacidad, cupo_horno, llenado_manual,
                       activo, orden
-productos             nombre, tipo_id, activo
+productos             nombre, tipo_id, moldes (inventario), activo
 secaderos             numero, tipo_id, estado, activo, estado_desde
 secadero_contenido    secadero_id, producto_id, cantidad     (snapshot vivo)
 movimientos           secadero_id + snapshots, tipo, estado_desde, estado_hasta,
@@ -218,12 +218,48 @@ consumo_yeso          tipo (bolson|balde_desperdicio), cantidad,
 motivos_desperdicio   nombre, activo
 motivos_desvio        nombre, activo
 planes                fecha (date), sector, nota
-plan_lineas           plan_id, producto_id, secaderos, destino, cliente,
+plan_lineas           plan_id, producto_id, secaderos, destino (planes viejos),
+                      cliente, palets_estandar, palets_optimizados,
                       motivo_desvio_id, nota_desvio, explicado_por
+plan_moldes           fecha (date), producto_id, moldes   (set pedido; sin filas
+                      = "sin cambios", siguen los montados)
+cambios_moldes        usuario, total, lugares, motivo_incompleto, nota,
+                      creado_en, anulado_en + anulado_por + motivo_anulacion
+cambio_moldes_lineas  cambio_id, producto_id + nombre, cantidad
+                      (el SET COMPLETO que quedó montado, no la diferencia)
+palets_armados        fecha (date), producto_id + nombre, tipo
+                      (estandar|optimizado), cantidad (+/-), usuario, creado_en
 notas_horno           fecha (date, PK), carga, descarga, actualizado_por
                       (texto libre para el hornero; no es un plan ni se mide)
 config                clave (PK), valor (text)
 ```
+
+### 4.1.1 Moldes del carrusel
+
+El carrusel tiene `moldes_carrusel` lugares (108, en Parámetros). Cada molde es
+de un solo modelo, y de cada modelo hay una cantidad (`productos.moldes`) que se
+edita en Administración → Moldes.
+
+- **Plan**: `plan_moldes` guarda el set pedido para un día. Nunca más moldes de
+  un modelo que los del inventario ni más que los lugares. Sin filas el día va
+  "sin cambios".
+- **Lo montado**: cada `cambios_moldes` guarda el set completo que quedó. "Qué
+  había montado a tal hora" es el último cambio vigente antes de esa hora; lo
+  que salió y entró se calcula contra el anterior. Lo registra el operario, que
+  tiene la última palabra: puede hacer el cambio pedido de un toque, por partes
+  u otro distinto. Solo no puede pasarse de los lugares, y si deja lugares
+  vacíos tiene que dar el motivo (mesa en mantenimiento, falta de moldes, otro).
+- **Anular**: solo el último cambio vigente, por su autor en el día o por el
+  admin. Vuelve a regir el anterior.
+
+### 4.1.2 Palets
+
+Paletizado recibe, por modelo, secaderos a bajar y palets estándar y
+optimizados a armar (una línea puede pedir solo palets). Confirma lo armado
+en `palets_armados`, un registro de toques +/−: lo armado es la suma, sin tope,
+así que 9 de 7 se ve 9/7. Va por fecha y modelo, no por línea, para que
+rehacer el plan no borre lo confirmado. `plan_lineas.destino` quedó solo para
+leer los planes anteriores.
 
 ### 4.2 Cuatro convenciones que atraviesan todo
 

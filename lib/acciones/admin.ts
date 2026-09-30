@@ -10,6 +10,9 @@ import {
   movimientoLineas,
   movimientos,
   planLineas,
+  planMoldes,
+  paletsArmados,
+  cambioMoldesLineas,
   productos,
   roturasCarrusel,
   secaderoContenido,
@@ -284,6 +287,30 @@ export async function eliminarProducto(entrada: {
       fallar(
         `Este producto figura en ${enPlanes} ${enPlanes === 1 ? "línea" : "líneas"} de órdenes de producción. ` +
           "Sacalo de esos planes o suspendelo en lugar de eliminarlo.",
+      );
+    }
+
+    // Moldes y palets tambien guardan historia del producto: un modelo que
+    // estuvo en el carrusel o del que se armaron palets se suspende.
+    const [[{ enMoldes }], [{ enPlanMoldes }], [{ enPalets }]] =
+      await Promise.all([
+        db
+          .select({ enMoldes: count() })
+          .from(cambioMoldesLineas)
+          .where(eq(cambioMoldesLineas.productoId, id)),
+        db
+          .select({ enPlanMoldes: count() })
+          .from(planMoldes)
+          .where(eq(planMoldes.productoId, id)),
+        db
+          .select({ enPalets: count() })
+          .from(paletsArmados)
+          .where(eq(paletsArmados.productoId, id)),
+      ]);
+
+    if (enMoldes > 0 || enPlanMoldes > 0 || enPalets > 0) {
+      fallar(
+        "Este producto tiene historial de moldes o de palets. Suspendelo en lugar de eliminarlo.",
       );
     }
 
@@ -670,6 +697,7 @@ const esquemaConfig = z.object({
   // error de tipeo que igual va a caer adentro del rango valido.
   kg_por_bolson: z.number().int().min(1).max(10000),
   kg_por_balde_yeso: z.number().int().min(1).max(10000),
+  moldes_carrusel: z.number().int().min(1).max(1000),
 });
 
 export async function guardarConfig(

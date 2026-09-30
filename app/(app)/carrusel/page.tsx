@@ -9,6 +9,8 @@ import {
   secaderosConContenido,
 } from "@/lib/consultas";
 import { compararPlan, motivosDesvioActivos } from "@/lib/plan";
+import { datosMoldesCarrusel } from "@/lib/moldes";
+import { leerConfig } from "@/lib/consultas";
 import {
   esFecha,
   etiquetaRelativa,
@@ -22,6 +24,7 @@ import { BuscadorAccion } from "@/components/buscador-accion";
 import { RoturasCarrusel } from "@/components/roturas-carrusel";
 import { SelectorDia } from "@/components/selector-dia";
 import { YesoCarrusel } from "@/components/yeso-carrusel";
+import { MoldesCarrusel } from "@/components/moldes-carrusel";
 import { Titulo } from "@/components/ui";
 
 export const metadata = { title: "Cargar · Secaderos" };
@@ -51,6 +54,8 @@ export default async function PaginaCarrusel({
     motivos,
     roturas,
     yeso,
+    moldes,
+    config,
   ] = await Promise.all([
     secaderosConContenido(),
     listarMovimientos({
@@ -67,6 +72,8 @@ export default async function PaginaCarrusel({
     motivosActivos(),
     roturasDeCarrusel(desde, hasta),
     consumoDeYeso(desde, hasta),
+    datosMoldesCarrusel(fecha, hoy, sesion),
+    leerConfig(),
   ]);
 
   const corregibles = await corregiblesPara(cargas.items, {
@@ -88,6 +95,16 @@ export default async function PaginaCarrusel({
         comparacion={plan}
         motivos={motivosDesvio.map((m) => ({ id: m.id, nombre: m.nombre }))}
         puedeExplicar={sesion.rol !== "auditor"}
+      />
+
+      {/* Despues del plan y antes de los secaderos: un cambio de moldes
+          pendiente es lo primero que el operario tiene que hacer. */}
+      <MoldesCarrusel
+        fecha={fecha}
+        hoy={hoy}
+        lugares={config.moldes_carrusel}
+        {...moldes}
+        puedeRegistrar={sesion.rol === "carrusel" || sesion.rol === "admin"}
       />
 
       {/* Las guardas no las carga el carrusel: las llena a mano su propio
