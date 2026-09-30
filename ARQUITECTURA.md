@@ -227,6 +227,9 @@ cambios_moldes        usuario, total, lugares, motivo_incompleto, nota,
                       creado_en, anulado_en + anulado_por + motivo_anulacion
 cambio_moldes_lineas  cambio_id, producto_id + nombre, cantidad
                       (el SET COMPLETO que quedó montado, no la diferencia)
+ajustes_inventario_moldes  producto_id + nombre, antes, despues, motivo
+                      (carga_inicial|alta|baja_deterioro|discontinuado|
+                      correccion|otro), nota, usuario, creado_en
 palets_armados        fecha (date), producto_id + nombre, tipo
                       (estandar|optimizado), cantidad (+/-), usuario, creado_en
 notas_horno           fecha (date, PK), carga, descarga, actualizado_por
@@ -240,6 +243,10 @@ El carrusel tiene `moldes_carrusel` lugares (108, en Parámetros). Cada molde es
 de un solo modelo, y de cada modelo hay una cantidad (`productos.moldes`) que se
 edita en Administración → Moldes.
 
+- **Inventario**: `productos.moldes` es el número vigente y
+  `ajustes_inventario_moldes` su historia. Se escriben en la misma transacción,
+  con el antes, el después y un motivo categorizado. El inventario en un
+  momento dado es el último "después" de cada modelo hasta ese momento.
 - **Plan**: `plan_moldes` guarda el set pedido para un día. Nunca más moldes de
   un modelo que los del inventario ni más que los lugares. Sin filas el día va
   "sin cambios".

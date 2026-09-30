@@ -623,6 +623,55 @@ export const cambioMoldesLineas = pgTable(
 );
 
 /**
+ * Por que cambio el inventario de moldes de un modelo.
+ *
+ * Categorizado para poder contestar despues "cuantos moldes se dieron de baja
+ * por deterioro este año" sin leer notas una por una.
+ */
+export const motivoInventarioMoldesEnum = pgEnum("motivo_inventario_moldes", [
+  "carga_inicial",
+  "alta",
+  "baja_deterioro",
+  "discontinuado",
+  "correccion",
+  "otro",
+]);
+
+/**
+ * Historial del inventario de moldes: cada cambio del numero de un modelo.
+ *
+ * `productos.moldes` es el numero vigente, que es lo que se consulta todo el
+ * tiempo; esta tabla es la historia de como se llego ahi. Se escriben juntas,
+ * en la misma transaccion, asi que nunca se contradicen. Guarda el antes y el
+ * despues, y no solo la diferencia, para que cada fila se lea sola.
+ */
+export const ajustesInventarioMoldes = pgTable(
+  "ajustes_inventario_moldes",
+  {
+    id: serial("id").primaryKey(),
+    productoId: integer("producto_id")
+      .notNull()
+      .references(() => productos.id),
+    productoNombre: text("producto_nombre").notNull(),
+    antes: integer("antes").notNull(),
+    despues: integer("despues").notNull(),
+    motivo: motivoInventarioMoldesEnum("motivo").notNull(),
+    nota: text("nota"),
+    usuarioId: integer("usuario_id")
+      .notNull()
+      .references(() => usuarios.id),
+    usuarioNombre: text("usuario_nombre").notNull(),
+    creadoEn: timestamp("creado_en", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("ajustes_inventario_moldes_creado_idx").on(t.creadoEn),
+    index("ajustes_inventario_moldes_producto_idx").on(t.productoId),
+  ],
+);
+
+/**
  * Palets que paletizado confirma haber armado.
  *
  * Es un registro de movimientos y no un contador: cada toque en + o en "Listo"
@@ -780,3 +829,5 @@ export type ConsumoYeso = typeof consumoYeso.$inferSelect;
 export type MotivoMoldesIncompletos =
   (typeof motivoMoldesIncompletosEnum.enumValues)[number];
 export type TipoPalet = (typeof tipoPaletEnum.enumValues)[number];
+export type MotivoInventarioMoldes =
+  (typeof motivoInventarioMoldesEnum.enumValues)[number];

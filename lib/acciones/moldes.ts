@@ -4,7 +4,12 @@ import { revalidatePath } from "next/cache";
 import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db";
-import { cambioMoldesLineas, cambiosMoldes, productos } from "../db/schema";
+import {
+  ajustesInventarioMoldes,
+  cambioMoldesLineas,
+  cambiosMoldes,
+  productos,
+} from "../db/schema";
 import { autorizar } from "../auth";
 import { leerConfig } from "../consultas";
 import { mismosMoldes, totalMoldes, type LineaMoldes } from "../moldes-comun";
@@ -243,26 +248,78 @@ const esquemaInventario = z.object({
         .max(1000, "Esa cantidad de moldes es demasiado grande."),
     }),
   ),
+  motivo: z.enum(
+    [
+      "carga_inicial",
+      "alta",
+      "baja_deterioro",
+      "discontinuado",
+      "correccion",
+      "otro",
+    ],
+    { errorMap: () => ({ message: "Elegí el motivo del cambio." }) },
+  ),
+  nota: z.string().trim().max(500, "La nota es demasiado larga.").optional(),
 });
 
 /**
  * Cuantos moldes hay de cada modelo. Es el techo de lo que se puede pedir en
  * el plan, no de lo que el operario puede montar.
+ *
+ * Cada modelo que cambia deja una fila en el historial con el antes, el
+ * despues, el motivo y quien lo hizo. El motivo y la nota son uno para todo lo
+ * que se guarda junto: una compra de moldes o una baja por deterioro suele
+ * tocar varios modelos por la misma razon.
  */
 export async function guardarInventarioMoldes(
   entrada: z.input<typeof esquemaInventario>,
 ): Promise<Resultado> {
   return ejecutar(async () => {
-    await autorizar("admin");
-    const { items } = esquemaInventario.parse(entrada);
+    const sesion = await autorizar("admin");
+    const { items, motivo, nota } = esquemaInventario.parse(entrada);
+    if (motivo === "otro" && !nota) {
+      fallar("Con el motivo «Otro», escribí en la nota qué pasó.");
+    }
+    if (items.length === 0) fallar("No hay cambios para guardar.");
+    const ids = new Set(items.map((i) => i.productoId));
+    if (ids.size !== items.length) fallar("Hay un modelo repetido.");
 
     await db.transaction(async (tx) => {
+      // Se leen los numeros actuales dentro de la transaccion y bloqueados:
+      // el "antes" del historial tiene que ser el que realmente habia.
+      const actuales = await tx
+        .select({
+          id: productos.id,
+          nombre: productos.nombre,
+          moldes: productos.moldes,
+        })
+        .from(productos)
+        .where(inArray(productos.id, [...ids]))
+        .for("update");
+      if (actuales.length !== ids.size) fallar("Alguno de los modelos ya no existe.");
+      const porId = new Map(actuales.map((p) => [p.id, p]));
+
+      let cambiados = 0;
       for (const i of items) {
+        const p = porId.get(i.productoId)!;
+        if (p.moldes === i.moldes) continue;
+        cambiados++;
         await tx
           .update(productos)
           .set({ moldes: i.moldes })
           .where(eq(productos.id, i.productoId));
+        await tx.insert(ajustesInventarioMoldes).values({
+          productoId: p.id,
+          productoNombre: p.nombre,
+          antes: p.moldes,
+          despues: i.moldes,
+          motivo,
+          nota: nota || null,
+          usuarioId: sesion.uid,
+          usuarioNombre: sesion.nombre,
+        });
       }
+      if (cambiados === 0) fallar("Los números son los mismos que ya estaban.");
     });
 
     revalidatePath("/", "layout");

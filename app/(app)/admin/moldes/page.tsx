@@ -1,11 +1,17 @@
 import { leerConfig } from "@/lib/consultas";
 import {
+  ajustesDeInventario,
   cambiosDeMoldes,
+  inventarioEn,
   inventarioMoldes,
   montadoEn,
   ultimoCambioVigente,
 } from "@/lib/moldes";
-import { ETIQUETA_MOTIVO_MOLDES, listaMoldes } from "@/lib/moldes-comun";
+import {
+  ETIQUETA_MOTIVO_INVENTARIO,
+  ETIQUETA_MOTIVO_MOLDES,
+  listaMoldes,
+} from "@/lib/moldes-comun";
 import { fechaHora, numero } from "@/lib/formato";
 import { finDeHoy } from "@/lib/rangos";
 import { SalenEntran } from "@/components/moldes-carrusel";
@@ -25,22 +31,33 @@ export default async function PaginaAdminMoldes({
   searchParams: Promise<{ en?: string }>;
 }) {
   const { en } = await searchParams;
-  const instante = esInstante(en) ? new Date(`${en}:00-03:00`) : null;
+  // Hasta el final del minuto elegido: "a las 16:13" incluye lo que se
+  // registro a las 16:13:40.
+  const instante = esInstante(en) ? new Date(`${en}:59.999-03:00`) : null;
 
-  const [inventario, config, cambios, ultimoId, montadoAhora, montadoEntonces] =
-    await Promise.all([
+  const hace120 = new Date(Date.now() - 120 * 24 * 60 * 60 * 1000);
+  const [
+    inventario,
+    config,
+    cambios,
+    ultimoId,
+    montadoAhora,
+    montadoEntonces,
+    ajustes,
+    inventarioEntonces,
+    [primerAjuste],
+  ] = await Promise.all([
       inventarioMoldes(),
       leerConfig(),
       // Los ultimos 120 dias alcanzan para el historial en pantalla; para un
       // momento puntual mas viejo esta la consulta de arriba.
-      cambiosDeMoldes(
-        new Date(Date.now() - 120 * 24 * 60 * 60 * 1000),
-        finDeHoy(),
-        300,
-      ),
+      cambiosDeMoldes(hace120, finDeHoy(), 300),
       ultimoCambioVigente(),
       montadoEn(),
       instante ? montadoEn(instante) : Promise.resolve(null),
+      ajustesDeInventario(hace120, finDeHoy()),
+      instante ? inventarioEn(instante) : Promise.resolve(null),
+      ajustesDeInventario(new Date(0), finDeHoy(), 1),
     ]);
 
   const lugares = config.moldes_carrusel;
@@ -69,7 +86,56 @@ export default async function PaginaAdminMoldes({
             montados:
               montadoAhora?.set.find((l) => l.productoId === p.id)?.cantidad ?? 0,
           }))}
+          sinHistorial={!primerAjuste}
         />
+      </section>
+
+      <section>
+        <h2 className="mb-1 text-base font-bold text-slate-900">
+          Historial del inventario
+        </h2>
+        <p className="mb-3 text-sm text-slate-500">
+          Cada vez que cambió la cantidad de moldes de un modelo, en los últimos
+          120 días: de cuánto a cuánto, por qué y quién lo cargó.
+        </p>
+        {ajustes.length === 0 ? (
+          <p className="tarjeta p-4 text-sm text-slate-400">
+            Todavía no se registró ningún cambio de inventario.
+          </p>
+        ) : (
+          <ul className="tarjeta divide-y divide-slate-100 px-4">
+            {ajustes.map((a) => {
+              const delta = a.despues - a.antes;
+              return (
+                <li key={a.id} className="py-2.5">
+                  <div className="flex flex-wrap items-baseline gap-x-2">
+                    <span className="text-sm font-semibold text-slate-800">
+                      {a.productoNombre}
+                    </span>
+                    <span className="text-sm tabular-nums text-slate-600">
+                      {numero(a.antes)} → {numero(a.despues)}
+                    </span>
+                    <span
+                      className={`text-sm font-bold tabular-nums ${
+                        delta > 0 ? "text-emerald-700" : "text-red-700"
+                      }`}
+                    >
+                      {delta > 0 ? "+" : "−"}
+                      {numero(Math.abs(delta))}
+                    </span>
+                    <span className="ml-auto text-xs text-slate-400">
+                      {fechaHora(a.creadoEn)} · {a.usuarioNombre}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-600">
+                    {ETIQUETA_MOTIVO_INVENTARIO[a.motivo]}
+                    {a.nota && ` — ${a.nota}`}
+                  </p>
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </section>
 
       <section>
@@ -78,7 +144,7 @@ export default async function PaginaAdminMoldes({
         </h2>
         <p className="mb-3 text-sm text-slate-500">
           Elegí un día y una hora para ver el set de moldes que estaba en el
-          carrusel en ese momento.
+          carrusel en ese momento, y cuántos moldes había en el inventario.
         </p>
         <form className="tarjeta flex flex-wrap items-end gap-2 p-4">
           <label className="block">
@@ -97,6 +163,9 @@ export default async function PaginaAdminMoldes({
         </form>
         {instante && (
           <div className="tarjeta mt-3 p-4">
+            <p className="mb-1 text-xs font-semibold tracking-wide text-slate-500 uppercase">
+              Montado en el carrusel
+            </p>
             {montadoEntonces ? (
               <>
                 <p className="text-sm font-bold text-slate-900">
@@ -120,6 +189,25 @@ export default async function PaginaAdminMoldes({
             ) : (
               <p className="text-sm text-slate-500">
                 Para ese momento todavía no se había cargado ningún set de moldes.
+              </p>
+            )}
+
+            <p className="mt-4 mb-1 text-xs font-semibold tracking-wide text-slate-500 uppercase">
+              Inventario
+            </p>
+            {inventarioEntonces && inventarioEntonces.length > 0 ? (
+              <p className="text-sm text-slate-700">
+                {inventarioEntonces
+                  .map((i) => `${numero(i.moldes)} ${i.nombre}`)
+                  .join(" · ")}{" "}
+                <span className="text-slate-500">
+                  (total{" "}
+                  {numero(inventarioEntonces.reduce((a, i) => a + i.moldes, 0))})
+                </span>
+              </p>
+            ) : (
+              <p className="text-sm text-slate-500">
+                Para ese momento todavía no se había cargado el inventario.
               </p>
             )}
           </div>

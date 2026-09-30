@@ -1,4 +1,7 @@
-import type { MotivoMoldesIncompletos } from "./db/schema";
+import type {
+  MotivoInventarioMoldes,
+  MotivoMoldesIncompletos,
+} from "./db/schema";
 
 /**
  * Moldes del carrusel: lo que se puede calcular sin base. Lo usan el servidor
@@ -83,3 +86,21 @@ export function ordenarSet(set: LineaMoldes[]): LineaMoldes[] {
     .filter((l) => l.cantidad > 0)
     .sort((x, y) => y.cantidad - x.cantidad || x.nombre.localeCompare(y.nombre));
 }
+
+export const MOTIVOS_INVENTARIO_MOLDES: MotivoInventarioMoldes[] = [
+  "carga_inicial",
+  "alta",
+  "baja_deterioro",
+  "discontinuado",
+  "correccion",
+  "otro",
+];
+
+export const ETIQUETA_MOTIVO_INVENTARIO: Record<MotivoInventarioMoldes, string> = {
+  carga_inicial: "Carga inicial",
+  alta: "Moldes nuevos",
+  baja_deterioro: "Baja por deterioro",
+  discontinuado: "Modelo discontinuado",
+  correccion: "Corrección de conteo",
+  otro: "Otro",
+};

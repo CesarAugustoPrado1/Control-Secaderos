@@ -93,7 +93,9 @@ otro, no para discutir con un proveedor.
 El carrusel lleva 108 moldes (configurable en Parámetros). En el plan del día
 el admin pide cuántos moldes de cada modelo quiere; si no pide nada, siguen los
 de ayer. Nunca se puede pedir más de lo que hay en el inventario de moldes
-(Administración → Moldes).
+(Administración → Moldes). Cada cambio del inventario queda en un historial
+con el antes, el después, el motivo (carga inicial, moldes nuevos, baja por
+deterioro, modelo discontinuado, corrección de conteo u otro) y quién lo cargó.
 
 El operario ve un cartel **"Cambio de moldes: salen 10 Ekos · entran 10
 Dividida"** y lo confirma con **Hecho**, o registra lo que realmente hizo (por

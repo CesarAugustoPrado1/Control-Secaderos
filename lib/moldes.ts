@@ -12,6 +12,7 @@ import {
 } from "drizzle-orm";
 import { db } from "./db";
 import {
+  ajustesInventarioMoldes,
   cambioMoldesLineas,
   cambiosMoldes,
   planMoldes,
@@ -292,4 +293,43 @@ export async function datosMoldesCarrusel(
       anulable: puedeAnular(c),
     })),
   };
+}
+
+/** Los cambios del inventario de moldes de un tramo, del mas nuevo al mas viejo. */
+export async function ajustesDeInventario(desde: Date, hasta: Date, limite = 300) {
+  return db
+    .select()
+    .from(ajustesInventarioMoldes)
+    .where(
+      and(
+        gte(ajustesInventarioMoldes.creadoEn, desde),
+        lte(ajustesInventarioMoldes.creadoEn, hasta),
+      ),
+    )
+    .orderBy(desc(ajustesInventarioMoldes.creadoEn), desc(ajustesInventarioMoldes.id))
+    .limit(limite);
+}
+
+/**
+ * Cuantos moldes habia de cada modelo en un instante: el "despues" del ultimo
+ * ajuste de cada modelo hasta ese momento. Un modelo sin ajustes hasta ahi no
+ * figura, porque su inventario todavia no se habia cargado.
+ */
+export async function inventarioEn(instante: Date) {
+  const filas = await db
+    .selectDistinctOn([ajustesInventarioMoldes.productoId], {
+      productoId: ajustesInventarioMoldes.productoId,
+      nombre: ajustesInventarioMoldes.productoNombre,
+      moldes: ajustesInventarioMoldes.despues,
+    })
+    .from(ajustesInventarioMoldes)
+    .where(lte(ajustesInventarioMoldes.creadoEn, instante))
+    .orderBy(
+      ajustesInventarioMoldes.productoId,
+      desc(ajustesInventarioMoldes.creadoEn),
+      desc(ajustesInventarioMoldes.id),
+    );
+  return filas
+    .filter((f) => f.moldes > 0)
+    .sort((a, b) => a.nombre.localeCompare(b.nombre));
 }
