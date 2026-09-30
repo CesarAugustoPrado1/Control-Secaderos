@@ -18,7 +18,7 @@ import {
   type LineaMoldes,
 } from "@/lib/moldes-comun";
 import { fechaHora, hora, numero } from "@/lib/formato";
-import { etiquetaRelativa } from "@/lib/rangos";
+import { etiquetaDia, etiquetaRelativa } from "@/lib/rangos";
 import { useAccion } from "@/components/usar-accion";
 import { Plegable } from "@/components/plegable";
 import { Aviso } from "@/components/ui";
@@ -77,10 +77,13 @@ export function MoldesCarrusel({
   inventario,
   cambios,
   puedeRegistrar,
+  proximo,
 }: {
   fecha: string;
   hoy: string;
   lugares: number;
+  /** Solo hoy: el proximo cambio programado en el plan, si hay. */
+  proximo: ProximoCambio | null;
   /** Hoy: lo montado ahora. Un dia pasado: lo que quedo al terminar el dia. */
   montado: MontadoVista | null;
   /** El set pedido en el plan de ese dia, o null si va sin cambios. */
@@ -146,8 +149,25 @@ export function MoldesCarrusel({
         </section>
       )}
 
+      {/* Hoy siempre hay un cartel que dice si los moldes montados son los que
+          van: el operario no tiene que abrir nada para saber si puede usar lo
+          que tiene puesto. */}
+      {esHoy && montado && !pendiente && (
+        <section className="rounded-2xl bg-emerald-50 p-4 ring-2 ring-emerald-400">
+          <p className="text-lg font-extrabold text-emerald-950">
+            ✓ Moldes vigentes
+          </p>
+          <p className="mt-0.5 text-sm text-emerald-900">
+            Los moldes montados son los que van hoy. No hay cambios pendientes.
+          </p>
+          <LineaProximo proximo={proximo} hoy={hoy} />
+        </section>
+      )}
+
       {pendiente && (
         <CartelCambio
+          proximo={proximo}
+          hoy={hoy}
           pedido={pedido!}
           montado={montado!}
           lugares={lugares}
@@ -294,7 +314,53 @@ export function SalenEntran({
   );
 }
 
+export type ProximoCambio = {
+  fecha: string;
+  salen: LineaMoldes[];
+  entran: LineaMoldes[];
+};
+
+/**
+ * "Próximo cambio: lun 27/10 (en 5 días)", con que sale y que entra. Es para
+ * prepararse: juntar los moldes, avisar al mantenimiento.
+ */
+function LineaProximo({
+  proximo,
+  hoy,
+}: {
+  proximo: ProximoCambio | null;
+  hoy: string;
+}) {
+  if (!proximo) {
+    return (
+      <p className="mt-2 border-t border-black/10 pt-2 text-sm text-slate-600">
+        Próximo cambio: <span className="font-semibold">no hay programado</span>
+      </p>
+    );
+  }
+  const dias = Math.round(
+    (new Date(`${proximo.fecha}T12:00:00-03:00`).getTime() -
+      new Date(`${hoy}T12:00:00-03:00`).getTime()) /
+      (24 * 60 * 60 * 1000),
+  );
+  return (
+    <div className="mt-2 border-t border-black/10 pt-2">
+      <p className="text-sm font-bold text-slate-900">
+        Próximo cambio: {etiquetaDia(proximo.fecha)}{" "}
+        <span className="font-semibold text-slate-600">
+          ({dias === 1 ? "mañana" : `en ${dias} días`})
+        </span>
+      </p>
+      <div className="mt-0.5">
+        <SalenEntran salen={proximo.salen} entran={proximo.entran} />
+      </div>
+    </div>
+  );
+}
+
 function CartelCambio({
+  proximo,
+  hoy,
   pedido,
   montado,
   lugares,
@@ -305,6 +371,8 @@ function CartelCambio({
   alEditar,
   yaHuboCambios,
 }: {
+  proximo: ProximoCambio | null;
+  hoy: string;
   pedido: LineaMoldes[];
   montado: MontadoVista;
   lugares: number;
@@ -324,7 +392,12 @@ function CartelCambio({
 
   return (
     <section className="rounded-2xl bg-blue-50 p-4 ring-2 ring-blue-400">
-      <p className="text-lg font-extrabold text-blue-950">Cambio de moldes</p>
+      <p className="text-lg font-extrabold text-blue-950">
+        ⟳ Moldes a cambiar hoy
+      </p>
+      <p className="text-sm font-semibold text-blue-900">
+        No uses los moldes que salen: primero hacé el cambio.
+      </p>
       {yaHuboCambios && (
         <p className="text-xs font-semibold text-blue-800">
           Lo que falta para llegar a lo pedido:
@@ -378,6 +451,7 @@ function CartelCambio({
           </button>
         </div>
       )}
+      <LineaProximo proximo={proximo} hoy={hoy} />
     </section>
   );
 }

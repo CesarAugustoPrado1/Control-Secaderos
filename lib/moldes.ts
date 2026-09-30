@@ -6,6 +6,7 @@ import {
   eq,
   gte,
   inArray,
+  gt,
   isNull,
   lt,
   lte,
@@ -20,7 +21,12 @@ import {
   tipos,
   type MotivoMoldesIncompletos,
 } from "./db/schema";
-import { diferenciaMoldes, ordenarSet, type LineaMoldes } from "./moldes-comun";
+import {
+  diferenciaMoldes,
+  mismosMoldes,
+  ordenarSet,
+  type LineaMoldes,
+} from "./moldes-comun";
 import { finDeHoy, rangoDeFecha } from "./rangos";
 
 /** Un cambio de moldes con el set que dejo montado. */
@@ -230,6 +236,49 @@ export async function inventarioMoldes() {
 }
 
 /**
+ * El proximo cambio de moldes programado despues de `hoy`: el primer dia
+ * futuro cuyo set pedido no coincide con el que va a estar montado para
+ * entonces. Sirve para que el operario sepa de antemano cuando le toca.
+ *
+ * `base` es lo que se supone montado al terminar hoy: lo pedido para hoy si
+ * hay pedido, o lo montado ahora. Los dias pedidos que repiten el set vigente
+ * no son un cambio y se saltean.
+ */
+export async function proximoCambioMoldes(
+  hoy: string,
+  base: LineaMoldes[] | null,
+): Promise<{ fecha: string; salen: LineaMoldes[]; entran: LineaMoldes[] } | null> {
+  const filas = await db
+    .select({
+      fecha: planMoldes.fecha,
+      productoId: planMoldes.productoId,
+      nombre: productos.nombre,
+      cantidad: planMoldes.moldes,
+    })
+    .from(planMoldes)
+    .innerJoin(productos, eq(productos.id, planMoldes.productoId))
+    .where(gt(planMoldes.fecha, hoy))
+    .orderBy(asc(planMoldes.fecha));
+
+  const porFecha = new Map<string, LineaMoldes[]>();
+  for (const f of filas) {
+    const lista = porFecha.get(f.fecha) ?? [];
+    lista.push({ productoId: f.productoId, nombre: f.nombre, cantidad: f.cantidad });
+    porFecha.set(f.fecha, lista);
+  }
+
+  let vigente = base;
+  for (const [fecha, set] of porFecha) {
+    if (!vigente || !mismosMoldes(vigente, set)) {
+      const { salen, entran } = diferenciaMoldes(vigente ?? [], set);
+      return { fecha, salen, entran };
+    }
+    vigente = set;
+  }
+  return null;
+}
+
+/**
  * Todo lo que la pantalla del carrusel necesita de moldes para un dia.
  *
  * Hoy: lo montado ahora y lo pedido para hoy. Un dia pasado: lo que quedo
@@ -254,6 +303,10 @@ export async function datosMoldesCarrusel(
       ultimoCambioVigente(),
     ]);
 
+  // Solo hoy: es un aviso para prepararse, no tiene sentido mirando otro dia.
+  const proximo =
+    fecha === hoy ? await proximoCambioMoldes(hoy, pedido ?? montado?.set ?? null) : null;
+
   const puedeAnular = (c: CambioConDiferencia) =>
     !c.anuladoEn &&
     c.id === ultimoId &&
@@ -261,6 +314,7 @@ export async function datosMoldesCarrusel(
       (quien.rol === "carrusel" && c.usuarioId === quien.uid && fecha === hoy));
 
   return {
+    proximo,
     montado: montado && {
       id: montado.id,
       set: montado.set,
