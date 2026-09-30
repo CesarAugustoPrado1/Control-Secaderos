@@ -97,8 +97,12 @@ de ayer. Nunca se puede pedir más de lo que hay en el inventario de moldes
 con el antes, el después, el motivo (carga inicial, moldes nuevos, baja por
 deterioro, modelo discontinuado, corrección de conteo u otro) y quién lo cargó.
 
-El operario ve un cartel **"Cambio de moldes: salen 10 Ekos · entran 10
-Dividida"** y lo confirma con **Hecho**, o registra lo que realmente hizo (por
+Arriba de su pantalla el operario siempre ve un cartel: **"✓ Moldes vigentes"**
+si lo montado es lo que va hoy, o **"⟳ Moldes a cambiar hoy"** con qué sale y
+qué entra, y la advertencia de no usar los que salen hasta hacer el cambio. Los
+dos dicen también el **próximo cambio programado** (por ejemplo "mar 27/10, en
+27 días") para que se pueda preparar de antemano. El cambio lo confirma con
+**Hecho**, o registra lo que realmente hizo (por
 partes, u otro cambio si no se pudo). Si quedan lugares vacíos, un cartel grande
 lo avisa con el motivo. Cada cambio queda con quién y a qué hora, y en
 Administración → Moldes se puede ver qué había montado en cualquier momento.
