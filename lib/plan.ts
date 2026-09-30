@@ -6,12 +6,14 @@ import {
   movimientoLineas,
   movimientos,
   notasHorno,
+  paletsArmados,
   planLineas,
   planes,
   productos,
   tipos,
   type Destino,
   type Sector,
+  type TipoPalet,
 } from "./db/schema";
 import { rangoDeFecha } from "./rangos";
 import { vigente } from "./vigencia";
@@ -21,6 +23,9 @@ const MOVIMIENTO_DEL_SECTOR = {
   carrusel: "carga",
   paletizado: "descarga",
 } as const;
+
+/** Palets pedidos y confirmados de un tipo. */
+export type AvancePalets = { pedidos: number; hechos: number };
 
 export type LineaPlan = {
   lineaId: number;
@@ -38,8 +43,13 @@ export type LineaPlan = {
    * plan de esos productos se sigue solo por cantidad de secaderos.
    */
   placasEsperadas: number | null;
-  /** Que hacer con lo descargado y para quien. Solo en paletizado. */
+  /**
+   * Destino de los planes viejos, de antes de pedir palets por cantidad. Se
+   * sigue mostrando para leer esos dias; los planes nuevos lo dejan en null.
+   */
   destino: Destino | null;
+  /** Solo en paletizado. */
+  palets: Record<TipoPalet, AvancePalets>;
   cliente: string | null;
   motivoDesvioId: number | null;
   notaDesvio: string | null;
@@ -55,9 +65,19 @@ export type ComparacionPlan = {
   nota: string | null;
   lineas: LineaPlan[];
   /** Lo que se hizo y no estaba pedido. */
-  fueraDePlan: { producto: string; hechos: number; placas: number }[];
+  fueraDePlan: {
+    producto: string;
+    hechos: number;
+    placas: number;
+    palets: Record<TipoPalet, number>;
+  }[];
   totalPedido: number;
   totalHecho: number;
+  /**
+   * Palets de todo el dia, por tipo. Lo hecho suma sin tope: si se pidieron 7
+   * y se armaron 9, es 9/7 y tiene que verse asi.
+   */
+  palets: Record<TipoPalet, AvancePalets>;
 };
 
 /**
@@ -95,6 +115,8 @@ export async function compararPlan(
           pedidos: planLineas.secaderos,
           destino: planLineas.destino,
           cliente: planLineas.cliente,
+          paletsEstandar: planLineas.paletsEstandar,
+          paletsOptimizados: planLineas.paletsOptimizados,
           motivoDesvioId: planLineas.motivoDesvioId,
           notaDesvio: planLineas.notaDesvio,
           explicadoPorNombre: planLineas.explicadoPorNombre,
@@ -141,31 +163,94 @@ export async function compararPlan(
     )
     .groupBy(movimientoLineas.productoId, movimientoLineas.productoNombre);
 
-  const porProducto = new Map(
+  /**
+   * Palets confirmados ese dia, por producto y tipo. Solo paletizado arma
+   * palets. Van por fecha del plan, no por la hora del registro.
+   */
+  const armados =
+    sector === "paletizado"
+      ? await db
+          .select({
+            productoId: paletsArmados.productoId,
+            producto: paletsArmados.productoNombre,
+            tipo: paletsArmados.tipo,
+            cantidad: sql<string>`coalesce(sum(${paletsArmados.cantidad}), 0)`,
+          })
+          .from(paletsArmados)
+          .where(eq(paletsArmados.fecha, fecha))
+          .groupBy(
+            paletsArmados.productoId,
+            paletsArmados.productoNombre,
+            paletsArmados.tipo,
+          )
+      : [];
+
+  const vacio = () => ({ estandar: 0, optimizado: 0 });
+  const porProducto = new Map<
+    number,
+    {
+      producto: string;
+      hechos: number;
+      placas: number;
+      palets: Record<TipoPalet, number>;
+    }
+  >(
     realizado.map((r) => [
       r.productoId,
       {
         producto: r.producto,
         hechos: Number(r.hechos),
         placas: Number(r.placas),
+        palets: vacio(),
       },
     ]),
   );
-
-  const lineas: LineaPlan[] = lineasPlan.map((l) => {
-    const real = porProducto.get(l.productoId);
-    porProducto.delete(l.productoId);
-    return {
-      ...l,
-      hechos: real?.hechos ?? 0,
-      placas: real?.placas ?? 0,
-      placasEsperadas: l.capacidad === null ? null : l.pedidos * l.capacidad,
+  for (const a of armados) {
+    const n = Number(a.cantidad);
+    if (n === 0) continue;
+    const fila = porProducto.get(a.productoId) ?? {
+      producto: a.producto,
+      hechos: 0,
+      placas: 0,
+      palets: vacio(),
     };
-  });
+    fila.palets[a.tipo] += n;
+    porProducto.set(a.productoId, fila);
+  }
+
+  const lineas: LineaPlan[] = lineasPlan.map(
+    ({ paletsEstandar, paletsOptimizados, ...l }) => {
+      const real = porProducto.get(l.productoId);
+      porProducto.delete(l.productoId);
+      return {
+        ...l,
+        hechos: real?.hechos ?? 0,
+        placas: real?.placas ?? 0,
+        placasEsperadas: l.capacidad === null ? null : l.pedidos * l.capacidad,
+        palets: {
+          estandar: {
+            pedidos: paletsEstandar ?? 0,
+            hechos: real?.palets.estandar ?? 0,
+          },
+          optimizado: {
+            pedidos: paletsOptimizados ?? 0,
+            hechos: real?.palets.optimizado ?? 0,
+          },
+        },
+      };
+    },
+  );
 
   const fueraDePlan = [...porProducto.values()].sort(
     (a, b) => b.hechos - a.hechos,
   );
+
+  const sumaPalets = (tipo: TipoPalet): AvancePalets => ({
+    pedidos: lineas.reduce((a, l) => a + l.palets[tipo].pedidos, 0),
+    hechos:
+      lineas.reduce((a, l) => a + l.palets[tipo].hechos, 0) +
+      fueraDePlan.reduce((a, f) => a + f.palets[tipo], 0),
+  });
 
   return {
     fecha,
@@ -177,6 +262,7 @@ export async function compararPlan(
     fueraDePlan,
     totalPedido: lineas.reduce((a, l) => a + l.pedidos, 0),
     totalHecho: lineas.reduce((a, l) => a + Math.min(l.hechos, l.pedidos), 0),
+    palets: { estandar: sumaPalets("estandar"), optimizado: sumaPalets("optimizado") },
   };
 }
 
@@ -221,6 +307,7 @@ export async function planesDeFechas(fechas: string[]) {
       sector: planes.sector,
       lineas: sql<string>`count(${planLineas.id})`,
       secaderos: sql<string>`coalesce(sum(${planLineas.secaderos}), 0)`,
+      palets: sql<string>`coalesce(sum(coalesce(${planLineas.paletsEstandar}, 0) + coalesce(${planLineas.paletsOptimizados}, 0)), 0)`,
     })
     .from(planes)
     .leftJoin(planLineas, eq(planLineas.planId, planes.id))
@@ -233,6 +320,7 @@ export async function planesDeFechas(fechas: string[]) {
     sector: f.sector,
     lineas: Number(f.lineas),
     secaderos: Number(f.secaderos),
+    palets: Number(f.palets),
   }));
 }
 
@@ -241,6 +329,8 @@ export type PedidoDeDia = {
   secaderos: number;
   destino: Destino | null;
   cliente: string | null;
+  paletsEstandar: number | null;
+  paletsOptimizados: number | null;
 };
 
 /**
@@ -265,6 +355,8 @@ export async function lineasDeSemana(fechas: string[], sector: Sector) {
       secaderos: planLineas.secaderos,
       destino: planLineas.destino,
       cliente: planLineas.cliente,
+      paletsEstandar: planLineas.paletsEstandar,
+      paletsOptimizados: planLineas.paletsOptimizados,
     })
     .from(planes)
     .innerJoin(planLineas, eq(planLineas.planId, planes.id))
@@ -276,6 +368,8 @@ export async function lineasDeSemana(fechas: string[], sector: Sector) {
       secaderos: f.secaderos,
       destino: f.destino,
       cliente: f.cliente,
+      paletsEstandar: f.paletsEstandar,
+      paletsOptimizados: f.paletsOptimizados,
     };
   }
   return porFecha;

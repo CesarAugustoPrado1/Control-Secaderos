@@ -88,6 +88,35 @@ que cambiar el parámetro no recalcula el histórico. Ojo con esos kilos: son un
 conversión de unidades, no un pesaje. Sirven para comparar un período contra
 otro, no para discutir con un proveedor.
 
+### Moldes del carrusel
+
+El carrusel lleva 108 moldes (configurable en Parámetros). En el plan del día
+el admin pide cuántos moldes de cada modelo quiere; si no pide nada, siguen los
+de ayer. Nunca se puede pedir más de lo que hay en el inventario de moldes
+(Administración → Moldes). Cada cambio del inventario queda en un historial
+con el antes, el después, el motivo (carga inicial, moldes nuevos, baja por
+deterioro, modelo discontinuado, corrección de conteo u otro) y quién lo cargó.
+
+El operario ve un cartel **"Cambio de moldes: salen 10 Ekos · entran 10
+Dividida"** y lo confirma con **Hecho**, o registra lo que realmente hizo (por
+partes, u otro cambio si no se pudo). Si quedan lugares vacíos, un cartel grande
+lo avisa con el motivo. Cada cambio queda con quién y a qué hora, y en
+Administración → Moldes se puede ver qué había montado en cualquier momento.
+
+### Palets
+
+El plan de paletizado pide, por modelo, secaderos a bajar y palets estándar y
+optimizados a armar, también de modelos de los que no se piden secaderos. El
+paletizador los confirma con **✓ Listo** o de a uno con **+ / −**, y el plan
+muestra el cumplimiento en tres renglones: secaderos 13/15, palets estándar 5/5,
+optimizados 9/7.
+
+### Repetir un día
+
+Desde el plan, **Repetir en otros días** copia el día completo (carrusel con
+moldes, notas del horno, paletizado con palets) a mañana, el resto de la semana
+o una fecha suelta. Si un día ya tiene algo cargado, pregunta antes de pisarlo.
+
 ## Roles
 
 - **admin** — todo: ABM de secaderos, tipos, modelos, usuarios, motivos de

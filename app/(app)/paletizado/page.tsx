@@ -83,6 +83,12 @@ export default async function PaginaPaletizado({
         motivos={motivosDesvio.map((m) => ({ id: m.id, nombre: m.nombre }))}
         entregadosPorHorno={entregados}
         puedeExplicar={sesion.rol !== "auditor"}
+        // El operario confirma lo de hoy; el admin puede completar un dia
+        // pasado que quedo sin confirmar.
+        puedeRegistrarPalets={
+          (sesion.rol === "paletizado" && fecha === hoy) ||
+          (sesion.rol === "admin" && !esFuturo)
+        }
       />
 
       {/* Las guardas las descarga el mismo operario que las llenó, desde

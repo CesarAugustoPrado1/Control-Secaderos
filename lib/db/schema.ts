@@ -183,6 +183,19 @@ export const productos = pgTable("productos", {
   tipoId: integer("tipo_id")
     .notNull()
     .references(() => tipos.id),
+  /**
+   * Moldes de este modelo que hay en la planta, montados o no.
+   *
+   * Es el techo de lo que se puede pedir en el plan: nunca se pide poner mas
+   * moldes de los que existen. Cambia con el tiempo -se dan de baja los
+   * deteriorados, se compran nuevos, se discontinua un modelo- y se edita
+   * desde Administracion -> Moldes.
+   *
+   * Nace en 0 para todo lo que ya existia: hasta que se cargue el inventario
+   * no se puede pedir ningun molde de ese modelo, que es mas honesto que
+   * inventar un numero.
+   */
+  moldes: integer("moldes").notNull().default(0),
   activo: boolean("activo").notNull().default(true),
   creadoEn: timestamp("creado_en", { withTimezone: true })
     .notNull()
@@ -490,6 +503,18 @@ export const planLineas = pgTable(
      */
     destino: destinoEnum("destino"),
     cliente: text("cliente"),
+    /**
+     * Palets pedidos a paletizado, por tipo. Solo en paletizado.
+     *
+     * Reemplazan a `destino` en los planes nuevos: en vez de "este modelo va a
+     * palet estandar" se pide "arma 1 palet estandar", que es algo que se
+     * puede confirmar y medir. `destino` queda para leer los planes viejos.
+     *
+     * Una linea puede pedir palets sin pedir secaderos (`secaderos` = 0): las
+     * placas pueden estar ya descargadas, en un cajon.
+     */
+    paletsEstandar: integer("palets_estandar"),
+    paletsOptimizados: integer("palets_optimizados"),
     motivoDesvioId: integer("motivo_desvio_id").references(
       () => motivosDesvio.id,
     ),
@@ -499,6 +524,189 @@ export const planLineas = pgTable(
     explicadoEn: timestamp("explicado_en", { withTimezone: true }),
   },
   (t) => [index("plan_lineas_plan_idx").on(t.planId)],
+);
+
+/**
+ * Moldes pedidos en el carrusel para un dia: cuantos de cada modelo.
+ *
+ * No cuelga de `planes` porque vive con independencia de los secaderos: se
+ * puede pedir un cambio de moldes un dia sin plan de secaderos, y borrar el
+ * plan de secaderos no puede llevarse puesto el de moldes.
+ *
+ * Un dia SIN filas significa "sin cambios": siguen los moldes que esten
+ * montados. No es lo mismo que pedir cero moldes, que no tiene sentido.
+ */
+export const planMoldes = pgTable(
+  "plan_moldes",
+  {
+    id: serial("id").primaryKey(),
+    fecha: date("fecha").notNull(),
+    productoId: integer("producto_id")
+      .notNull()
+      .references(() => productos.id),
+    moldes: integer("moldes").notNull(),
+  },
+  (t) => [
+    uniqueIndex("plan_moldes_fecha_producto_idx").on(t.fecha, t.productoId),
+  ],
+);
+
+/**
+ * Por que el carrusel no tiene todos sus lugares con molde.
+ *
+ * Lo normal es que esten todos; menos que eso es una excepcion que tiene que
+ * quedar explicada, porque cada lugar vacio es produccion que no sale.
+ */
+export const motivoMoldesIncompletosEnum = pgEnum(
+  "motivo_moldes_incompletos",
+  ["mesa_mantenimiento", "falta_moldes", "otro"],
+);
+
+/**
+ * Cambio de moldes en el carrusel: el historial de que moldes hubo montados.
+ *
+ * Cada fila guarda el SET COMPLETO que quedo montado despues del cambio, no
+ * solo lo que entro y salio. Asi "que habia montado a tal hora" es leer una
+ * sola fila -la ultima vigente antes de esa hora- y no reconstruir una suma de
+ * diferencias desde el principio de los tiempos. Lo que salio y lo que entro
+ * se calcula comparando con el cambio anterior.
+ *
+ * Lo registra el operario del carrusel, que tiene la ultima palabra: el plan
+ * dice que moldes se quieren, pero si en el momento no se puede, el operario
+ * monta lo que corresponde y queda asentado lo que realmente se hizo.
+ *
+ * Se anula igual que un movimiento: la fila queda, marcada. Solo se puede
+ * anular el ultimo vigente, porque cada set se apoya en el anterior.
+ */
+export const cambiosMoldes = pgTable(
+  "cambios_moldes",
+  {
+    id: serial("id").primaryKey(),
+    usuarioId: integer("usuario_id")
+      .notNull()
+      .references(() => usuarios.id),
+    usuarioNombre: text("usuario_nombre").notNull(),
+    /** Moldes montados despues del cambio, sumando todos los modelos. */
+    total: integer("total").notNull(),
+    /** Lugares del carrusel en ese momento. Snapshot del parametro. */
+    lugares: integer("lugares").notNull(),
+    /** Obligatorio cuando `total` < `lugares`. */
+    motivoIncompleto: motivoMoldesIncompletosEnum("motivo_incompleto"),
+    nota: text("nota"),
+    creadoEn: timestamp("creado_en", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    anuladoEn: timestamp("anulado_en", { withTimezone: true }),
+    anuladoPorId: integer("anulado_por_id").references(() => usuarios.id),
+    anuladoPorNombre: text("anulado_por_nombre"),
+    motivoAnulacion: text("motivo_anulacion"),
+  },
+  (t) => [index("cambios_moldes_creado_idx").on(t.creadoEn)],
+);
+
+/** El set montado despues de un cambio, modelo por modelo. Solo filas > 0. */
+export const cambioMoldesLineas = pgTable(
+  "cambio_moldes_lineas",
+  {
+    id: serial("id").primaryKey(),
+    cambioId: integer("cambio_id")
+      .notNull()
+      .references(() => cambiosMoldes.id, { onDelete: "cascade" }),
+    productoId: integer("producto_id")
+      .notNull()
+      .references(() => productos.id),
+    /** Snapshot: el historial se lee aunque despues se renombre el modelo. */
+    productoNombre: text("producto_nombre").notNull(),
+    cantidad: integer("cantidad").notNull(),
+  },
+  (t) => [index("cambio_moldes_lineas_cambio_idx").on(t.cambioId)],
+);
+
+/**
+ * Por que cambio el inventario de moldes de un modelo.
+ *
+ * Categorizado para poder contestar despues "cuantos moldes se dieron de baja
+ * por deterioro este año" sin leer notas una por una.
+ */
+export const motivoInventarioMoldesEnum = pgEnum("motivo_inventario_moldes", [
+  "carga_inicial",
+  "alta",
+  "baja_deterioro",
+  "discontinuado",
+  "correccion",
+  "otro",
+]);
+
+/**
+ * Historial del inventario de moldes: cada cambio del numero de un modelo.
+ *
+ * `productos.moldes` es el numero vigente, que es lo que se consulta todo el
+ * tiempo; esta tabla es la historia de como se llego ahi. Se escriben juntas,
+ * en la misma transaccion, asi que nunca se contradicen. Guarda el antes y el
+ * despues, y no solo la diferencia, para que cada fila se lea sola.
+ */
+export const ajustesInventarioMoldes = pgTable(
+  "ajustes_inventario_moldes",
+  {
+    id: serial("id").primaryKey(),
+    productoId: integer("producto_id")
+      .notNull()
+      .references(() => productos.id),
+    productoNombre: text("producto_nombre").notNull(),
+    antes: integer("antes").notNull(),
+    despues: integer("despues").notNull(),
+    motivo: motivoInventarioMoldesEnum("motivo").notNull(),
+    nota: text("nota"),
+    usuarioId: integer("usuario_id")
+      .notNull()
+      .references(() => usuarios.id),
+    usuarioNombre: text("usuario_nombre").notNull(),
+    creadoEn: timestamp("creado_en", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("ajustes_inventario_moldes_creado_idx").on(t.creadoEn),
+    index("ajustes_inventario_moldes_producto_idx").on(t.productoId),
+  ],
+);
+
+/**
+ * Palets que paletizado confirma haber armado.
+ *
+ * Es un registro de movimientos y no un contador: cada toque en + o en "Listo"
+ * agrega una fila con quien y cuando, y un toque en - agrega una fila negativa.
+ * Lo armado del dia es la suma. Asi el numero nunca se pisa y se sabe quien
+ * confirmo cada cosa.
+ *
+ * Va por fecha del plan y por modelo, no por linea del plan: se pueden armar
+ * palets de un modelo del que no se pidieron secaderos -placas que ya estaban
+ * en un cajon-, y rehacer el plan borra y reescribe sus lineas, lo que se
+ * llevaria puesto lo confirmado.
+ */
+export const tipoPaletEnum = pgEnum("tipo_palet", ["estandar", "optimizado"]);
+
+export const paletsArmados = pgTable(
+  "palets_armados",
+  {
+    id: serial("id").primaryKey(),
+    fecha: date("fecha").notNull(),
+    productoId: integer("producto_id")
+      .notNull()
+      .references(() => productos.id),
+    productoNombre: text("producto_nombre").notNull(),
+    tipo: tipoPaletEnum("tipo").notNull(),
+    /** Positivo al confirmar, negativo al descontar un error. */
+    cantidad: integer("cantidad").notNull(),
+    usuarioId: integer("usuario_id")
+      .notNull()
+      .references(() => usuarios.id),
+    usuarioNombre: text("usuario_nombre").notNull(),
+    creadoEn: timestamp("creado_en", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("palets_armados_fecha_idx").on(t.fecha)],
 );
 
 /**
@@ -618,3 +826,8 @@ export type Destino = (typeof destinoEnum.enumValues)[number];
 export type RoturaCarrusel = typeof roturasCarrusel.$inferSelect;
 export type TipoYeso = (typeof tipoYesoEnum.enumValues)[number];
 export type ConsumoYeso = typeof consumoYeso.$inferSelect;
+export type MotivoMoldesIncompletos =
+  (typeof motivoMoldesIncompletosEnum.enumValues)[number];
+export type TipoPalet = (typeof tipoPaletEnum.enumValues)[number];
+export type MotivoInventarioMoldes =
+  (typeof motivoInventarioMoldesEnum.enumValues)[number];

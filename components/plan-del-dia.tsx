@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { explicarDesvio } from "@/lib/acciones/plan";
-import type { ComparacionPlan, LineaPlan } from "@/lib/plan";
+import { explicarDesvio, registrarPalets } from "@/lib/acciones/plan";
+import type { AvancePalets, ComparacionPlan, LineaPlan } from "@/lib/plan";
+import type { TipoPalet } from "@/lib/db/schema";
 import { COLOR_DESTINO, ETIQUETA_DESTINO } from "@/lib/estados";
 import { numero, porcentaje } from "@/lib/formato";
 import { etiquetaRelativa } from "@/lib/rangos";
@@ -12,6 +13,31 @@ import { Plegable } from "@/components/plegable";
 import { Aviso } from "@/components/ui";
 
 type Motivo = { id: number; nombre: string };
+
+const TIPOS_PALET: TipoPalet[] = ["estandar", "optimizado"];
+
+const ETIQUETA_PALET: Record<TipoPalet, string> = {
+  estandar: "Palets estándar",
+  optimizado: "Palets optimizados",
+};
+
+const CORTO_PALET: Record<TipoPalet, string> = {
+  estandar: "pal. est.",
+  optimizado: "pal. opt.",
+};
+
+/** Lo que falta de una linea, en palabras: "2 sec · 1 pal. est.". */
+function faltaDeLinea(l: LineaPlan): string[] {
+  const partes: string[] = [];
+  if (l.hechos < l.pedidos) partes.push(`${numero(l.pedidos - l.hechos)} sec`);
+  for (const t of TIPOS_PALET) {
+    const p = l.palets[t];
+    if (p.hechos < p.pedidos) partes.push(`${numero(p.pedidos - p.hechos)} ${CORTO_PALET[t]}`);
+  }
+  return partes;
+}
+
+const lineaCompleta = (l: LineaPlan) => faltaDeLinea(l).length === 0;
 
 /**
  * La orden del dia en la pantalla del operario, con el avance en vivo.
@@ -31,6 +57,7 @@ export function PlanDelDia({
   motivos,
   entregadosPorHorno,
   puedeExplicar,
+  puedeRegistrarPalets = false,
 }: {
   fecha: string;
   hoy: string;
@@ -43,6 +70,8 @@ export function PlanDelDia({
    */
   entregadosPorHorno?: number;
   puedeExplicar: boolean;
+  /** Solo paletizado: si quien mira puede confirmar palets de ese dia. */
+  puedeRegistrarPalets?: boolean;
 }) {
   const dia = etiquetaRelativa(fecha, hoy);
   const esFuturo = fecha > hoy;
@@ -62,9 +91,12 @@ export function PlanDelDia({
     );
   }
 
-  const { lineas, fueraDePlan, totalPedido, totalHecho } = comparacion;
+  const { lineas, fueraDePlan, totalPedido, totalHecho, palets } = comparacion;
   const cumplimiento = totalPedido > 0 ? totalHecho / totalPedido : 1;
-  const faltantes = lineas.filter((l) => l.hechos < l.pedidos);
+  const faltantes = lineas.filter((l) => !lineaCompleta(l));
+  const tiposConPalets = TIPOS_PALET.filter(
+    (t) => palets[t].pedidos > 0 || palets[t].hechos > 0,
+  );
 
   /**
    * Lo que se lee sin abrir la seccion.
@@ -78,7 +110,7 @@ export function PlanDelDia({
    */
   const resumen = (
     <>
-      {esFuturo ? (
+      {totalPedido === 0 ? null : esFuturo ? (
         <span className="text-sm font-bold tabular-nums text-slate-700">
           {numero(totalPedido)} secaderos pedidos
         </span>
@@ -92,22 +124,55 @@ export function PlanDelDia({
                 : "text-amber-700"
           }`}
         >
-          {numero(totalHecho)} de {numero(totalPedido)} secaderos ·{" "}
+          Secaderos {numero(totalHecho)}/{numero(totalPedido)} ·{" "}
           {porcentaje(totalHecho, totalPedido)}
         </span>
       )}
 
+      {/* Los palets van en su propio renglon y sin topear: 9/7 es 9/7. */}
+      {tiposConPalets.map((t) => (
+        <span
+          key={t}
+          className={`block text-sm font-bold tabular-nums ${
+            esFuturo
+              ? "text-slate-700"
+              : palets[t].hechos >= palets[t].pedidos
+                ? "text-emerald-600"
+                : "text-slate-700"
+          }`}
+        >
+          {ETIQUETA_PALET[t]}{" "}
+          {esFuturo
+            ? `${numero(palets[t].pedidos)} pedidos`
+            : `${numero(palets[t].hechos)}/${numero(palets[t].pedidos)}`}
+        </span>
+      ))}
+
       {esFuturo ? (
         lineas.length > 0 && (
           <span className="mt-0.5 block text-xs text-slate-500">
-            {lineas.map((l) => `${l.producto} ${numero(l.pedidos)}`).join(" · ")}
+            {lineas
+              .map((l) =>
+                [
+                  l.producto,
+                  l.pedidos > 0 ? `${numero(l.pedidos)} sec` : null,
+                  ...TIPOS_PALET.map((t) =>
+                    l.palets[t].pedidos > 0
+                      ? `${numero(l.palets[t].pedidos)} ${CORTO_PALET[t]}`
+                      : null,
+                  ),
+                ]
+                  .filter(Boolean)
+                  .join(" "),
+              )
+              .join(" · ")}
           </span>
         )
       ) : faltantes.length > 0 ? (
         <span className="mt-0.5 block text-xs font-semibold text-amber-800">
           Falta:{" "}
           {faltantes
-            .map((l) => `${l.producto} ${numero(l.pedidos - l.hechos)}`)
+            .map((l) => `${l.producto} ${faltaDeLinea(l).join(" + ")}`)
             .join(" · ")}
         </span>
       ) : (
@@ -146,8 +211,10 @@ export function PlanDelDia({
             <FilaPlan
               key={l.lineaId}
               linea={l}
+              fecha={fecha}
               motivos={motivos}
               puedeExplicar={puedeExplicar}
+              puedeRegistrarPalets={puedeRegistrarPalets}
             />
           ),
         )}
@@ -160,7 +227,15 @@ export function PlanDelDia({
           </p>
           <p className="text-xs text-slate-500">
             {fueraDePlan
-              .map((f) => `${f.producto} (${numero(f.hechos)})`)
+              .map((f) => {
+                const partes = [
+                  f.hechos > 0 ? `${numero(f.hechos)} sec` : null,
+                  ...TIPOS_PALET.map((t) =>
+                    f.palets[t] > 0 ? `${numero(f.palets[t])} ${CORTO_PALET[t]}` : null,
+                  ),
+                ].filter(Boolean);
+                return `${f.producto} (${partes.join(", ")})`;
+              })
               .join(", ")}
           </p>
         </div>
@@ -185,6 +260,8 @@ function Instruccion({
   cliente: string | null;
 }) {
   if (!destino && !cliente) return null;
+  // `destino` solo viene en planes viejos: los nuevos piden palets por
+  // cantidad, que se muestran en sus propios renglones.
 
   return (
     <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -215,15 +292,25 @@ function FilaPedido({ linea }: { linea: LineaPlan }) {
         <span className="min-w-0 truncate text-sm font-semibold text-slate-800">
           {linea.producto}
         </span>
-        <span className="shrink-0 text-sm font-bold tabular-nums text-slate-700">
-          {numero(linea.pedidos)}{" "}
-          {linea.pedidos === 1 ? "secadero" : "secaderos"}
-        </span>
+        {linea.pedidos > 0 && (
+          <span className="shrink-0 text-sm font-bold tabular-nums text-slate-700">
+            {numero(linea.pedidos)}{" "}
+            {linea.pedidos === 1 ? "secadero" : "secaderos"}
+          </span>
+        )}
       </div>
-      {linea.placasEsperadas !== null && (
+      {linea.pedidos > 0 && linea.placasEsperadas !== null && (
         <p className="mt-1 text-xs tabular-nums text-slate-500">
           {numero(linea.placasEsperadas)} placas
         </p>
+      )}
+      {TIPOS_PALET.map(
+        (t) =>
+          linea.palets[t].pedidos > 0 && (
+            <p key={t} className="mt-1 text-sm font-semibold text-slate-700">
+              {ETIQUETA_PALET[t]}: {numero(linea.palets[t].pedidos)}
+            </p>
+          ),
       )}
       <Instruccion destino={linea.destino} cliente={linea.cliente} />
     </li>
@@ -232,12 +319,16 @@ function FilaPedido({ linea }: { linea: LineaPlan }) {
 
 function FilaPlan({
   linea,
+  fecha,
   motivos,
   puedeExplicar,
+  puedeRegistrarPalets,
 }: {
   linea: LineaPlan;
+  fecha: string;
   motivos: Motivo[];
   puedeExplicar: boolean;
+  puedeRegistrarPalets: boolean;
 }) {
   const router = useRouter();
   const { ejecutar, enviando, error } = useAccion();
@@ -245,9 +336,11 @@ function FilaPlan({
   const [motivoId, setMotivoId] = useState(linea.motivoDesvioId ?? 0);
   const [nota, setNota] = useState(linea.notaDesvio ?? "");
 
-  const completo = linea.hechos >= linea.pedidos;
-  const falta = Math.max(0, linea.pedidos - linea.hechos);
+  const secaderosCompletos = linea.hechos >= linea.pedidos;
+  const completo = lineaCompleta(linea);
+  const falta = faltaDeLinea(linea).join(" + ");
   const avance = linea.pedidos > 0 ? Math.min(1, linea.hechos / linea.pedidos) : 1;
+  const conSecaderos = linea.pedidos > 0 || linea.hechos > 0;
   const explicado = linea.motivoDesvioId != null;
   const nombreMotivo = motivos.find((m) => m.id === linea.motivoDesvioId)?.nombre;
 
@@ -257,31 +350,62 @@ function FilaPlan({
         <span className="min-w-0 truncate text-sm font-semibold text-slate-800">
           {linea.producto}
         </span>
-        <span
-          className={`shrink-0 text-sm font-bold tabular-nums ${
-            completo ? "text-emerald-600" : "text-slate-700"
-          }`}
-        >
-          {numero(linea.hechos)} / {numero(linea.pedidos)}
-          {completo && " ✓"}
-        </span>
+        {conSecaderos && (
+          <span
+            className={`shrink-0 text-sm font-bold tabular-nums ${
+              secaderosCompletos ? "text-emerald-600" : "text-slate-700"
+            }`}
+          >
+            {linea.pedidos > 0
+              ? `Secaderos ${numero(linea.hechos)} / ${numero(linea.pedidos)}${secaderosCompletos ? " ✓" : ""}`
+              : `Secaderos bajados: ${numero(linea.hechos)}`}
+          </span>
+        )}
       </div>
 
-      <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-slate-200">
-        <div
-          className={`h-full rounded-full ${completo ? "bg-emerald-500" : "bg-blue-500"}`}
-          style={{ width: `${avance * 100}%` }}
-        />
-      </div>
+      {linea.pedidos > 0 && (
+        <>
+          <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-slate-200">
+            <div
+              className={`h-full rounded-full ${secaderosCompletos ? "bg-emerald-500" : "bg-blue-500"}`}
+              style={{ width: `${avance * 100}%` }}
+            />
+          </div>
 
-      {/* El detalle en placas revela los secaderos que salieron incompletos:
-          3 de 3 secaderos puede ser 500 de 612 placas. Sin tope fijo no hay
-          esperado contra el cual compararlo, asi que va solo lo hecho. */}
-      <p className="mt-1 text-xs tabular-nums text-slate-500">
-        {linea.placasEsperadas === null
-          ? `${numero(linea.placas)} placas`
-          : `${numero(linea.placas)} de ${numero(linea.placasEsperadas)} placas`}
-      </p>
+          {/* El detalle en placas revela los secaderos que salieron
+              incompletos: 3 de 3 secaderos puede ser 500 de 612 placas. Sin
+              tope fijo no hay esperado contra el cual compararlo, asi que va
+              solo lo hecho. */}
+          <p className="mt-1 text-xs tabular-nums text-slate-500">
+            {linea.placasEsperadas === null
+              ? `${numero(linea.placas)} placas`
+              : `${numero(linea.placas)} de ${numero(linea.placasEsperadas)} placas`}
+          </p>
+        </>
+      )}
+
+      {TIPOS_PALET.map(
+        (t) =>
+          (linea.palets[t].pedidos > 0 || linea.palets[t].hechos > 0) && (
+            <FilaPalets
+              key={t}
+              tipo={t}
+              avance={linea.palets[t]}
+              productoId={linea.productoId}
+              fecha={fecha}
+              puedeRegistrar={puedeRegistrarPalets}
+            />
+          ),
+      )}
+      {/* Pedido de palets sin palets de un tipo todavia: igual se puede
+          confirmar uno de mas desde aca, en la linea del modelo. */}
+      {puedeRegistrarPalets &&
+        TIPOS_PALET.every(
+          (t) => linea.palets[t].pedidos === 0 && linea.palets[t].hechos === 0,
+        ) &&
+        linea.destino === null && (
+          <AgregarPaletSinPedir productoId={linea.productoId} fecha={fecha} />
+        )}
 
       <Instruccion destino={linea.destino} cliente={linea.cliente} />
 
@@ -290,7 +414,7 @@ function FilaPlan({
           {explicado ? (
             <p className="text-xs text-slate-600">
               <span className="font-semibold text-amber-800">
-                Faltaron {numero(falta)}:
+                Faltaron {falta}:
               </span>{" "}
               {nombreMotivo ?? "motivo no encontrado"}
               {linea.notaDesvio && ` — ${linea.notaDesvio}`}
@@ -316,11 +440,11 @@ function FilaPlan({
               onClick={() => setAbierto((v) => !v)}
               className="rounded-lg bg-amber-100 px-2.5 py-1.5 text-xs font-bold text-amber-900 ring-1 ring-amber-300"
             >
-              Faltaron {numero(falta)} · explicar por qué
+              Faltaron {falta} · explicar por qué
             </button>
           ) : (
             <p className="text-xs font-semibold text-amber-800">
-              Faltaron {numero(falta)}, sin explicar
+              Faltaron {falta}, sin explicar
             </p>
           )}
         </div>
@@ -406,5 +530,130 @@ function FilaPlan({
         </div>
       )}
     </li>
+  );
+}
+
+/**
+ * Un renglon de palets: lo confirmado contra lo pedido, con los botones para
+ * confirmar de a uno, todo junto o descontar un toque de mas.
+ *
+ * Lo hecho no se topea: si armaron 9 de 7, dice 9/7.
+ */
+function FilaPalets({
+  tipo,
+  avance,
+  productoId,
+  fecha,
+  puedeRegistrar,
+}: {
+  tipo: TipoPalet;
+  avance: AvancePalets;
+  productoId: number;
+  fecha: string;
+  puedeRegistrar: boolean;
+}) {
+  const router = useRouter();
+  const { ejecutar, enviando, error } = useAccion();
+  const { pedidos, hechos } = avance;
+  const completo = hechos >= pedidos;
+
+  const registrar = (cantidad: number) =>
+    void ejecutar(
+      () => registrarPalets({ fecha, productoId, tipo, cantidad }),
+      () => router.refresh(),
+    );
+
+  return (
+    <div className="mt-2 rounded-lg bg-white p-2 ring-1 ring-slate-200">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="min-w-0 flex-1 text-sm font-semibold text-slate-700">
+          {ETIQUETA_PALET[tipo]}
+        </span>
+        <span
+          className={`text-base font-extrabold tabular-nums ${
+            hechos > pedidos
+              ? "text-blue-700"
+              : completo
+                ? "text-emerald-600"
+                : "text-slate-800"
+          }`}
+        >
+          {numero(hechos)} / {numero(pedidos)}
+          {completo && pedidos > 0 && " ✓"}
+        </span>
+      </div>
+
+      {puedeRegistrar && (
+        <div className="mt-2 flex gap-2">
+          <button
+            type="button"
+            disabled={enviando || hechos === 0}
+            onClick={() => registrar(-1)}
+            className="h-11 w-11 shrink-0 rounded-lg bg-white text-xl font-bold text-slate-700 ring-1 ring-slate-300 disabled:opacity-30"
+            aria-label={`Descontar un ${ETIQUETA_PALET[tipo].toLowerCase()}`}
+          >
+            −
+          </button>
+          <button
+            type="button"
+            disabled={enviando}
+            onClick={() => registrar(1)}
+            className="h-11 w-11 shrink-0 rounded-lg bg-white text-xl font-bold text-slate-700 ring-1 ring-slate-300"
+            aria-label={`Confirmar un ${ETIQUETA_PALET[tipo].toLowerCase()}`}
+          >
+            +
+          </button>
+          {!completo && (
+            <button
+              type="button"
+              disabled={enviando}
+              onClick={() => registrar(pedidos - hechos)}
+              className="boton flex-1 bg-emerald-600 text-sm text-white hover:bg-emerald-700"
+            >
+              {enviando ? "Guardando…" : `✓ Listo (${numero(pedidos)})`}
+            </button>
+          )}
+        </div>
+      )}
+      {error && (
+        <div className="mt-2">
+          <Aviso>{error}</Aviso>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Para una linea sin palets pedidos: confirmar un palet que se armo igual. */
+function AgregarPaletSinPedir({
+  productoId,
+  fecha,
+}: {
+  productoId: number;
+  fecha: string;
+}) {
+  const router = useRouter();
+  const { ejecutar, enviando, error } = useAccion();
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+      <span className="text-slate-500">¿Armaron un palet igual?</span>
+      {TIPOS_PALET.map((t) => (
+        <button
+          key={t}
+          type="button"
+          disabled={enviando}
+          onClick={() =>
+            void ejecutar(
+              () => registrarPalets({ fecha, productoId, tipo: t, cantidad: 1 }),
+              () => router.refresh(),
+            )
+          }
+          className="rounded-lg bg-white px-2.5 py-1.5 font-semibold text-slate-600 ring-1 ring-slate-300"
+        >
+          + 1 {CORTO_PALET[t]}
+        </button>
+      ))}
+      {error && <span className="basis-full text-red-600">{error}</span>}
+    </div>
   );
 }

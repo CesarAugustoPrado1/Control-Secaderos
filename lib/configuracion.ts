@@ -28,6 +28,11 @@ export const CONFIG_POR_DEFECTO = {
    */
   kg_por_bolson: 800,
   kg_por_balde_yeso: 20,
+  /**
+   * Lugares para moldes en el carrusel. Lo normal es que esten todos
+   * ocupados: montar menos exige explicar por que.
+   */
+  moldes_carrusel: 108,
 } as const;
 
 export type ClaveConfig = keyof typeof CONFIG_POR_DEFECTO;
@@ -37,6 +42,7 @@ export const ETIQUETA_CONFIG: Record<ClaveConfig, string> = {
   minutos_horno_objetivo: "Tiempo objetivo de horno (minutos)",
   kg_por_bolson: "Peso de un bolsón de yeso (kg)",
   kg_por_balde_yeso: "Peso de un balde de desperdicio (kg)",
+  moldes_carrusel: "Lugares para moldes en el carrusel",
 };
 
 export type Configuracion = Record<ClaveConfig, number>;
