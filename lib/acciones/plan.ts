@@ -497,52 +497,97 @@ export async function registrarPalets(
 /* Repetir un dia                                                             */
 /* -------------------------------------------------------------------------- */
 
-/** Que dias de la lista ya tienen algo cargado: plan, notas o moldes. */
-async function fechasConContenido(fechas: string[]): Promise<string[]> {
-  if (fechas.length === 0) return [];
-  const [p, n, m] = await Promise.all([
-    db.selectDistinct({ f: planes.fecha }).from(planes).where(inArray(planes.fecha, fechas)),
-    db
-      .selectDistinct({ f: notasHorno.fecha })
-      .from(notasHorno)
-      .where(inArray(notasHorno.fecha, fechas)),
-    db
-      .selectDistinct({ f: planMoldes.fecha })
-      .from(planMoldes)
-      .where(inArray(planMoldes.fecha, fechas)),
-  ]);
-  return [...new Set([...p, ...n, ...m].map((x) => x.f))].sort();
+/**
+ * Las partes de un dia que se pueden repetir, cada una por su lado.
+ *
+ * Son independientes a proposito: lo normal es dejar el mismo set de moldes
+ * toda la semana y pedirle a paletizado algo distinto cada dia. Repetir los
+ * moldes no puede arrastrar el paletizado, ni al reves.
+ */
+const PARTES = ["moldes", "carrusel", "horno", "paletizado"] as const;
+type Parte = (typeof PARTES)[number];
+
+const ETIQUETA_PARTE: Record<Parte, string> = {
+  moldes: "moldes",
+  carrusel: "secaderos del carrusel",
+  horno: "notas del horno",
+  paletizado: "paletizado",
+};
+
+/** Que dias de la lista ya tienen cargada alguna de estas partes. */
+async function fechasConContenido(
+  fechas: string[],
+  partes: Parte[],
+): Promise<string[]> {
+  if (fechas.length === 0 || partes.length === 0) return [];
+  const consultas: Promise<{ f: string }[]>[] = [];
+  const sectores = partes.filter(
+    (p): p is "carrusel" | "paletizado" => p === "carrusel" || p === "paletizado",
+  );
+  if (sectores.length) {
+    consultas.push(
+      db
+        .selectDistinct({ f: planes.fecha })
+        .from(planes)
+        .where(and(inArray(planes.fecha, fechas), inArray(planes.sector, sectores))),
+    );
+  }
+  if (partes.includes("horno")) {
+    consultas.push(
+      db
+        .selectDistinct({ f: notasHorno.fecha })
+        .from(notasHorno)
+        .where(inArray(notasHorno.fecha, fechas)),
+    );
+  }
+  if (partes.includes("moldes")) {
+    consultas.push(
+      db
+        .selectDistinct({ f: planMoldes.fecha })
+        .from(planMoldes)
+        .where(inArray(planMoldes.fecha, fechas)),
+    );
+  }
+  const filas = (await Promise.all(consultas)).flat();
+  return [...new Set(filas.map((x) => x.f))].sort();
 }
 
 const esquemaFechas = z.array(esquemaFecha).min(1).max(62);
+const esquemaPartes = z
+  .array(z.enum(PARTES))
+  .min(1, "Elegí qué querés copiar.");
 
 /**
- * Antes de repetir: cuales de los dias elegidos ya tienen algo cargado, para
- * preguntar si se pisan. No escribe nada.
+ * Antes de repetir: cuales de los dias elegidos ya tienen cargado algo de lo
+ * que se va a copiar, para preguntar si se pisa. No escribe nada.
  */
 export async function revisarDestinos(
   fechas: string[],
+  partes: Parte[],
 ): Promise<Resultado<string[]>> {
   return ejecutar(async () => {
     await autorizar("admin");
-    return fechasConContenido(esquemaFechas.parse(fechas));
+    return fechasConContenido(esquemaFechas.parse(fechas), esquemaPartes.parse(partes));
   });
 }
 
 const esquemaRepetir = z.object({
   origen: esquemaFecha,
   destinos: esquemaFechas,
-  /** Dias que ya tienen algo y el admin confirmo que se pisen. */
+  /** Que se copia. Lo que no esta en la lista no se toca en ningun dia. */
+  partes: esquemaPartes,
+  /** Dias que ya tienen algo de esas partes y el admin confirmo que se pisen. */
   pisar: z.array(esquemaFecha).default([]),
 });
 
 /**
- * Repite un dia completo en otras fechas: carrusel (secaderos y moldes),
- * notas del horno y paletizado (secaderos, palets y cliente), con las notas.
+ * Repite partes de un dia en otras fechas: los moldes, los secaderos del
+ * carrusel, las notas del horno y/o el paletizado, cada una por separado.
  *
- * Cada dia destino queda igual al de origen: lo que tenia antes se reemplaza
- * entero, y solo si el admin lo confirmo para ese dia. Las explicaciones de
- * desvio no se copian: son de lo que paso aquel dia, no de lo que se pide.
+ * En cada dia destino se reemplaza SOLO lo elegido; lo demas de ese dia queda
+ * como estaba. Pisar algo que ya estaba cargado requiere confirmarlo dia por
+ * dia. Las explicaciones de desvio no se copian: son de lo que paso aquel
+ * dia, no de lo que se pide.
  *
  * Nunca a un dia pasado: su cumplimiento ya esta medido. Los modelos
  * suspendidos desde entonces se saltean y se avisa cuales.
@@ -553,6 +598,7 @@ export async function repetirDia(
   return ejecutar(async () => {
     const sesion = await autorizar("admin");
     const datos = esquemaRepetir.parse(entrada);
+    const partes = new Set(datos.partes);
     const hoy = fechaLocal();
 
     const destinos = [...new Set(datos.destinos)].sort();
@@ -561,11 +607,15 @@ export async function repetirDia(
       if (f < hoy) fallar("No se puede copiar a un día que ya pasó.");
     }
 
-    // Lo que tiene el dia de origen.
-    const planesOrigen = await db
-      .select()
-      .from(planes)
-      .where(eq(planes.fecha, datos.origen));
+    const sectores = datos.partes.filter(
+      (p): p is "carrusel" | "paletizado" => p === "carrusel" || p === "paletizado",
+    );
+    const planesOrigen = sectores.length
+      ? await db
+          .select()
+          .from(planes)
+          .where(and(eq(planes.fecha, datos.origen), inArray(planes.sector, sectores)))
+      : [];
     const lineasOrigen = planesOrigen.length
       ? await db
           .select({
@@ -583,24 +633,39 @@ export async function repetirDia(
           .innerJoin(productos, eq(productos.id, planLineas.productoId))
           .where(inArray(planLineas.planId, planesOrigen.map((p) => p.id)))
       : [];
-    const [notas] = await db
-      .select()
-      .from(notasHorno)
-      .where(eq(notasHorno.fecha, datos.origen))
-      .limit(1);
-    const moldesOrigen = await db
-      .select({
-        productoId: planMoldes.productoId,
-        nombre: productos.nombre,
-        activo: productos.activo,
-        moldes: planMoldes.moldes,
-      })
-      .from(planMoldes)
-      .innerJoin(productos, eq(productos.id, planMoldes.productoId))
-      .where(eq(planMoldes.fecha, datos.origen));
+    const [notas] = partes.has("horno")
+      ? await db
+          .select()
+          .from(notasHorno)
+          .where(eq(notasHorno.fecha, datos.origen))
+          .limit(1)
+      : [];
+    const moldesOrigen = partes.has("moldes")
+      ? await db
+          .select({
+            productoId: planMoldes.productoId,
+            nombre: productos.nombre,
+            activo: productos.activo,
+            moldes: planMoldes.moldes,
+          })
+          .from(planMoldes)
+          .innerJoin(productos, eq(productos.id, planMoldes.productoId))
+          .where(eq(planMoldes.fecha, datos.origen))
+      : [];
 
-    if (planesOrigen.length === 0 && !notas && moldesOrigen.length === 0) {
-      fallar("Ese día no tiene nada cargado para repetir.");
+    // Cada parte elegida tiene que existir en el origen: copiar "nada" sobre
+    // un dia que tenia algo lo borraria sin que nadie lo haya pedido.
+    const faltan = datos.partes.filter((p) =>
+      p === "moldes"
+        ? moldesOrigen.length === 0
+        : p === "horno"
+          ? !notas
+          : !planesOrigen.some((pl) => pl.sector === p),
+    );
+    if (faltan.length > 0) {
+      fallar(
+        `El día de origen no tiene ${faltan.map((p) => ETIQUETA_PARTE[p]).join(" ni ")} para copiar.`,
+      );
     }
 
     const omitidos = new Set<string>();
@@ -613,22 +678,38 @@ export async function repetirDia(
       ? await validarMoldesPedidos(moldesActivos)
       : null;
 
-    const ocupados = new Set(await fechasConContenido(destinos));
+    const ocupados = new Set(await fechasConContenido(destinos, datos.partes));
     const pisar = new Set(datos.pisar);
     const sinConfirmar = destinos.filter((f) => ocupados.has(f) && !pisar.has(f));
     if (sinConfirmar.length > 0) {
       fallar(
-        `Estos días ya tienen algo cargado: ${sinConfirmar.join(", ")}. Confirmá si se pisan.`,
+        `Estos días ya tienen algo de eso cargado: ${sinConfirmar.join(", ")}. Confirmá si se pisan.`,
       );
     }
 
     await db.transaction(async (tx) => {
       for (const fecha of destinos) {
-        await tx.delete(planes).where(eq(planes.fecha, fecha));
-        await tx.delete(notasHorno).where(eq(notasHorno.fecha, fecha));
-        await reemplazarMoldesPedidos(tx, fecha, moldes);
+        if (partes.has("moldes")) {
+          await reemplazarMoldesPedidos(tx, fecha, moldes);
+        }
+
+        if (partes.has("horno")) {
+          await tx.delete(notasHorno).where(eq(notasHorno.fecha, fecha));
+          await tx.insert(notasHorno).values({
+            fecha,
+            carga: notas!.carga,
+            descarga: notas!.descarga,
+            actualizadoPor: sesion.uid,
+            actualizadoEn: new Date(),
+          });
+        }
 
         for (const p of planesOrigen) {
+          // Solo el sector de este plan: el otro sector del dia destino no se
+          // toca.
+          await tx
+            .delete(planes)
+            .where(and(eq(planes.fecha, fecha), eq(planes.sector, p.sector)));
           const lineas = lineasOrigen.filter((l) => l.planId === p.id && l.activo);
           if (lineas.length === 0) continue;
           const [nuevo] = await tx
@@ -651,16 +732,6 @@ export async function repetirDia(
               paletsOptimizados: l.paletsOptimizados,
             })),
           );
-        }
-
-        if (notas) {
-          await tx.insert(notasHorno).values({
-            fecha,
-            carga: notas.carga,
-            descarga: notas.descarga,
-            actualizadoPor: sesion.uid,
-            actualizadoEn: new Date(),
-          });
         }
       }
     });

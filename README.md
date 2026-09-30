@@ -115,11 +115,14 @@ paletizador los confirma con **✓ Listo** o de a uno con **+ / −**, y el plan
 muestra el cumplimiento en tres renglones: secaderos 13/15, palets estándar 5/5,
 optimizados 9/7.
 
-### Repetir un día
+### Copiar de un día a otros
 
-Desde el plan, **Repetir en otros días** copia el día completo (carrusel con
-moldes, notas del horno, paletizado con palets) a mañana, el resto de la semana
-o una fecha suelta. Si un día ya tiene algo cargado, pregunta antes de pisarlo.
+Desde el plan, **Copiar a otros días** copia las partes que elijas de un día
+—set de moldes, secaderos del carrusel, notas del horno, paletizado— a mañana,
+el resto de la semana o una fecha suelta. Cada parte va por separado y ninguna
+viene marcada: lo normal es repetir los moldes toda la semana y pedirle a
+paletizado algo distinto cada día. En el día destino se reemplaza solo lo que
+se tildó; si ya tenía cargado algo de eso, pregunta antes de pisarlo.
 
 ## Roles
 
