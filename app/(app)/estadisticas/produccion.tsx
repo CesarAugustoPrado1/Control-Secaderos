@@ -96,7 +96,7 @@ export async function Produccion({
           </div>
 
           <Panel
-            titulo={`Por modelo, en ${unidad}`}
+            titulo={`Por tipo de secadero y modelo, en ${unidad}`}
             detalle={
               unidad === "secaderos"
                 ? "Un secadero con dos modelos cuenta en los dos, pero una sola vez en el total"
@@ -105,10 +105,17 @@ export async function Produccion({
           >
             <Tabla
               encabezados={["Modelo", ...puestos.map((p) => p.etiqueta)]}
-              filas={prod.modelos.map((m) => [
-                m.modelo,
-                ...puestos.map((p) => celda(valor(m.puestos[p.clave]))),
-              ])}
+              grupos={prod.tipos.map((g) => ({
+                titulo: g.tipo,
+                filas: g.modelos.map((m) => [
+                  m.modelo,
+                  ...puestos.map((p) => celda(valor(m.puestos[p.clave]))),
+                ]),
+                subtotal: [
+                  `Subtotal ${g.tipo}`,
+                  ...puestos.map((p) => celda(valor(g.subtotal[p.clave]))),
+                ],
+              }))}
               pie={["Total", ...puestos.map((p) => numero(valor(prod.totales[p.clave])))]}
             />
           </Panel>
