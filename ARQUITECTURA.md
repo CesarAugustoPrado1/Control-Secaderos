@@ -387,7 +387,7 @@ app/
     tablero/          foto del piso (por estado, tipo o modelo)
     produccion/       resumen del día para oficina
     movimientos/      historial filtrable + export CSV
-    estadisticas/     tiempos, desperdicio, adherencia
+    estadisticas/     producción por puesto, rendimiento, roturas, horno
     admin/            ABM y parámetros
   login/
 lib/
@@ -549,7 +549,20 @@ derivado del tipo, no un dato.
 
 ## 8. Estadísticas
 
-Lo que se calcula (`lib/estadisticas.ts`), sobre rangos de 7/30/90/365 días:
+La página se organiza en cuatro categorías —**Producción, Rendimiento, Roturas
+y Horno**— y cada una corre sólo sus propias consultas. El período es de
+calendario (`lib/periodos.ts`): un día, una semana (lunes a domingo), un mes o
+un año, elegibles con flechas o con el calendario, en hora argentina.
+
+**Producción** responde cuánto movió cada puesto: secaderos cargados por el
+carrusel, entradas al horno y descargas de paletizado, en **placas o en
+secaderos**, por modelo y con el total, y abierto por día (o por mes en un año).
+El llenado manual va en columnas propias, separado por la bandera del tipo, igual
+que en las pantallas. Al horno cuenta la entrada (un rehorneado cuenta dos veces)
+y el secado natural no cuenta. Un secadero con dos modelos cuenta en cada uno,
+pero una sola vez en el total.
+
+Lo demás que se calcula (`lib/estadisticas.ts`):
 
 - Tiempo de horno promedio/mín/máx, **abierto por tipo de placa**, más el
   detalle de los últimos ciclos.

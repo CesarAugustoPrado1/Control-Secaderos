@@ -23,22 +23,10 @@ import {
   type TipoMovimiento,
 } from "./db/schema";
 import { ETIQUETA_MOVIMIENTO } from "./estados";
-import { finDeHoy } from "./rangos";
+import { ZONA_SQL } from "./rangos";
 import { vigente } from "./vigencia";
 
 export type Rango = { desde: Date; hasta: Date };
-
-/**
- * Los ultimos N dias. El corte de arriba es el fin del dia de hoy y no "ahora"
- * por la misma razon que en `rangos.ts`: el reloj de la base va adelantado
- * respecto del de la app, y cortar en "ahora" esconde lo que se acaba de
- * registrar.
- */
-export function rangoDeDias(dias: number): Rango {
-  const hasta = finDeHoy();
-  const desde = new Date(hasta.getTime() - dias * 24 * 60 * 60 * 1000);
-  return { desde, hasta };
-}
 
 /**
  * Rango de fechas de los movimientos, y solo los vigentes: ver lib/vigencia.ts.
@@ -926,4 +914,181 @@ export async function roturasCarruselPorMotivo(rango: Rango) {
     placas: aNumero(f.placas),
     reportes: Number(f.reportes),
   }));
+}
+
+/* -------------------------------------------------------------------------- */
+/* Produccion por puesto                                                      */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Los puestos por los que pasa una placa, en el orden del circuito.
+ *
+ * Carrusel y paletizado se separan del llenado manual por la bandera del tipo
+ * de secadero, igual que las pantallas: las guardas las carga y descarga a mano
+ * otro puesto, y sumarlas al carrusel inflaria la produccion de la linea con
+ * placas que no hizo. El horno es uno solo: ahi entran todos los secaderos.
+ */
+export const PUESTOS = [
+  { clave: "carrusel", etiqueta: "Carrusel", detalle: "Cargado" },
+  { clave: "horno", etiqueta: "Horno", detalle: "Entró al horno" },
+  { clave: "paletizado", etiqueta: "Paletizado", detalle: "A producto terminado" },
+  { clave: "manual_carga", etiqueta: "Llenado manual", detalle: "Cargado a mano" },
+  { clave: "manual_descarga", etiqueta: "Descarga manual", detalle: "Descargado a mano" },
+] as const;
+
+export type Puesto = (typeof PUESTOS)[number]["clave"];
+
+export type Cuenta = { placas: number; secaderos: number };
+
+export type ProduccionPorPuesto = {
+  /** Total de cada puesto. Los secaderos se cuentan una vez cada uno. */
+  totales: Record<Puesto, Cuenta>;
+  /** Una fila por modelo, con lo que hizo cada puesto. */
+  modelos: { modelo: string; puestos: Record<Puesto, Cuenta> }[];
+};
+
+const vacias = (): Record<Puesto, Cuenta> =>
+  Object.fromEntries(
+    PUESTOS.map((p) => [p.clave, { placas: 0, secaderos: 0 }]),
+  ) as Record<Puesto, Cuenta>;
+
+/**
+ * El puesto de cada movimiento, en SQL. Solo cuentan los tres pasos que mueven
+ * produccion: la carga, la entrada al horno y la descarga.
+ *
+ * Al horno cuenta la ENTRADA: es lo que paso por el horno ese dia. Un secadero
+ * rehorneado entra dos veces y cuenta dos, porque ocupo el horno dos veces. El
+ * secado natural no cuenta: esas placas nunca estuvieron adentro.
+ */
+const PUESTO_SQL = sql.raw(`
+  case
+    when m.tipo = 'entrada_horno' then 'horno'
+    when m.tipo = 'carga' then
+      case when coalesce(t.llenado_manual, false) then 'manual_carga' else 'carrusel' end
+    else
+      case when coalesce(t.llenado_manual, false) then 'manual_descarga' else 'paletizado' end
+  end`);
+
+/**
+ * Las placas son las que quedaron en circuito despues del paso (`cantidad`):
+ * las que efectivamente entraron al secadero, al horno o a producto terminado.
+ * Lo roto en ese mismo paso no se movio, y esta en las estadisticas de rotura.
+ */
+const DESDE_PRODUCCION = (r: Rango) => sql`
+  from movimientos m
+  join movimiento_lineas l on l.movimiento_id = m.id
+  left join tipos t on t.id = m.secadero_tipo_id
+  where m.tipo in ('carga', 'entrada_horno', 'descarga')
+    -- Vigentes solamente: ver lib/vigencia.ts.
+    and m.anulado_en is null
+    and m.creado_en >= ${r.desde.toISOString()}::timestamptz
+    and m.creado_en <= ${r.hasta.toISOString()}::timestamptz`;
+
+/**
+ * Cuantas placas y cuantos secaderos movio cada puesto en el periodo, por
+ * modelo y en total.
+ *
+ * Un secadero con dos modelos cuenta como un secadero en cada uno de ellos,
+ * pero UNA vez en el total: por eso el total de secaderos sale de su propia
+ * consulta y no de sumar las filas.
+ */
+export async function produccionPorPuesto(
+  rango: Rango,
+): Promise<ProduccionPorPuesto> {
+  const [porModelo, porPuesto] = await Promise.all([
+    db.execute<{
+      puesto: Puesto;
+      modelo: string;
+      placas: string;
+      secaderos: string;
+    }>(sql`
+      select ${PUESTO_SQL} as puesto,
+             l.producto_nombre as modelo,
+             coalesce(sum(l.cantidad), 0)::text as placas,
+             (count(distinct m.id) filter (where l.cantidad > 0))::text as secaderos
+      ${DESDE_PRODUCCION(rango)}
+      group by 1, 2
+    `),
+    db.execute<{ puesto: Puesto; placas: string; secaderos: string }>(sql`
+      select ${PUESTO_SQL} as puesto,
+             coalesce(sum(l.cantidad), 0)::text as placas,
+             count(distinct m.id)::text as secaderos
+      ${DESDE_PRODUCCION(rango)}
+      group by 1
+    `),
+  ]);
+
+  const totales = vacias();
+  for (const f of porPuesto) {
+    totales[f.puesto] = {
+      placas: aNumero(f.placas),
+      secaderos: aNumero(f.secaderos),
+    };
+  }
+
+  const modelos = new Map<string, Record<Puesto, Cuenta>>();
+  for (const f of porModelo) {
+    let fila = modelos.get(f.modelo);
+    if (!fila) {
+      fila = vacias();
+      modelos.set(f.modelo, fila);
+    }
+    fila[f.puesto] = {
+      placas: aNumero(f.placas),
+      secaderos: aNumero(f.secaderos),
+    };
+  }
+
+  return {
+    totales,
+    modelos: [...modelos.entries()]
+      .map(([modelo, puestos]) => ({ modelo, puestos }))
+      .filter((m) => PUESTOS.some((p) => m.puestos[p.clave].placas > 0))
+      // El que mas se produjo primero: es el orden en que se lee la planilla.
+      .sort(
+        (a, b) =>
+          b.puestos.carrusel.placas + b.puestos.manual_carga.placas -
+          (a.puestos.carrusel.placas + a.puestos.manual_carga.placas) ||
+          a.modelo.localeCompare(b.modelo),
+      ),
+  };
+}
+
+/**
+ * Lo mismo que `produccionPorPuesto` pero abierto en el tiempo, por dia o por
+ * mes, para ver como se repartio la produccion dentro del periodo.
+ */
+export async function produccionPorPuestoEnElTiempo(
+  rango: Rango,
+  paso: "dia" | "mes",
+): Promise<{ clave: string; puestos: Record<Puesto, Cuenta> }[]> {
+  const formato = paso === "dia" ? "YYYY-MM-DD" : "YYYY-MM";
+  const filas = await db.execute<{
+    clave: string;
+    puesto: Puesto;
+    placas: string;
+    secaderos: string;
+  }>(sql`
+    select to_char(m.creado_en at time zone ${ZONA_SQL}, ${formato}) as clave,
+           ${PUESTO_SQL} as puesto,
+           coalesce(sum(l.cantidad), 0)::text as placas,
+           count(distinct m.id)::text as secaderos
+    ${DESDE_PRODUCCION(rango)}
+    group by 1, 2
+    order by 1
+  `);
+
+  const porClave = new Map<string, Record<Puesto, Cuenta>>();
+  for (const f of filas) {
+    let fila = porClave.get(f.clave);
+    if (!fila) {
+      fila = vacias();
+      porClave.set(f.clave, fila);
+    }
+    fila[f.puesto] = {
+      placas: aNumero(f.placas),
+      secaderos: aNumero(f.secaderos),
+    };
+  }
+  return [...porClave.entries()].map(([clave, puestos]) => ({ clave, puestos }));
 }

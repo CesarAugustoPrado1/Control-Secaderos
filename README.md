@@ -278,7 +278,7 @@ app/
     paletizado/     descarga a producto terminado
     tablero/        foto del piso de planta (por estado, tipo o modelo)
     movimientos/    historial filtrable + export CSV
-    estadisticas/   tiempos y desperdicio
+    estadisticas/   producción por puesto, rendimiento, roturas, horno
     admin/          ABM y parámetros
   login/            ingreso con usuario + PIN
 lib/
