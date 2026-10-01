@@ -940,11 +940,20 @@ export type Puesto = (typeof PUESTOS)[number]["clave"];
 
 export type Cuenta = { placas: number; secaderos: number };
 
+export type FilaProduccion = { modelo: string; puestos: Record<Puesto, Cuenta> };
+
 export type ProduccionPorPuesto = {
   /** Total de cada puesto. Los secaderos se cuentan una vez cada uno. */
   totales: Record<Puesto, Cuenta>;
-  /** Una fila por modelo, con lo que hizo cada puesto. */
-  modelos: { modelo: string; puestos: Record<Puesto, Cuenta> }[];
+  /**
+   * Un grupo por tipo de secadero, en el orden configurado de los tipos
+   * (Grande, Chico, Guarda, Especial), con sus modelos y su subtotal.
+   */
+  tipos: {
+    tipo: string;
+    modelos: FilaProduccion[];
+    subtotal: Record<Puesto, Cuenta>;
+  }[];
 };
 
 const vacias = (): Record<Puesto, Cuenta> =>
@@ -985,31 +994,46 @@ const DESDE_PRODUCCION = (r: Rango) => sql`
     and m.creado_en <= ${r.hasta.toISOString()}::timestamptz`;
 
 /**
- * Cuantas placas y cuantos secaderos movio cada puesto en el periodo, por
- * modelo y en total.
+ * El tipo de secadero de cada movimiento, para agrupar. Va el nombre actual del
+ * tipo, asi un tipo renombrado no aparece partido en dos; si el tipo se borro,
+ * queda el nombre que tenia al momento del movimiento.
+ */
+const TIPO_SQL = sql.raw(`coalesce(t.nombre, m.secadero_tipo_nombre)`);
+/** Los tipos en el orden en que estan configurados; los borrados, al final. */
+const ORDEN_TIPO_SQL = sql.raw(`coalesce(t.orden, 2147483647)`);
+
+/**
+ * Cuantas placas y cuantos secaderos movio cada puesto en el periodo, por tipo
+ * de secadero y modelo, con subtotal por tipo y total general.
  *
  * Un secadero con dos modelos cuenta como un secadero en cada uno de ellos,
- * pero UNA vez en el total: por eso el total de secaderos sale de su propia
- * consulta y no de sumar las filas.
+ * pero UNA vez en el subtotal del tipo y en el total: por eso esos dos salen de
+ * sus propias consultas y no de sumar las filas.
  */
 export async function produccionPorPuesto(
   rango: Rango,
 ): Promise<ProduccionPorPuesto> {
-  const [porModelo, porPuesto] = await Promise.all([
-    db.execute<{
-      puesto: Puesto;
-      modelo: string;
-      placas: string;
-      secaderos: string;
-    }>(sql`
+  type FilaCuenta = { puesto: Puesto; placas: string; secaderos: string };
+  const [porModelo, porTipo, porPuesto] = await Promise.all([
+    db.execute<FilaCuenta & { tipo: string; orden: number; modelo: string }>(sql`
       select ${PUESTO_SQL} as puesto,
+             ${TIPO_SQL} as tipo,
+             ${ORDEN_TIPO_SQL} as orden,
              l.producto_nombre as modelo,
              coalesce(sum(l.cantidad), 0)::text as placas,
              (count(distinct m.id) filter (where l.cantidad > 0))::text as secaderos
       ${DESDE_PRODUCCION(rango)}
+      group by 1, 2, 3, 4
+    `),
+    db.execute<FilaCuenta & { tipo: string }>(sql`
+      select ${PUESTO_SQL} as puesto,
+             ${TIPO_SQL} as tipo,
+             coalesce(sum(l.cantidad), 0)::text as placas,
+             count(distinct m.id)::text as secaderos
+      ${DESDE_PRODUCCION(rango)}
       group by 1, 2
     `),
-    db.execute<{ puesto: Puesto; placas: string; secaderos: string }>(sql`
+    db.execute<FilaCuenta>(sql`
       select ${PUESTO_SQL} as puesto,
              coalesce(sum(l.cantidad), 0)::text as placas,
              count(distinct m.id)::text as secaderos
@@ -1018,39 +1042,62 @@ export async function produccionPorPuesto(
     `),
   ]);
 
-  const totales = vacias();
-  for (const f of porPuesto) {
-    totales[f.puesto] = {
-      placas: aNumero(f.placas),
-      secaderos: aNumero(f.secaderos),
-    };
-  }
+  const cuenta = (f: FilaCuenta): Cuenta => ({
+    placas: aNumero(f.placas),
+    secaderos: aNumero(f.secaderos),
+  });
 
-  const modelos = new Map<string, Record<Puesto, Cuenta>>();
+  const totales = vacias();
+  for (const f of porPuesto) totales[f.puesto] = cuenta(f);
+
+  const grupos = new Map<
+    string,
+    { orden: number; modelos: Map<string, Record<Puesto, Cuenta>>; subtotal: Record<Puesto, Cuenta> }
+  >();
+  const grupo = (tipo: string) => {
+    let g = grupos.get(tipo);
+    if (!g) {
+      g = { orden: Number.MAX_SAFE_INTEGER, modelos: new Map(), subtotal: vacias() };
+      grupos.set(tipo, g);
+    }
+    return g;
+  };
+
   for (const f of porModelo) {
-    let fila = modelos.get(f.modelo);
+    const g = grupo(f.tipo);
+    g.orden = Math.min(g.orden, aNumero(f.orden));
+    let fila = g.modelos.get(f.modelo);
     if (!fila) {
       fila = vacias();
-      modelos.set(f.modelo, fila);
+      g.modelos.set(f.modelo, fila);
     }
-    fila[f.puesto] = {
-      placas: aNumero(f.placas),
-      secaderos: aNumero(f.secaderos),
-    };
+    fila[f.puesto] = cuenta(f);
   }
+  for (const f of porTipo) grupo(f.tipo).subtotal[f.puesto] = cuenta(f);
+
+  const conAlgo = (p: Record<Puesto, Cuenta>) =>
+    PUESTOS.some((x) => p[x.clave].placas > 0);
+  const cargadas = (p: Record<Puesto, Cuenta>) =>
+    p.carrusel.placas + p.manual_carga.placas;
 
   return {
     totales,
-    modelos: [...modelos.entries()]
-      .map(([modelo, puestos]) => ({ modelo, puestos }))
-      .filter((m) => PUESTOS.some((p) => m.puestos[p.clave].placas > 0))
-      // El que mas se produjo primero: es el orden en que se lee la planilla.
-      .sort(
-        (a, b) =>
-          b.puestos.carrusel.placas + b.puestos.manual_carga.placas -
-          (a.puestos.carrusel.placas + a.puestos.manual_carga.placas) ||
-          a.modelo.localeCompare(b.modelo),
-      ),
+    tipos: [...grupos.entries()]
+      .sort(([ta, a], [tb, b]) => a.orden - b.orden || ta.localeCompare(tb))
+      .map(([tipo, g]) => ({
+        tipo,
+        subtotal: g.subtotal,
+        modelos: [...g.modelos.entries()]
+          .map(([modelo, puestos]) => ({ modelo, puestos }))
+          .filter((m) => conAlgo(m.puestos))
+          // Dentro del tipo, el modelo que mas se produjo primero.
+          .sort(
+            (a, b) =>
+              cargadas(b.puestos) - cargadas(a.puestos) ||
+              a.modelo.localeCompare(b.modelo),
+          ),
+      }))
+      .filter((g) => g.modelos.length > 0),
   };
 }
 

@@ -58,11 +58,17 @@ export function SinDatos({ texto = "Sin datos en este período." }: { texto?: st
 
 export function Tabla({
   encabezados,
-  filas,
+  filas = [],
+  grupos,
   pie,
 }: {
   encabezados: string[];
-  filas: string[][];
+  filas?: string[][];
+  /**
+   * Filas agrupadas bajo un titulo, cada grupo con su subtotal. Van despues de
+   * `filas`, que normalmente queda vacio cuando se usan grupos.
+   */
+  grupos?: { titulo: string; filas: string[][]; subtotal?: string[] }[];
   /** Fila de totales, separada y en negrita. */
   pie?: string[];
 }) {
@@ -83,24 +89,42 @@ export function Tabla({
             ))}
           </tr>
         </thead>
-        <tbody className="divide-y divide-slate-100">
-          {filas.map((fila, i) => (
-            <tr key={i}>
-              {fila.map((celda, j) => (
-                <td
-                  key={j}
-                  className={`py-2.5 ${
-                    j === 0
-                      ? "font-medium text-slate-800"
-                      : "pl-4 text-right tabular-nums whitespace-nowrap text-slate-600"
-                  }`}
-                >
-                  {celda}
-                </td>
-              ))}
+        {filas.length > 0 && (
+          <tbody className="divide-y divide-slate-100">
+            {filas.map((fila, i) => (
+              <FilaTabla key={i} fila={fila} />
+            ))}
+          </tbody>
+        )}
+        {grupos?.map((g) => (
+          <tbody key={g.titulo} className="divide-y divide-slate-100">
+            <tr>
+              <th
+                colSpan={encabezados.length}
+                className="bg-slate-50 px-2 pt-4 pb-1.5 text-left text-xs font-bold tracking-wide text-slate-700 uppercase"
+              >
+                {g.titulo}
+              </th>
             </tr>
-          ))}
-        </tbody>
+            {g.filas.map((fila, i) => (
+              <FilaTabla key={i} fila={fila} sangria />
+            ))}
+            {g.subtotal && (
+              <tr>
+                {g.subtotal.map((celda, j) => (
+                  <td
+                    key={j}
+                    className={`py-2 font-semibold text-slate-800 ${
+                      j === 0 ? "pl-3" : "pl-4 text-right tabular-nums whitespace-nowrap"
+                    }`}
+                  >
+                    {celda}
+                  </td>
+                ))}
+              </tr>
+            )}
+          </tbody>
+        ))}
         {pie && (
           <tfoot>
             <tr className="border-t-2 border-slate-300">
@@ -119,6 +143,25 @@ export function Tabla({
         )}
       </table>
     </div>
+  );
+}
+
+function FilaTabla({ fila, sangria }: { fila: string[]; sangria?: boolean }) {
+  return (
+    <tr>
+      {fila.map((celda, j) => (
+        <td
+          key={j}
+          className={`py-2.5 ${
+            j === 0
+              ? `font-medium text-slate-800 ${sangria ? "pl-3" : ""}`
+              : "pl-4 text-right tabular-nums whitespace-nowrap text-slate-600"
+          }`}
+        >
+          {celda}
+        </td>
+      ))}
+    </tr>
   );
 }
 
