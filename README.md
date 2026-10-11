@@ -241,12 +241,43 @@ tener las funciones lejos de la base suma más de 100 ms por consulta.
 En los celulares conviene abrir la URL y usar *Agregar a pantalla de inicio*:
 la app queda como un ícono y se abre en pantalla completa.
 
+### Informe diario por Telegram
+
+Todos los días a las **22 hs** la app manda por Telegram el cumplimiento del
+plan del día (carrusel, paletizado en secaderos y en palets) y lo que movió
+cada sector. Si ese día no hubo ningún movimiento ni palet, no manda nada.
+
+Lo manda un bot de Telegram propio, que se crea una sola vez:
+
+1. En Telegram, abrí **@BotFather**, mandale `/newbot` y seguí los pasos (un
+   nombre y un usuario que termine en `bot`). Al final te da el **token**.
+2. Abrí tu bot nuevo (el link que te pasa BotFather) y apretá **Iniciar**. Sin
+   esto el bot no puede escribirte.
+3. Abrí **@userinfobot** y mandale cualquier mensaje: te contesta con tu **Id**.
+4. En Vercel → **Settings → Environment Variables** (Production) cargá:
+
+   | Variable | Valor |
+   | --- | --- |
+   | `TELEGRAM_BOT_TOKEN` | El token que te dio BotFather |
+   | `TELEGRAM_CHAT_ID` | Tu Id, el número que te dio @userinfobot |
+   | `CRON_SECRET` | Una cadena aleatoria, como `SESSION_SECRET` |
+
+5. Volvé a desplegar (**Deployments → ⋯ → Redeploy**) para que tome las variables.
+
+Para probarlo sin esperar a la noche: **Settings → Cron Jobs → Run** (manda el
+de hoy, y nada si hoy no se trabajó). Para probar con otro día, entrá a la app
+como admin y abrí `/api/informe-diario?fecha=2026-10-09`: manda el informe de
+ese día. Con `&ver=1` al final solo muestra el texto, sin mandarlo. El horario
+está en `vercel.json` (`0 1 * * *` es la 1 UTC, las 22 de Argentina). En el plan
+gratuito de Vercel el cron puede correr en cualquier minuto de esa hora.
+
 ---
 
 ## Estadísticas y datos
 
-La pantalla de **Estadísticas** (admin y auditor) muestra, para 7 / 30 / 90 días
-o un año:
+La pantalla de **Estadísticas** (admin y auditor) se organiza en Producción,
+Rendimiento, Roturas y Horno, para un día, una semana, un mes o un año. Muestra,
+entre otras cosas:
 
 - Tiempo de horno promedio, mínimo y máximo, abierto por tipo de placa, más el
   detalle de los últimos ciclos uno por uno.
@@ -257,6 +288,12 @@ o un año:
   colas.
 - Desperdicio por motivo, por etapa del proceso, por modelo y por operario.
 - Producción diaria de placas terminadas.
+- Cuánto cargó el carrusel, entró al horno y se paletizó, en placas o en
+  secaderos, por tipo de secadero y modelo.
+
+En **Administración → Plan**, cada día con plan se dibuja lleno hasta el
+porcentaje cumplido. Paletizado va partido en dos, secaderos y palets, que se
+miden por separado.
 
 En **Movimientos** se puede filtrar por tipo, secadero, usuario y fechas, y
 exportar el resultado a **CSV** (una fila por modelo y motivo, listo para
