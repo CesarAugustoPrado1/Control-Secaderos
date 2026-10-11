@@ -4,8 +4,16 @@ import { puedeVer, rutaInicial } from "./lib/permisos";
 
 const PUBLICAS = ["/login", "/sin-permiso"];
 
+/**
+ * Rutas que no son de una persona sino de un servicio, como el cron del
+ * informe diario. No pasan por la sesion: cada una exige su propia clave.
+ */
+const DE_SERVICIO = ["/api/informe-diario"];
+
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
+  if (DE_SERVICIO.includes(pathname)) return NextResponse.next();
+
   const sesion = await verificarSesion(req.cookies.get(COOKIE_SESION)?.value);
 
   if (PUBLICAS.includes(pathname)) {
