@@ -5,10 +5,11 @@ import { movimientos, paletsArmados } from "./db/schema";
 import { produccionPorPuesto } from "./estadisticas";
 import { cumplimientoDeFechas, type Avance } from "./plan";
 import { etiquetaDia, rangoDeFecha } from "./rangos";
+import { escaparHtml } from "./telegram";
 import { vigente } from "./vigencia";
 
 /**
- * El informe de cumplimiento de un dia, como texto para WhatsApp.
+ * El informe de cumplimiento de un dia, como mensaje de Telegram (HTML).
  *
  * Devuelve null si ese dia no se trabajo: ni un movimiento ni un palet. Un
  * dia sin trabajo no manda nada, en vez de un mensaje lleno de ceros que
@@ -43,14 +44,14 @@ export async function informeDelDia(fecha: string): Promise<string | null> {
   const t = prod.totales;
 
   const lineas = [
-    `*Informe de cumplimiento · ${etiquetaDia(fecha)}*`,
+    `<b>Informe de cumplimiento · ${escaparHtml(etiquetaDia(fecha))}</b>`,
     "",
-    "*Plan del día*",
+    "<b>Plan del día</b>",
     renglon("Carrusel · secaderos", car?.secaderos),
     renglon("Paletizado · secaderos", pal?.secaderos),
     renglon("Paletizado · palets", pal?.palets),
     "",
-    "*Producción*",
+    "<b>Producción</b>",
     `Carrusel: ${t.carrusel.secaderos} secaderos (${miles(t.carrusel.placas)} placas)`,
     `Horno: ${t.horno.secaderos} secaderos (${miles(t.horno.placas)} placas)`,
     `Paletizado: ${t.paletizado.secaderos} secaderos (${miles(t.paletizado.placas)} placas)`,

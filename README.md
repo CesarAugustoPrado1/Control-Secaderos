@@ -241,24 +241,25 @@ tener las funciones lejos de la base suma más de 100 ms por consulta.
 En los celulares conviene abrir la URL y usar *Agregar a pantalla de inicio*:
 la app queda como un ícono y se abre en pantalla completa.
 
-### Informe diario por WhatsApp
+### Informe diario por Telegram
 
-Todos los días a las **22 hs** la app manda por WhatsApp el cumplimiento del
+Todos los días a las **22 hs** la app manda por Telegram el cumplimiento del
 plan del día (carrusel, paletizado en secaderos y en palets) y lo que movió
 cada sector. Si ese día no hubo ningún movimiento ni palet, no manda nada.
 
-Lo envía [CallMeBot](https://www.callmebot.com/blog/free-api-whatsapp-messages/),
-gratis, al número de quien lo activa:
+Lo manda un bot de Telegram propio, que se crea una sola vez:
 
-1. Agendá en el celular el número del bot que figura en la página de CallMeBot.
-2. Mandale por WhatsApp el mensaje `I allow callmebot to send me messages`.
-3. El bot contesta con tu **apikey**.
+1. En Telegram, abrí **@BotFather**, mandale `/newbot` y seguí los pasos (un
+   nombre y un usuario que termine en `bot`). Al final te da el **token**.
+2. Abrí tu bot nuevo (el link que te pasa BotFather) y apretá **Iniciar**. Sin
+   esto el bot no puede escribirte.
+3. Abrí **@userinfobot** y mandale cualquier mensaje: te contesta con tu **Id**.
 4. En Vercel → **Settings → Environment Variables** (Production) cargá:
 
    | Variable | Valor |
    | --- | --- |
-   | `WHATSAPP_TELEFONO` | Tu número con código de país, ej. `+5493511234567` |
-   | `CALLMEBOT_APIKEY` | La apikey que te mandó el bot |
+   | `TELEGRAM_BOT_TOKEN` | El token que te dio BotFather |
+   | `TELEGRAM_CHAT_ID` | Tu Id, el número que te dio @userinfobot |
    | `CRON_SECRET` | Una cadena aleatoria, como `SESSION_SECRET` |
 
 5. Volvé a desplegar (**Deployments → ⋯ → Redeploy**) para que tome las variables.

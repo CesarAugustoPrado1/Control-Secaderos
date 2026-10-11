@@ -1,17 +1,17 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { informeDelDia } from "@/lib/informe";
 import { esFecha, fechaLocal } from "@/lib/rangos";
-import { enviarWhatsApp } from "@/lib/whatsapp";
+import { enviarTelegram } from "@/lib/telegram";
 
 export const dynamic = "force-dynamic";
 
 /**
- * El informe diario por WhatsApp. Lo llama el cron de Vercel a las 22 hs de
+ * El informe diario por Telegram. Lo llama el cron de Vercel a las 22 hs de
  * Argentina (ver vercel.json); no lo usa ninguna pantalla.
  *
  * Vercel manda `Authorization: Bearer <CRON_SECRET>`. Sin esa clave la ruta
  * no hace nada: si no, cualquiera que conociera la direccion podria llenarle
- * el WhatsApp al dueño.
+ * el Telegram al dueño.
  *
  * `?fecha=YYYY-MM-DD` arma el informe de otro dia, para probar.
  * `?ver=1` devuelve el texto sin mandarlo.
@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    await enviarWhatsApp(texto);
+    await enviarTelegram(texto);
   } catch (e) {
     console.error("Informe diario:", e);
     return NextResponse.json(
