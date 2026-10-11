@@ -264,7 +264,10 @@ Lo manda un bot de Telegram propio, que se crea una sola vez:
 
 5. Volvé a desplegar (**Deployments → ⋯ → Redeploy**) para que tome las variables.
 
-Para probarlo sin esperar a la noche: **Settings → Cron Jobs → Run**. El horario
+Para probarlo sin esperar a la noche: **Settings → Cron Jobs → Run** (manda el
+de hoy, y nada si hoy no se trabajó). Para probar con otro día, entrá a la app
+como admin y abrí `/api/informe-diario?fecha=2026-10-09`: manda el informe de
+ese día. Con `&ver=1` al final solo muestra el texto, sin mandarlo. El horario
 está en `vercel.json` (`0 1 * * *` es la 1 UTC, las 22 de Argentina). En el plan
 gratuito de Vercel el cron puede correr en cualquier minuto de esa hora.
 

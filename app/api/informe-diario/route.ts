@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { sesionActual } from "@/lib/auth";
 import { informeDelDia } from "@/lib/informe";
 import { esFecha, fechaLocal } from "@/lib/rangos";
 import { enviarTelegram } from "@/lib/telegram";
@@ -13,12 +14,16 @@ export const dynamic = "force-dynamic";
  * no hace nada: si no, cualquiera que conociera la direccion podria llenarle
  * el Telegram al dueño.
  *
- * `?fecha=YYYY-MM-DD` arma el informe de otro dia, para probar.
- * `?ver=1` devuelve el texto sin mandarlo.
+ * Para probar, tambien lo puede abrir el admin logueado desde el navegador,
+ * que no puede mandar ese encabezado:
+ *   /api/informe-diario?fecha=YYYY-MM-DD   manda el informe de ese dia
+ *   ...&ver=1                              muestra el texto sin mandarlo
  */
 export async function GET(req: NextRequest) {
   const secreto = process.env.CRON_SECRET;
-  if (!secreto || req.headers.get("authorization") !== `Bearer ${secreto}`) {
+  const esCron =
+    !!secreto && req.headers.get("authorization") === `Bearer ${secreto}`;
+  if (!esCron && (await sesionActual())?.rol !== "admin") {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 
