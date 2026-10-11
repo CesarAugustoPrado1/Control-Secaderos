@@ -410,3 +410,51 @@ export async function motivosDesvioActivos() {
 export async function todosLosMotivosDesvio() {
   return db.select().from(motivosDesvio).orderBy(asc(motivosDesvio.nombre));
 }
+
+/** Pedido contra hecho de una de las dos mitades del plan. */
+export type Avance = { pedidos: number; hechos: number };
+
+/**
+ * Cumplimiento de un dia y un sector, ya reducido a los numeros que se
+ * dibujan: secaderos y palets por separado, porque se miden por separado.
+ * Un paletizado puede descargar todos sus secaderos y no armar ningun palet,
+ * y promediarlos esconderia justo eso.
+ */
+export type Cumplimiento = {
+  fecha: string;
+  sector: Sector;
+  secaderos: Avance;
+  palets: Avance;
+};
+
+/**
+ * El cumplimiento de cada dia con plan de las fechas dadas, hasta hoy.
+ *
+ * Usa `compararPlan` tal cual, asi el porcentaje de la grilla es exactamente
+ * el que se ve al abrir el dia: lo hecho de secaderos tiene tope por linea (un
+ * modelo de mas no tapa otro de menos) y los palets suman sin tope.
+ *
+ * Los dias futuros no se miden: todavia no paso nada y se verian en cero.
+ */
+export async function cumplimientoDeFechas(
+  fechas: string[],
+  hoy: string,
+): Promise<Cumplimiento[]> {
+  const conPlan = (await planesDeFechas(fechas.filter((f) => f <= hoy))).filter(
+    (p) => p.sector === "carrusel" || p.sector === "paletizado",
+  );
+
+  const comparaciones = await Promise.all(
+    conPlan.map((p) => compararPlan(p.fecha, p.sector)),
+  );
+
+  return comparaciones.map((c) => ({
+    fecha: c.fecha,
+    sector: c.sector,
+    secaderos: { pedidos: c.totalPedido, hechos: c.totalHecho },
+    palets: {
+      pedidos: c.palets.estandar.pedidos + c.palets.optimizado.pedidos,
+      hechos: c.palets.estandar.hechos + c.palets.optimizado.hechos,
+    },
+  }));
+}

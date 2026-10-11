@@ -1,6 +1,7 @@
 import { productosDelCircuito } from "@/lib/consultas";
 import {
   compararPlan,
+  cumplimientoDeFechas,
   lineasDeSemana,
   notasDelHorno,
   notasHornoDeFechas,
@@ -55,6 +56,7 @@ export default async function PaginaAdminPlan({
     notas,
     moldesSemana,
     moldes,
+    cumplimiento,
   ] = await Promise.all([
       // Solo los del circuito principal: el plan es del carrusel y de
       // paletizado, y lo que hace el operario de guardas no se compara contra
@@ -85,6 +87,7 @@ export default async function PaginaAdminPlan({
             lugares: config.moldes_carrusel,
           }))
         : Promise.resolve(undefined),
+      cumplimientoDeFechas(fechas, hoy),
     ]);
 
   /** Las partes que tiene un dia de la semana, para elegir que copiar. */
@@ -129,6 +132,7 @@ export default async function PaginaAdminPlan({
         moldes={moldesSemana}
         diaElegido={diaElegido}
         filaElegida={filaElegida}
+        cumplimiento={cumplimiento}
       />
 
       {diaElegido && (
