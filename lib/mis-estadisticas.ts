@@ -1,7 +1,7 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "./db";
-import type { TipoMovimiento, TipoPalet } from "./db/schema";
+import type { Rol, TipoMovimiento, TipoPalet } from "./db/schema";
 import type { Rango } from "./estadisticas";
 import { ZONA_SQL } from "./rangos";
 
@@ -196,4 +196,106 @@ export async function misDiasYCorrecciones(uid: number, r: Rango) {
     dias: aNumero(fila?.dias),
     corregidos: aNumero(fila?.corregidos),
   };
+}
+
+export type ResumenOperario = {
+  uid: number;
+  nombre: string;
+  rol: Rol;
+  activo: boolean;
+  secaderos: number;
+  placas: number;
+  /** Las mismas que "Roturas registradas" en su detalle: movimientos y linea. */
+  rotas: number;
+  dias: number;
+  palets: number;
+};
+
+/**
+ * Una fila por operario con lo que hizo en el periodo, para la vista del
+ * admin. Aparecen todos los usuarios activos de los puestos de planta, aunque
+ * no hayan hecho nada: un operario en cero tambien es un dato. Los inactivos y
+ * los admin solo si trabajaron en el periodo.
+ *
+ * Los numeros salen igual que en `DetalleOperario`, asi la fila y el detalle
+ * de cada uno coinciden.
+ */
+export async function resumenDeOperarios(
+  r: Rango,
+  inicio: string,
+  fin: string,
+): Promise<ResumenOperario[]> {
+  const filas = await db.execute<{
+    uid: number;
+    nombre: string;
+    rol: Rol;
+    activo: boolean;
+    secaderos: string;
+    placas: string;
+    rotas: string;
+    dias: string;
+    palets: string;
+  }>(sql`
+    with mov as (
+      select m.usuario_id,
+             count(distinct m.id) as secaderos,
+             coalesce(sum(l.cantidad), 0) as placas,
+             coalesce(sum(l.desperdicio), 0) as rotas,
+             count(distinct to_char(m.creado_en at time zone ${ZONA_SQL}, 'YYYY-MM-DD')) as dias
+      from movimientos m
+      left join movimiento_lineas l on l.movimiento_id = m.id
+      -- Vigentes solamente: ver lib/vigencia.ts.
+      where m.anulado_en is null
+        and m.creado_en >= ${desde(r)}::timestamptz
+        and m.creado_en <= ${hasta(r)}::timestamptz
+      group by m.usuario_id
+    ),
+    rc as (
+      select usuario_id, sum(cantidad) as rotas
+      from roturas_carrusel
+      where creado_en >= ${desde(r)}::timestamptz
+        and creado_en <= ${hasta(r)}::timestamptz
+      group by usuario_id
+    ),
+    pal as (
+      select usuario_id, sum(cantidad) as palets
+      from palets_armados
+      where fecha >= ${inicio}::date and fecha <= ${fin}::date
+      group by usuario_id
+    )
+    select u.id as uid, u.nombre, u.rol, u.activo,
+           coalesce(mov.secaderos, 0)::text as secaderos,
+           coalesce(mov.placas, 0)::text as placas,
+           (coalesce(mov.rotas, 0) + coalesce(rc.rotas, 0))::text as rotas,
+           coalesce(mov.dias, 0)::text as dias,
+           coalesce(pal.palets, 0)::text as palets
+    from usuarios u
+    left join mov on mov.usuario_id = u.id
+    left join rc on rc.usuario_id = u.id
+    left join pal on pal.usuario_id = u.id
+    where (u.activo and u.rol in ('carrusel', 'llenado_manual', 'horno', 'paletizado'))
+       or mov.usuario_id is not null
+       or rc.usuario_id is not null
+       or coalesce(pal.palets, 0) <> 0
+    order by coalesce(mov.secaderos, 0) desc, u.nombre
+  `);
+  return [...filas].map((f) => ({
+    uid: Number(f.uid),
+    nombre: f.nombre,
+    rol: f.rol,
+    activo: f.activo,
+    secaderos: aNumero(f.secaderos),
+    placas: aNumero(f.placas),
+    rotas: aNumero(f.rotas),
+    dias: aNumero(f.dias),
+    palets: aNumero(f.palets),
+  }));
+}
+
+/** Nombre del usuario, para encabezar su detalle. null si no existe. */
+export async function nombreDeUsuario(uid: number) {
+  const [fila] = await db.execute<{ nombre: string; rol: Rol }>(sql`
+    select nombre, rol from usuarios where id = ${uid}
+  `);
+  return fila ?? null;
 }

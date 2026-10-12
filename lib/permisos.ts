@@ -40,6 +40,9 @@ const REGLAS: Array<{ prefijo: string; roles: Rol[] }> = [
   { prefijo: "/produccion", roles: ["administrativo", "admin", "auditor"] },
   { prefijo: "/movimientos", roles: ["admin", "auditor"] },
   { prefijo: "/estadisticas", roles: ["admin", "auditor"] },
+  // Lo que ve cada operario en "Mis estadisticas", de todos, para revisarlo
+  // sin entrar con su usuario.
+  { prefijo: "/estadisticas-operarios", roles: ["admin", "auditor"] },
   {
     prefijo: "/tablero",
     roles: [
@@ -123,6 +126,7 @@ const NAV: ItemNav[] = [
   { href: "/produccion", etiqueta: "Producción", icono: "resumen" },
   { href: "/movimientos", etiqueta: "Movimientos", icono: "lista" },
   { href: "/estadisticas", etiqueta: "Estadísticas", icono: "grafico" },
+  { href: "/estadisticas-operarios", etiqueta: "Estadísticas operarios", icono: "equipo" },
   { href: "/admin", etiqueta: "Administración", icono: "config" },
 ];
 
