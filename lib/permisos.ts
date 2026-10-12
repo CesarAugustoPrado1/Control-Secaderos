@@ -31,6 +31,12 @@ const REGLAS: Array<{ prefijo: string; roles: Rol[] }> = [
     prefijo: "/corregir",
     roles: ["carrusel", "llenado_manual", "horno", "paletizado", "admin"],
   },
+  // Lo propio de cada uno. Solo los roles que mueven secaderos: al
+  // administrativo y al auditor les quedaria siempre vacia.
+  {
+    prefijo: "/mis-estadisticas",
+    roles: ["carrusel", "llenado_manual", "horno", "paletizado", "admin"],
+  },
   { prefijo: "/produccion", roles: ["administrativo", "admin", "auditor"] },
   { prefijo: "/movimientos", roles: ["admin", "auditor"] },
   { prefijo: "/estadisticas", roles: ["admin", "auditor"] },
@@ -111,6 +117,9 @@ const NAV: ItemNav[] = [
   // la barra del celular las cuatro de siempre, sin que Descargar se le caiga
   // al cajon de "Más".
   { href: "/llenado-manual", etiqueta: "Llenado manual", icono: "mano" },
+  // Despues de las pantallas de trabajo, por lo mismo que llenado manual: el
+  // admin conserva sus cuatro de siempre en la barra del celular.
+  { href: "/mis-estadisticas", etiqueta: "Mis estadísticas", icono: "persona" },
   { href: "/produccion", etiqueta: "Producción", icono: "resumen" },
   { href: "/movimientos", etiqueta: "Movimientos", icono: "lista" },
   { href: "/estadisticas", etiqueta: "Estadísticas", icono: "grafico" },

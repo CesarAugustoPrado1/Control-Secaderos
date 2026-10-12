@@ -295,6 +295,12 @@ En **Administración → Plan**, cada día con plan se dibuja lleno hasta el
 porcentaje cumplido. Paletizado va partido en dos, secaderos y palets, que se
 miden por separado.
 
+En **Mis estadísticas**, cada persona que opera (carrusel, llenado manual,
+horno, paletizado y admin) ve sólo su propio trabajo: secaderos y placas que
+movió, días trabajados, roturas que registró, palets que armó y movimientos
+suyos que se anularon, por día, semana, mes o año. Una corrección conserva el
+autor original, así que no le quita el trabajo a quien lo hizo.
+
 En **Movimientos** se puede filtrar por tipo, secadero, usuario y fechas, y
 exportar el resultado a **CSV** (una fila por modelo y motivo, listo para
 tabular en una planilla).
