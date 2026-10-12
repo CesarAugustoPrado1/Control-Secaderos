@@ -13,6 +13,7 @@ import { useAccion } from "@/components/usar-accion";
 import { Aviso, ChipTipo, Modelos, Titulo } from "@/components/ui";
 import { MarcasSecadero } from "@/components/marcas-secadero";
 import { SelectorDia } from "@/components/selector-dia";
+import { Plegable } from "@/components/plegable";
 import { etiquetaRelativa } from "@/lib/rangos";
 import {
   EditorRoturas,
@@ -339,16 +340,32 @@ export function PanelHorno({
       {plan}
 
       {/* ---------------- Sacar ---------------- */}
-      <section>
-        <EncabezadoSeccion
-          titulo="Sacar del horno"
-          detalle={
-            enHorno.length
-              ? "Destildá el que no haya terminado de secar."
-              : undefined
-          }
-          contador={enHorno.length}
-        />
+      {/* Escondible como "Hecho en el horno": el encabezado dice cuantos hay
+          y cuantos van a salir, asi se lee sin abrirlo. Arranca abierto
+          porque es el trabajo del hornero; si lo cierra, el celular lo
+          recuerda. */}
+      <Plegable
+        id="horno-sacar"
+        abiertoPorDefecto
+        titulo={`Sacar del horno · ${enHorno.length}`}
+        resumen={
+          <span className="text-sm font-semibold text-slate-500">
+            {enHorno.length === 0
+              ? "El horno está vacío"
+              : `${aSacar.size} de ${enHorno.length} marcados para sacar`}
+            {enHorno.some((s) => enReproceso.has(s.id)) && (
+              <span className="block text-xs font-bold text-red-700">
+                Hay rehorneados: sacarlos antes
+              </span>
+            )}
+          </span>
+        }
+      >
+        {enHorno.length > 0 && (
+          <p className="mb-3 text-sm text-slate-500">
+            Destildá el que no haya terminado de secar.
+          </p>
+        )}
 
         {enHorno.length === 0 ? (
           <p className="tarjeta px-4 py-8 text-center text-sm text-slate-500">
@@ -412,23 +429,36 @@ export function PanelHorno({
             </button>
           </>
         )}
-      </section>
+      </Plegable>
 
       {/* ---------------- Meter ---------------- */}
-      <section>
-        <EncabezadoSeccion
-          titulo="Meter al horno"
-          detalle={
-            humedos.length
-              ? hayCuposPropios
-                ? `Libres si sacás los marcados arriba — ${cupos
-                    .map((c) => `${c.nombre}: ${Math.max(0, c.libres)}`)
-                    .join(" · ")}`
-                : `${lugaresLibres} ${lugaresLibres === 1 ? "lugar libre" : "lugares libres"} si sacás los marcados arriba`
-              : undefined
-          }
-          contador={humedos.length}
-        />
+      <Plegable
+        id="horno-meter"
+        abiertoPorDefecto
+        titulo={`Meter al horno · ${humedos.length}`}
+        resumen={
+          <span className="text-sm font-semibold text-slate-500">
+            {humedos.length === 0
+              ? "No hay secaderos húmedos esperando"
+              : `${aMeter.size} marcados · ${
+                  hayCuposPropios
+                    ? cupos
+                        .map((c) => `${c.nombre}: ${Math.max(0, c.libres)} libres`)
+                        .join(" · ")
+                    : `${lugaresLibres} ${lugaresLibres === 1 ? "lugar libre" : "lugares libres"}`
+                }`}
+          </span>
+        }
+      >
+        {humedos.length > 0 && (
+          <p className="mb-3 text-sm text-slate-500">
+            {hayCuposPropios
+              ? `Libres si sacás los marcados arriba — ${cupos
+                  .map((c) => `${c.nombre}: ${Math.max(0, c.libres)}`)
+                  .join(" · ")}`
+              : `${lugaresLibres} ${lugaresLibres === 1 ? "lugar libre" : "lugares libres"} si sacás los marcados arriba`}
+          </p>
+        )}
 
         {humedos.length === 0 ? (
           <p className="tarjeta px-4 py-8 text-center text-sm text-slate-500">
@@ -619,7 +649,7 @@ export function PanelHorno({
             </p>
           </>
         )}
-      </section>
+      </Plegable>
     </div>
   );
 }
@@ -705,55 +735,32 @@ function SinCoincidencia({
   );
 }
 
-function EncabezadoSeccion({
-  titulo,
-  detalle,
-  contador,
-}: {
-  titulo: string;
-  detalle?: string;
-  contador: number;
-}) {
-  return (
-    <div className="mb-3">
-      <div className="flex items-center gap-2">
-        <h2 className="text-base font-bold text-slate-900">{titulo}</h2>
-        <span className="chip bg-slate-200 text-slate-700">{contador}</span>
-      </div>
-      {detalle && <p className="mt-0.5 text-sm text-slate-500">{detalle}</p>}
-    </div>
-  );
-}
-
 /**
- * Una lista de secaderos que se puede cerrar o achicar.
+ * Una lista de secaderos que se puede achicar.
  *
  * Con el horno lleno, la lista completa -una tarjeta grande por secadero-
  * obligaba a recorrer media pantalla de scroll para llegar al boton de sacar o
- * de meter. Por eso tiene tres vistas:
- *  - cerrada: un renglon con cuantos hay y cuales estan marcados. Para el caso
- *    de todos los dias -sacar todo, meter los mas viejos- alcanza con eso y
- *    con los botones de seleccion rapida.
+ * de meter. Por eso tiene dos vistas:
  *  - numeros: cada secadero es un botoncito con su numero y su modelo, que se
  *    marca y desmarca de un toque.
  *  - detalle: la lista completa, la unica donde se cargan roturas, que son la
  *    excepcion.
+ * Para esconderla del todo esta el plegable de la seccion.
  *
- * Arranca en detalle si son pocos y cerrada si son muchos, y despues recuerda
- * en este celular lo que eligio el hornero.
+ * Arranca en detalle si son pocos y en numeros si son muchos, y despues
+ * recuerda en este celular lo que eligio el hornero.
  */
 const POCOS = 6;
 
-type VistaLista = "cerrada" | "numeros" | "detalle";
+type VistaLista = "numeros" | "detalle";
 
 const VISTAS: { vista: VistaLista; etiqueta: string }[] = [
-  { vista: "cerrada", etiqueta: "Cerrada" },
   { vista: "numeros", etiqueta: "Números" },
   { vista: "detalle", etiqueta: "Detalle" },
 ];
 
 const esVista = (v: string | null): v is VistaLista =>
-  v === "cerrada" || v === "numeros" || v === "detalle";
+  v === "numeros" || v === "detalle";
 
 function ListaPlegable({
   id,
@@ -791,7 +798,7 @@ function ListaPlegable({
 
   const vista: VistaLista = forzarAbierta
     ? "detalle"
-    : (elegida ?? (secaderos.length <= POCOS ? "detalle" : "cerrada"));
+    : (elegida ?? (secaderos.length <= POCOS ? "detalle" : "numeros"));
 
   function cambiar(v: VistaLista) {
     setElegida(v);
@@ -801,9 +808,6 @@ function ListaPlegable({
       // Idem.
     }
   }
-
-  const marcados = secaderos.filter((s) => elegidos.has(s.id));
-  const rehorneados = secaderos.filter((s) => reproceso.has(s.id)).length;
 
   const marcado =
     acento === "horno"
@@ -838,40 +842,6 @@ function ListaPlegable({
 
       {secaderos.length === 0 || vista === "detalle" ? (
         <div className="space-y-2">{children}</div>
-      ) : vista === "cerrada" ? (
-        // Cerrada no es escondida: dice cuantos hay y cuales van, que es lo
-        // que hace falta para apretar el boton sin abrir nada.
-        <button
-          type="button"
-          onClick={() => cambiar("numeros")}
-          className="tarjeta block w-full px-4 py-3 text-left"
-        >
-          <span className="block text-sm font-bold text-slate-900">
-            {marcados.length} de {secaderos.length} marcados
-          </span>
-          <span className="mt-0.5 block text-xs text-slate-500 tabular-nums">
-            {marcados.length === 0
-              ? "Ninguno marcado. Tocá para elegir por número."
-              : marcados.length === secaderos.length
-                ? "Todos marcados. Tocá para cambiar la selección."
-                : `${marcados
-                    .slice(0, 15)
-                    .map((s) => s.numero)
-                    .join(", ")}${marcados.length > 15 ? ` y ${marcados.length - 15} más` : ""}`}
-          </span>
-          {rehorneados > 0 && (
-            <span className="mt-1 block text-xs font-bold text-red-700">
-              {rehorneados}{" "}
-              {acento === "horno"
-                ? rehorneados === 1
-                  ? "rehorneado: sacarlo antes"
-                  : "rehorneados: sacarlos antes"
-                : rehorneados === 1
-                  ? "no secó y va de nuevo"
-                  : "no secaron y van de nuevo"}
-            </span>
-          )}
-        </button>
       ) : (
         <>
           <div className="grid grid-cols-4 gap-1.5 sm:grid-cols-6">
