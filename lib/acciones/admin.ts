@@ -23,6 +23,7 @@ import {
 import { autorizar, hashPin } from "../auth";
 import { CONFIG_POR_DEFECTO } from "../configuracion";
 import { CLAVE_FONDO, esFondo } from "../apariencia";
+import { CLAVE_RUMBO, esquemaRumbo, type Rumbo } from "../rumbo";
 import { ejecutar, fallar, type Resultado } from "./comun";
 import { ETIQUETA_ESTADO } from "./motor";
 
@@ -741,5 +742,25 @@ export async function guardarFondo(entrada: { fondo: string }): Promise<Resultad
 
     // Revalida el layout entero: el fondo se ve en todas las pantallas.
     revalidar();
+  });
+}
+
+/* -------------------------------------------------------------------------- */
+/* Rumbo                                                                      */
+/* -------------------------------------------------------------------------- */
+
+/** Guarda el proposito, los objetivos y el glosario. */
+export async function guardarRumbo(entrada: Rumbo): Promise<Resultado> {
+  return ejecutar(async () => {
+    await autorizar("admin");
+    const datos = esquemaRumbo.parse(entrada);
+    const valor = JSON.stringify(datos);
+
+    await db
+      .insert(config)
+      .values({ clave: CLAVE_RUMBO, valor })
+      .onConflictDoUpdate({ target: config.clave, set: { valor } });
+
+    revalidatePath("/admin/rumbo");
   });
 }
