@@ -10,8 +10,13 @@ import {
   misRoturasPorMotivo,
 } from "@/lib/mis-estadisticas";
 import { granularidad, nombreMes, type Periodo } from "@/lib/periodos";
-import { etiquetaDia } from "@/lib/rangos";
+import { etiquetaDia, fechaLocal, sumarDias } from "@/lib/rangos";
 import { Vacio } from "@/components/ui";
+import {
+  BarrasHorizontales,
+  GraficoColumnas,
+  type PuntoColumna,
+} from "@/components/graficos";
 import { Barras, Indicador, Panel, Tabla } from "../estadisticas/piezas";
 
 /** En el orden en que pasa el material, para que las columnas se lean igual siempre. */
@@ -97,6 +102,59 @@ export async function DetalleOperario({
     (a, b) => ORDEN_TIPOS.indexOf(a.tipo) - ORDEN_TIPOS.indexOf(b.tipo),
   );
 
+  // La serie en el tiempo con TODOS los dias (o meses) del periodo hasta hoy,
+  // no solo los que tuvieron trabajo: un dia en cero tiene que verse como un
+  // hueco en el grafico, no desaparecer.
+  const hoy = fechaLocal();
+  const ultimo = periodo.fin < hoy ? periodo.fin : hoy;
+  const claves: string[] = [];
+  if (paso === "dia") {
+    for (let f = periodo.inicio; f <= ultimo; f = sumarDias(f, 1)) claves.push(f);
+  } else if (paso === "mes") {
+    for (let m = 1; m <= 12; m++) {
+      const clave = `${periodo.inicio.slice(0, 4)}-${String(m).padStart(2, "0")}`;
+      if (`${clave}-01` <= ultimo) claves.push(clave);
+    }
+  }
+  const serie: PuntoColumna[] = claves.map((clave) => {
+    const f = enElTiempo.find((x) => x.clave === clave);
+    const dd = `${clave}-01`.split("-")[2];
+    return {
+      clave,
+      // En una semana entra "lun 21"; en un mes, solo el numero de dia.
+      etiqueta:
+        paso === "dia"
+          ? claves.length <= 12
+            ? `${etiquetaDia(clave).split(" ")[0]} ${Number(dd)}`
+            : String(Number(dd))
+          : nombreMes(clave).slice(0, 3),
+      titulo: paso === "dia" ? etiquetaDia(clave) : nombreMes(clave),
+      valor: f?.secaderos ?? 0,
+      detalle: f
+        ? [
+            `${numero(f.placas)} placas`,
+            ...(f.rotas > 0 ? [`${numero(f.rotas)} rotas`] : []),
+          ]
+        : ["Sin trabajo"],
+    };
+  });
+
+  // El grafico por modelo va sobre el paso con mas placas: sumar todos los
+  // pasos contaria dos veces la misma placa (la entrada y la salida del horno).
+  const tipoPrincipal = tiposHechos
+    .slice()
+    .sort(
+      (x, y) =>
+        modelos.reduce((s2, m) => s2 + m.placas[y], 0) -
+        modelos.reduce((s2, m) => s2 + m.placas[x], 0),
+    )[0];
+  const porModeloPrincipal = tipoPrincipal
+    ? modelos
+        .map((m) => ({ etiqueta: m.modelo, valor: m.placas[tipoPrincipal] }))
+        .filter((m) => m.valor > 0)
+        .sort((x, y) => y.valor - x.valor)
+    : [];
+
   return !hayAlgo ? (
       <Vacio
         titulo={
@@ -154,11 +212,67 @@ export async function DetalleOperario({
           )}
         </div>
 
-        {ordenados.length > 0 && (
+        {serie.length > 1 && (
           <Panel
-            titulo={propio ? "Lo que hiciste" : "Lo que hizo"}
-            detalle={`Cada movimiento es un secadero que ${propio ? "pasaste" : "pasó"} al paso siguiente`}
+            titulo={paso === "dia" ? "Secaderos por día" : "Secaderos por mes"}
+            detalle="Tocá o pasá el mouse por una columna para ver el detalle"
           >
+            <GraficoColumnas datos={serie} unidad="secaderos" />
+          </Panel>
+        )}
+
+        <div className="grid gap-4 lg:grid-cols-2">
+          {porModeloPrincipal.length > 0 && (
+            <Panel
+              titulo="Placas por modelo"
+              detalle={
+                tiposHechos.length > 1
+                  ? `En ${ETIQUETA_MOVIMIENTO[tipoPrincipal!].toLowerCase()}, ${propio ? "tu" : "su"} paso principal`
+                  : ETIQUETA_MOVIMIENTO[tipoPrincipal!]
+              }
+            >
+              <BarrasHorizontales datos={porModeloPrincipal} unidad="placas" />
+            </Panel>
+          )}
+
+          {ordenados.length > 1 && (
+            <Panel
+              titulo={propio ? "Lo que hiciste" : "Lo que hizo"}
+              detalle="Secaderos por tipo de movimiento"
+            >
+              <BarrasHorizontales
+                datos={[...ordenados]
+                  .sort((x, y) => y.secaderos - x.secaderos)
+                  .map((f) => ({
+                    etiqueta: ETIQUETA_MOVIMIENTO[f.tipo],
+                    valor: f.secaderos,
+                    detalle: `${numero(f.placas)} placas`,
+                  }))}
+                unidad="secaderos"
+              />
+            </Panel>
+          )}
+
+          {roturas.length > 1 && (
+            <Panel
+              titulo={propio ? "Roturas que registraste" : "Roturas que registró"}
+              detalle="Por motivo. Es lo que se cargó como roto, que no siempre es lo que se rompió en esas manos"
+            >
+              <Barras
+                datos={roturas.map((r) => ({ etiqueta: r.motivo, valor: r.placas }))}
+                total={rotasRegistradas}
+              />
+            </Panel>
+          )}
+        </div>
+
+        {/* Los mismos numeros en tabla: para el que prefiere leerlos asi, y
+            para que ningun valor dependa de tocar un grafico. */}
+        <details className="tarjeta group p-4">
+          <summary className="cursor-pointer text-sm font-semibold text-slate-700 select-none">
+            Ver los números en tablas
+          </summary>
+          <div className="mt-4 space-y-6">
             <Tabla
               encabezados={["Movimiento", "Secaderos", "Placas", "Rotas"]}
               filas={ordenados.map((f) => [
@@ -174,56 +288,44 @@ export async function DetalleOperario({
                 numero(total.rotas),
               ]}
             />
-          </Panel>
-        )}
-
-        {paso && enElTiempo.length > 0 && (
-          <Panel titulo={paso === "dia" ? "Por día" : "Por mes"}>
-            <Tabla
-              encabezados={[
-                paso === "dia" ? "Día" : "Mes",
-                "Secaderos",
-                "Placas",
-                "Rotas",
-              ]}
-              filas={enElTiempo.map((f) => [
-                paso === "dia" ? etiquetaDia(f.clave) : nombreMes(f.clave),
-                numero(f.secaderos),
-                numero(f.placas),
-                f.rotas > 0 ? numero(f.rotas) : "—",
-              ])}
-            />
-          </Panel>
-        )}
-
-        {modelos.length > 0 && (
-          <Panel titulo="Por modelo, en placas">
-            <Tabla
-              encabezados={[
-                "Modelo",
-                ...tiposHechos.map((t) => ETIQUETA_MOVIMIENTO[t]),
-              ]}
-              filas={modelos.map((m) => [
-                m.modelo,
-                ...tiposHechos.map((t) =>
-                  m.placas[t] > 0 ? numero(m.placas[t]) : "—",
-                ),
-              ])}
-            />
-          </Panel>
-        )}
-
-        {roturas.length > 0 && (
-          <Panel
-            titulo={propio ? "Roturas que registraste, por motivo" : "Roturas que registró, por motivo"}
-            detalle={propio ? "Lo que cargaste como roto, que no siempre es lo que se rompió en tus manos" : "Lo que cargó como roto, que no siempre es lo que se rompió en sus manos"}
-          >
-            <Barras
-              datos={roturas.map((r) => ({ etiqueta: r.motivo, valor: r.placas }))}
-              total={rotasRegistradas}
-            />
-          </Panel>
-        )}
+            {paso && enElTiempo.length > 0 && (
+              <Tabla
+                encabezados={[
+                  paso === "dia" ? "Día" : "Mes",
+                  "Secaderos",
+                  "Placas",
+                  "Rotas",
+                ]}
+                filas={enElTiempo.map((f) => [
+                  paso === "dia" ? etiquetaDia(f.clave) : nombreMes(f.clave),
+                  numero(f.secaderos),
+                  numero(f.placas),
+                  f.rotas > 0 ? numero(f.rotas) : "—",
+                ])}
+              />
+            )}
+            {modelos.length > 0 && (
+              <Tabla
+                encabezados={[
+                  "Modelo",
+                  ...tiposHechos.map((t) => ETIQUETA_MOVIMIENTO[t]),
+                ]}
+                filas={modelos.map((m) => [
+                  m.modelo,
+                  ...tiposHechos.map((t) =>
+                    m.placas[t] > 0 ? numero(m.placas[t]) : "—",
+                  ),
+                ])}
+              />
+            )}
+            {roturas.length > 0 && (
+              <Tabla
+                encabezados={["Motivo de rotura", "Placas"]}
+                filas={roturas.map((r) => [r.motivo, numero(r.placas)])}
+              />
+            )}
+          </div>
+        </details>
 
         {paletsTotal !== 0 && extra.corregidos > 0 && (
           <p className="text-xs text-slate-500">
