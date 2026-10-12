@@ -85,6 +85,7 @@ const MOTIVOS = [
   "Mal secado",
   "Borde dañado",
   "Placa golpeada",
+  "Secadero volcado",
   "Otro",
 ];
 

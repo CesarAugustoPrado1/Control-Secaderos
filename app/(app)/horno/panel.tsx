@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   entrarAHorno,
   salirDeHorno,
@@ -41,6 +41,7 @@ export function PanelHorno({
   notas,
   fecha,
   hoy,
+  plan,
 }: {
   enHorno: SecaderoVista[];
   humedos: SecaderoVista[];
@@ -53,6 +54,8 @@ export function PanelHorno({
   /** El dia cuyas notas se muestran. */
   fecha: string;
   hoy: string;
+  /** El plan de paletizado del dia, ya armado: va debajo de las notas. */
+  plan?: React.ReactNode;
 }) {
   const enReproceso = useMemo(() => new Set(reproceso), [reproceso]);
   const router = useRouter();
@@ -333,6 +336,8 @@ export function PanelHorno({
         carga={notas.carga}
       />
 
+      {plan}
+
       {/* ---------------- Sacar ---------------- */}
       <section>
         <EncabezadoSeccion
@@ -351,7 +356,15 @@ export function PanelHorno({
           </p>
         ) : (
           <>
-            <div className="space-y-2">
+            <ListaPlegable
+              id="sacar"
+              secaderos={enHorno}
+              elegidos={aSacar}
+              alAlternar={alternarSacar}
+              reproceso={enReproceso}
+              acento="horno"
+              deshabilitado={salida.enviando}
+            >
               {enHorno.map((s) => (
                 <FilaSecadero
                   key={s.id}
@@ -368,7 +381,7 @@ export function PanelHorno({
                   reproceso={enReproceso.has(s.id)}
                 />
               ))}
-            </div>
+            </ListaPlegable>
 
             <div className="mt-3 flex flex-wrap gap-2">
               <BotonSeleccion onClick={() => setExcluidos(new Set())}>
@@ -509,7 +522,20 @@ export function PanelHorno({
               </div>
             )}
 
-            <div className="space-y-2">
+            <ListaPlegable
+              id="meter"
+              secaderos={humedosEnLista}
+              elegidos={aMeter}
+              alAlternar={(id) =>
+                q ? alternarDesdeBusqueda(id) : alternarMeter(id)
+              }
+              reproceso={enReproceso}
+              acento="humedo"
+              deshabilitado={entrada.enviando || sol.enviando}
+              // Buscando un numero la lista va abierta: son pocos y se quiere
+              // ver el detalle del que se encontro.
+              forzarAbierta={!!q}
+            >
               {humedosEnLista.map((s) => (
                 <FilaSecadero
                   key={s.id}
@@ -537,7 +563,7 @@ export function PanelHorno({
                   )}
                 </p>
               )}
-            </div>
+            </ListaPlegable>
 
             <div className="mt-3 flex flex-wrap gap-2">
               <BotonSeleccion onClick={() => elegirMasViejos(lugaresLibres)}>
@@ -695,6 +721,145 @@ function EncabezadoSeccion({
         <span className="chip bg-slate-200 text-slate-700">{contador}</span>
       </div>
       {detalle && <p className="mt-0.5 text-sm text-slate-500">{detalle}</p>}
+    </div>
+  );
+}
+
+/**
+ * Una lista de secaderos que se puede achicar.
+ *
+ * Con el horno lleno, la lista completa -una tarjeta grande por secadero-
+ * obligaba a recorrer media pantalla de scroll para llegar al boton de sacar o
+ * de meter. Achicada, cada secadero es un botoncito con su numero y su modelo,
+ * que se marca y desmarca igual de un toque, y el boton queda a mano. Para
+ * cargar roturas hay que abrirla: es la excepcion, no el caso de todos los dias.
+ *
+ * Arranca abierta si son pocos y achicada si son muchos, y despues recuerda en
+ * este celular lo que eligio el hornero.
+ */
+const POCOS = 6;
+
+function ListaPlegable({
+  id,
+  secaderos,
+  elegidos,
+  alAlternar,
+  reproceso,
+  acento,
+  deshabilitado,
+  forzarAbierta = false,
+  children,
+}: {
+  id: string;
+  secaderos: SecaderoVista[];
+  elegidos: Set<number>;
+  alAlternar: (id: number) => void;
+  reproceso: Set<number>;
+  acento: "horno" | "humedo";
+  deshabilitado?: boolean;
+  forzarAbierta?: boolean;
+  children: React.ReactNode;
+}) {
+  const [elegida, setElegida] = useState<boolean | null>(null);
+
+  // Lo recordado se lee despues de montar: el servidor no tiene localStorage,
+  // y arrancar distinto en las dos puntas rompe la hidratacion.
+  useEffect(() => {
+    try {
+      const v = localStorage.getItem(`lista-horno:${id}`);
+      if (v !== null) setElegida(v === "1");
+    } catch {
+      // Sin localStorage funciona igual, solo que no recuerda.
+    }
+  }, [id]);
+
+  const abierta =
+    forzarAbierta || (elegida ?? secaderos.length <= POCOS);
+
+  function alternar() {
+    const v = !abierta;
+    setElegida(v);
+    try {
+      localStorage.setItem(`lista-horno:${id}`, v ? "1" : "0");
+    } catch {
+      // Idem.
+    }
+  }
+
+  const marcado =
+    acento === "horno"
+      ? "bg-orange-500 text-white ring-orange-500"
+      : "bg-blue-600 text-white ring-blue-600";
+
+  return (
+    <div>
+      {!forzarAbierta && secaderos.length > 0 && (
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <span className="text-xs text-slate-500">
+            {abierta
+              ? "Lista completa"
+              : "Tocá un número para marcarlo o desmarcarlo"}
+          </span>
+          <button
+            type="button"
+            onClick={alternar}
+            aria-expanded={abierta}
+            className="shrink-0 rounded-lg bg-white px-3 py-1.5 text-xs font-bold text-slate-700 ring-1 ring-slate-300 hover:bg-slate-50"
+          >
+            {abierta ? "Achicar lista" : `Ver lista completa (${secaderos.length})`}
+          </button>
+        </div>
+      )}
+
+      {abierta || secaderos.length === 0 ? (
+        <div className="space-y-2">{children}</div>
+      ) : (
+        <>
+          <div className="grid grid-cols-4 gap-1.5 sm:grid-cols-6">
+            {secaderos.map((s) => {
+              const si = elegidos.has(s.id);
+              const rehorno = reproceso.has(s.id);
+              return (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => alAlternar(s.id)}
+                  disabled={deshabilitado}
+                  aria-pressed={si}
+                  aria-label={`Secadero ${s.numero}${rehorno ? ", rehorneado" : ""}: ${si ? "marcado" : "sin marcar"}`}
+                  className={`relative flex min-h-14 flex-col items-center justify-center rounded-xl px-1 py-1.5 ring-1 transition ${
+                    si ? marcado : "bg-white text-slate-900 ring-slate-300"
+                  }`}
+                >
+                  {rehorno && (
+                    <span className="absolute top-0.5 right-1 text-[10px] font-black text-red-600">
+                      !
+                    </span>
+                  )}
+                  <span className="text-lg leading-none font-bold tabular-nums">
+                    {s.numero}
+                  </span>
+                  <span
+                    className={`mt-0.5 w-full truncate text-center text-[10px] ${
+                      si ? "text-white/90" : "text-slate-500"
+                    }`}
+                  >
+                    {s.contenido.map((c) => c.nombre).join(" + ") || "vacío"}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          {secaderos.some((s) => reproceso.has(s.id)) && (
+            <p className="mt-1.5 text-[11px] text-slate-500">
+              <span className="font-black text-red-600">!</span>{" "}
+              {acento === "horno"
+                ? "rehorneado: sacarlo antes"
+                : "no secó: va de nuevo al horno"}
+            </p>
+          )}
+        </>
+      )}
     </div>
   );
 }
