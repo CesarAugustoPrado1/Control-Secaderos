@@ -15,6 +15,7 @@ const ICONOS: Record<string, string> = {
   resumen: "📋",
   grafico: "📈",
   persona: "👤",
+  equipo: "👥",
   config: "⚙",
 };
 

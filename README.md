@@ -301,6 +301,10 @@ movió, días trabajados, roturas que registró, palets que armó y movimientos
 suyos que se anularon, por día, semana, mes o año. Una corrección conserva el
 autor original, así que no le quita el trabajo a quien lo hizo.
 
+En **Estadísticas operarios** (admin y auditor) están todos los operarios en una
+tabla para el período elegido. Tocando un nombre se ve su detalle, que es
+exactamente lo que esa persona ve en su "Mis estadísticas".
+
 En **Movimientos** se puede filtrar por tipo, secadero, usuario y fechas, y
 exportar el resultado a **CSV** (una fila por modelo y motivo, listo para
 tabular en una planilla).
