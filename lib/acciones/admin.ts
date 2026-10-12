@@ -22,6 +22,7 @@ import {
 } from "../db/schema";
 import { autorizar, hashPin } from "../auth";
 import { CONFIG_POR_DEFECTO } from "../configuracion";
+import { CLAVE_FONDO, esFondo } from "../apariencia";
 import { ejecutar, fallar, type Resultado } from "./comun";
 import { ETIQUETA_ESTADO } from "./motor";
 
@@ -719,6 +720,26 @@ export async function guardarConfig(
         });
     }
 
+    revalidar();
+  });
+}
+
+/* -------------------------------------------------------------------------- */
+/* Apariencia                                                                 */
+/* -------------------------------------------------------------------------- */
+
+/** Cambia el fondo de la app para todos. */
+export async function guardarFondo(entrada: { fondo: string }): Promise<Resultado> {
+  return ejecutar(async () => {
+    await autorizar("admin");
+    if (!esFondo(entrada.fondo)) fallar("Ese fondo no existe.");
+
+    await db
+      .insert(config)
+      .values({ clave: CLAVE_FONDO, valor: entrada.fondo })
+      .onConflictDoUpdate({ target: config.clave, set: { valor: entrada.fondo } });
+
+    // Revalida el layout entero: el fondo se ve en todas las pantallas.
     revalidar();
   });
 }

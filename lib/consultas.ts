@@ -1,4 +1,5 @@
 import "server-only";
+import { CLAVE_FONDO, esFondo, FONDO_POR_DEFECTO, type Fondo } from "./apariencia";
 import { and, asc, desc, eq, inArray, gte, lte, max, sql } from "drizzle-orm";
 import { db } from "./db";
 import {
@@ -40,6 +41,19 @@ export async function leerConfig(): Promise<Configuracion> {
     }
   }
   return resultado;
+}
+
+/**
+ * El fondo elegido para la app. Va aparte de `leerConfig` porque es un texto y
+ * no un numero; un valor raro o ausente cae en el de siempre.
+ */
+export async function leerFondo(): Promise<Fondo> {
+  const [fila] = await db
+    .select({ valor: config.valor })
+    .from(config)
+    .where(eq(config.clave, CLAVE_FONDO))
+    .limit(1);
+  return esFondo(fila?.valor) ? fila.valor : FONDO_POR_DEFECTO;
 }
 
 export type LineaContenido = {

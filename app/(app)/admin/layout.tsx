@@ -10,6 +10,7 @@ const SECCIONES = [
   { href: "/admin/usuarios", etiqueta: "Usuarios" },
   { href: "/admin/motivos", etiqueta: "Motivos" },
   { href: "/admin/config", etiqueta: "Parámetros" },
+  { href: "/admin/apariencia", etiqueta: "Apariencia" },
 ];
 
 export default async function LayoutAdmin({

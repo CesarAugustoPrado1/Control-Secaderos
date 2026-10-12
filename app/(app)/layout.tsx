@@ -1,4 +1,5 @@
 import { requerirSesion } from "@/lib/auth";
+import { leerFondo } from "@/lib/consultas";
 import { cerrarSesion } from "@/lib/acciones/sesion";
 import { ETIQUETA_ROL, navParaRol } from "@/lib/permisos";
 import { NavInferior, NavLateral } from "@/components/navegacion";
@@ -8,11 +9,12 @@ export default async function LayoutApp({
 }: {
   children: React.ReactNode;
 }) {
-  const sesion = await requerirSesion();
+  const [sesion, fondo] = await Promise.all([requerirSesion(), leerFondo()]);
   const items = navParaRol(sesion.rol);
 
   return (
-    <div className="min-h-dvh">
+    // El fondo lo elige el admin en Apariencia y lo ven todos.
+    <div className={`min-h-dvh fondo-${fondo}`}>
       <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur">
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-3 px-4">
           <div className="flex min-w-0 items-center gap-2.5">
