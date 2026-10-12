@@ -1,5 +1,6 @@
 import "server-only";
 import { CLAVE_FONDO, esFondo, FONDO_POR_DEFECTO, type Fondo } from "./apariencia";
+import { CLAVE_RUMBO, parsearRumbo, type Rumbo } from "./rumbo";
 import { and, asc, desc, eq, inArray, gte, lte, max, sql } from "drizzle-orm";
 import { db } from "./db";
 import {
@@ -54,6 +55,16 @@ export async function leerFondo(): Promise<Fondo> {
     .where(eq(config.clave, CLAVE_FONDO))
     .limit(1);
   return esFondo(fila?.valor) ? fila.valor : FONDO_POR_DEFECTO;
+}
+
+/** Proposito, objetivos y glosario de la app (Administracion -> Rumbo). */
+export async function leerRumbo(): Promise<Rumbo> {
+  const [fila] = await db
+    .select({ valor: config.valor })
+    .from(config)
+    .where(eq(config.clave, CLAVE_RUMBO))
+    .limit(1);
+  return parsearRumbo(fila?.valor);
 }
 
 export type LineaContenido = {

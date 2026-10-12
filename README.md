@@ -305,6 +305,11 @@ En **Estadísticas operarios** (admin y auditor) están todos los operarios en u
 tabla para el período elegido. Tocando un nombre se ve su detalle, que es
 exactamente lo que esa persona ve en su "Mis estadísticas".
 
+En **Administración → Rumbo** está el propósito de la app, sus objetivos y un
+glosario (editables por el admin) y el **historial de desarrollo** con los hitos
+importantes. **Cada cambio que se publica suma su hito en `lib/historial.ts`,
+en el mismo pull request**, para que la línea de tiempo no quede atrasada.
+
 En **Movimientos** se puede filtrar por tipo, secadero, usuario y fechas, y
 exportar el resultado a **CSV** (una fila por modelo y motivo, listo para
 tabular en una planilla).
