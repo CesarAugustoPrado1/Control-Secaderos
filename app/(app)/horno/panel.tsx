@@ -562,9 +562,6 @@ export function PanelHorno({
               reproceso={enReproceso}
               acento="humedo"
               deshabilitado={entrada.enviando || sol.enviando}
-              // Buscando un numero la lista va abierta: son pocos y se quiere
-              // ver el detalle del que se encontro.
-              forzarAbierta={!!q}
             >
               {humedosEnLista.map((s) => (
                 <FilaSecadero
@@ -747,10 +744,10 @@ function SinCoincidencia({
  *    excepcion.
  * Para esconderla del todo esta el plegable de la seccion.
  *
- * Arranca en detalle si son pocos y en numeros si son muchos, y despues
- * recuerda en este celular lo que eligio el hornero.
+ * Arranca siempre en numeros, sean muchos o pocos, con filtro o buscando: la
+ * misma matriz en todo el horno, para no tener que leer dos formas distintas
+ * segun cuantos haya. Si el hornero elige detalle, el celular lo recuerda.
  */
-const POCOS = 6;
 
 type VistaLista = "numeros" | "detalle";
 
@@ -770,7 +767,6 @@ function ListaPlegable({
   reproceso,
   acento,
   deshabilitado,
-  forzarAbierta = false,
   children,
 }: {
   id: string;
@@ -780,7 +776,6 @@ function ListaPlegable({
   reproceso: Set<number>;
   acento: "horno" | "humedo";
   deshabilitado?: boolean;
-  forzarAbierta?: boolean;
   children: React.ReactNode;
 }) {
   const [elegida, setElegida] = useState<VistaLista | null>(null);
@@ -796,9 +791,7 @@ function ListaPlegable({
     }
   }, [id]);
 
-  const vista: VistaLista = forzarAbierta
-    ? "detalle"
-    : (elegida ?? (secaderos.length <= POCOS ? "detalle" : "numeros"));
+  const vista: VistaLista = elegida ?? "numeros";
 
   function cambiar(v: VistaLista) {
     setElegida(v);
@@ -816,7 +809,7 @@ function ListaPlegable({
 
   return (
     <div>
-      {!forzarAbierta && secaderos.length > 0 && (
+      {secaderos.length > 0 && (
         <div
           role="group"
           aria-label="Cómo ver la lista"
