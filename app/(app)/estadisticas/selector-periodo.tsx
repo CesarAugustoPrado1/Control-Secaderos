@@ -21,6 +21,7 @@ export function SelectorPeriodo({
   enCurso,
   hoy,
   consulta,
+  ruta = "/estadisticas",
 }: {
   tipo: TipoPeriodo;
   inicio: string;
@@ -30,10 +31,12 @@ export function SelectorPeriodo({
   enCurso: boolean;
   hoy: string;
   consulta: string;
+  /** La pagina a la que apuntan los links: estadisticas o mis estadisticas. */
+  ruta?: string;
 }) {
   const router = useRouter();
   const hrefDe = (t: TipoPeriodo, fecha: string) =>
-    `/estadisticas?${consulta ? `${consulta}&` : ""}periodo=${t}&fecha=${fecha}`;
+    `${ruta}?${consulta ? `${consulta}&` : ""}periodo=${t}&fecha=${fecha}`;
   const ir = (fecha: string) => router.push(hrefDe(tipo, fecha), { scroll: false });
 
   const anioActual = Number(hoy.slice(0, 4));
