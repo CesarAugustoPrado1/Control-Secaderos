@@ -726,18 +726,34 @@ function EncabezadoSeccion({
 }
 
 /**
- * Una lista de secaderos que se puede achicar.
+ * Una lista de secaderos que se puede cerrar o achicar.
  *
  * Con el horno lleno, la lista completa -una tarjeta grande por secadero-
  * obligaba a recorrer media pantalla de scroll para llegar al boton de sacar o
- * de meter. Achicada, cada secadero es un botoncito con su numero y su modelo,
- * que se marca y desmarca igual de un toque, y el boton queda a mano. Para
- * cargar roturas hay que abrirla: es la excepcion, no el caso de todos los dias.
+ * de meter. Por eso tiene tres vistas:
+ *  - cerrada: un renglon con cuantos hay y cuales estan marcados. Para el caso
+ *    de todos los dias -sacar todo, meter los mas viejos- alcanza con eso y
+ *    con los botones de seleccion rapida.
+ *  - numeros: cada secadero es un botoncito con su numero y su modelo, que se
+ *    marca y desmarca de un toque.
+ *  - detalle: la lista completa, la unica donde se cargan roturas, que son la
+ *    excepcion.
  *
- * Arranca abierta si son pocos y achicada si son muchos, y despues recuerda en
- * este celular lo que eligio el hornero.
+ * Arranca en detalle si son pocos y cerrada si son muchos, y despues recuerda
+ * en este celular lo que eligio el hornero.
  */
 const POCOS = 6;
+
+type VistaLista = "cerrada" | "numeros" | "detalle";
+
+const VISTAS: { vista: VistaLista; etiqueta: string }[] = [
+  { vista: "cerrada", etiqueta: "Cerrada" },
+  { vista: "numeros", etiqueta: "Números" },
+  { vista: "detalle", etiqueta: "Detalle" },
+];
+
+const esVista = (v: string | null): v is VistaLista =>
+  v === "cerrada" || v === "numeros" || v === "detalle";
 
 function ListaPlegable({
   id,
@@ -760,31 +776,34 @@ function ListaPlegable({
   forzarAbierta?: boolean;
   children: React.ReactNode;
 }) {
-  const [elegida, setElegida] = useState<boolean | null>(null);
+  const [elegida, setElegida] = useState<VistaLista | null>(null);
 
   // Lo recordado se lee despues de montar: el servidor no tiene localStorage,
   // y arrancar distinto en las dos puntas rompe la hidratacion.
   useEffect(() => {
     try {
-      const v = localStorage.getItem(`lista-horno:${id}`);
-      if (v !== null) setElegida(v === "1");
+      const v = localStorage.getItem(`lista-horno-vista:${id}`);
+      if (esVista(v)) setElegida(v);
     } catch {
       // Sin localStorage funciona igual, solo que no recuerda.
     }
   }, [id]);
 
-  const abierta =
-    forzarAbierta || (elegida ?? secaderos.length <= POCOS);
+  const vista: VistaLista = forzarAbierta
+    ? "detalle"
+    : (elegida ?? (secaderos.length <= POCOS ? "detalle" : "cerrada"));
 
-  function alternar() {
-    const v = !abierta;
+  function cambiar(v: VistaLista) {
     setElegida(v);
     try {
-      localStorage.setItem(`lista-horno:${id}`, v ? "1" : "0");
+      localStorage.setItem(`lista-horno-vista:${id}`, v);
     } catch {
       // Idem.
     }
   }
+
+  const marcados = secaderos.filter((s) => elegidos.has(s.id));
+  const rehorneados = secaderos.filter((s) => reproceso.has(s.id)).length;
 
   const marcado =
     acento === "horno"
@@ -794,25 +813,65 @@ function ListaPlegable({
   return (
     <div>
       {!forzarAbierta && secaderos.length > 0 && (
-        <div className="mb-2 flex items-center justify-between gap-2">
-          <span className="text-xs text-slate-500">
-            {abierta
-              ? "Lista completa"
-              : "Tocá un número para marcarlo o desmarcarlo"}
-          </span>
-          <button
-            type="button"
-            onClick={alternar}
-            aria-expanded={abierta}
-            className="shrink-0 rounded-lg bg-white px-3 py-1.5 text-xs font-bold text-slate-700 ring-1 ring-slate-300 hover:bg-slate-50"
-          >
-            {abierta ? "Achicar lista" : `Ver lista completa (${secaderos.length})`}
-          </button>
+        <div
+          role="group"
+          aria-label="Cómo ver la lista"
+          className="mb-2 inline-flex rounded-lg bg-slate-100 p-0.5"
+        >
+          {VISTAS.map((v) => (
+            <button
+              key={v.vista}
+              type="button"
+              onClick={() => cambiar(v.vista)}
+              aria-pressed={vista === v.vista}
+              className={`rounded-md px-3 py-1.5 text-xs font-bold transition ${
+                vista === v.vista
+                  ? "bg-white text-slate-900 shadow-sm"
+                  : "text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              {v.etiqueta}
+            </button>
+          ))}
         </div>
       )}
 
-      {abierta || secaderos.length === 0 ? (
+      {secaderos.length === 0 || vista === "detalle" ? (
         <div className="space-y-2">{children}</div>
+      ) : vista === "cerrada" ? (
+        // Cerrada no es escondida: dice cuantos hay y cuales van, que es lo
+        // que hace falta para apretar el boton sin abrir nada.
+        <button
+          type="button"
+          onClick={() => cambiar("numeros")}
+          className="tarjeta block w-full px-4 py-3 text-left"
+        >
+          <span className="block text-sm font-bold text-slate-900">
+            {marcados.length} de {secaderos.length} marcados
+          </span>
+          <span className="mt-0.5 block text-xs text-slate-500 tabular-nums">
+            {marcados.length === 0
+              ? "Ninguno marcado. Tocá para elegir por número."
+              : marcados.length === secaderos.length
+                ? "Todos marcados. Tocá para cambiar la selección."
+                : `${marcados
+                    .slice(0, 15)
+                    .map((s) => s.numero)
+                    .join(", ")}${marcados.length > 15 ? ` y ${marcados.length - 15} más` : ""}`}
+          </span>
+          {rehorneados > 0 && (
+            <span className="mt-1 block text-xs font-bold text-red-700">
+              {rehorneados}{" "}
+              {acento === "horno"
+                ? rehorneados === 1
+                  ? "rehorneado: sacarlo antes"
+                  : "rehorneados: sacarlos antes"
+                : rehorneados === 1
+                  ? "no secó y va de nuevo"
+                  : "no secaron y van de nuevo"}
+            </span>
+          )}
+        </button>
       ) : (
         <>
           <div className="grid grid-cols-4 gap-1.5 sm:grid-cols-6">

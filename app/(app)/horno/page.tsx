@@ -99,6 +99,7 @@ export default async function PaginaHorno({
         hoy={hoy}
         plan={
           <PlanDelDia
+            key="plan-paletizado"
             nombre="Plan de paletizado"
             fecha={fecha}
             hoy={hoy}
