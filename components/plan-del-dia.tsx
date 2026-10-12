@@ -58,6 +58,7 @@ export function PlanDelDia({
   entregadosPorHorno,
   puedeExplicar,
   puedeRegistrarPalets = false,
+  nombre = "Plan",
 }: {
   fecha: string;
   hoy: string;
@@ -72,6 +73,12 @@ export function PlanDelDia({
   puedeExplicar: boolean;
   /** Solo paletizado: si quien mira puede confirmar palets de ese dia. */
   puedeRegistrarPalets?: boolean;
+  /**
+   * Como se llama la seccion. En la pantalla del propio sector alcanza con
+   * "Plan"; en otra, como el horno mirando el de paletizado, hay que decir de
+   * quien es.
+   */
+  nombre?: string;
 }) {
   const dia = etiquetaRelativa(fecha, hoy);
   const esFuturo = fecha > hoy;
@@ -79,7 +86,9 @@ export function PlanDelDia({
   if (!comparacion.hayPlan) {
     return (
       <section className="tarjeta border-l-4 border-slate-300 p-4">
-        <h2 className="text-sm font-bold text-slate-700">Sin plan · {dia}</h2>
+        <h2 className="text-sm font-bold text-slate-700">
+          Sin {nombre.charAt(0).toLowerCase() + nombre.slice(1)} · {dia}
+        </h2>
         <p className="mt-1 text-sm text-slate-500">
           {fecha === hoy
             ? "Todavía no se cargó la orden de producción del día. Podés trabajar igual: lo que hagas queda registrado."
@@ -186,7 +195,7 @@ export function PlanDelDia({
   return (
     <Plegable
       id={`plan-${comparacion.sector}`}
-      titulo={`Plan · ${dia}`}
+      titulo={`${nombre} · ${dia}`}
       resumen={resumen}
     >
       {comparacion.nota && (

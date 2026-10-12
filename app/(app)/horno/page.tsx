@@ -7,10 +7,11 @@ import {
   secaderosConContenido,
   secaderosEnReproceso,
 } from "@/lib/consultas";
-import { notasDelHorno } from "@/lib/plan";
+import { compararPlan, notasDelHorno } from "@/lib/plan";
 import { esFecha, etiquetaRelativa, fechaLocal, rangoDeFecha } from "@/lib/rangos";
 import { Actividad } from "@/components/actividad";
 import { Plegable } from "@/components/plegable";
+import { PlanDelDia } from "@/components/plan-del-dia";
 import { PanelHorno } from "./panel";
 
 export const metadata = { title: "Horno · Secaderos" };
@@ -29,7 +30,7 @@ export default async function PaginaHorno({
   const fecha = esFecha(dia) ? dia : hoy;
   const { desde, hasta } = rangoDeFecha(fecha);
 
-  const [enHorno, humedos, motivos, cfg, reproceso, notas, hecho] =
+  const [enHorno, humedos, motivos, cfg, reproceso, notas, hecho, planPaletizado] =
     await Promise.all([
       secaderosConContenido(["horno"]),
       secaderosConContenido(["humedo"]),
@@ -46,6 +47,9 @@ export default async function PaginaHorno({
         porPagina: 300,
         orden: "asc",
       }),
+      // El plan de paletizado le dice al hornero que tiene que estar seco y
+      // cuando: es lo que conviene meter primero.
+      compararPlan(fecha, "paletizado"),
     ]);
 
   const corregibles = await corregiblesPara(hecho.items, {
@@ -93,6 +97,18 @@ export default async function PaginaHorno({
         notas={notas}
         fecha={fecha}
         hoy={hoy}
+        plan={
+          <PlanDelDia
+            nombre="Plan de paletizado"
+            fecha={fecha}
+            hoy={hoy}
+            comparacion={planPaletizado}
+            motivos={[]}
+            // Solo lectura: explicar un desvio o confirmar palets es de
+            // paletizado, no del horno.
+            puedeExplicar={false}
+          />
+        }
       />
 
       {/* Abajo y plegado: el trabajo del hornero es sacar y meter. Esto es para
