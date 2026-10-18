@@ -42,7 +42,6 @@ export function Semana({
   notasHorno,
   moldes,
   diaElegido,
-  filaElegida,
   cumplimiento,
 }: {
   inicio: string;
@@ -54,7 +53,6 @@ export function Semana({
   /** Fechas de la semana con un set de moldes pedido. */
   moldes: string[];
   diaElegido: string | null;
-  filaElegida: Fila;
   /** Lo hecho contra lo pedido de cada dia con plan, hasta hoy. */
   cumplimiento: Cumplimiento[];
 }) {
@@ -65,8 +63,11 @@ export function Semana({
   const conNotas = new Set(notasHorno);
   const conMoldes = new Set(moldes);
 
+  // Las flechas mueven el dia elegido una semana, asi la vista del dia de
+  // arriba acompaña.
+  const base = diaElegido ?? inicio;
   const correr = (dias: number) => {
-    const d = new Date(`${inicio}T12:00:00-03:00`);
+    const d = new Date(`${base}T12:00:00-03:00`);
     d.setDate(d.getDate() + dias);
     return d.toISOString().slice(0, 10);
   };
@@ -75,11 +76,11 @@ export function Semana({
     <section className="tarjeta p-4">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-base font-bold text-slate-900">
-          Orden de producción
+          La semana
         </h2>
         <div className="flex gap-1.5">
           <Link
-            href={`/admin/plan?desde=${correr(-7)}`}
+            href={`/admin/plan?dia=${correr(-7)}`}
             className="rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 ring-1 ring-slate-300"
           >
             ← Semana anterior
@@ -91,7 +92,7 @@ export function Semana({
             Hoy
           </Link>
           <Link
-            href={`/admin/plan?desde=${correr(7)}`}
+            href={`/admin/plan?dia=${correr(7)}`}
             className="rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 ring-1 ring-slate-300"
           >
             Semana siguiente →
@@ -130,8 +131,10 @@ export function Semana({
                   {s.etiqueta}
                 </td>
                 {fechas.map((f) => {
-                  const activo = diaElegido === f && filaElegida === s.clave;
-                  const href = `/admin/plan?desde=${inicio}&dia=${f}&sector=${s.clave}`;
+                  // Toda la columna del dia elegido va marcada: arriba se ve
+                  // ese dia entero, con sus tres sectores.
+                  const activo = diaElegido === f;
+                  const href = `/admin/plan?dia=${f}#plan-${s.clave}`;
                   const avance =
                     s.clave === "horno" ? undefined : avanceDe(f, s.clave);
 
@@ -226,7 +229,7 @@ export function Semana({
         lo pedido: verde completo, amarillo desde la mitad, rojo por debajo.
         Paletizado va partido en dos: a la izquierda los secaderos y a la
         derecha los palets, que se miden por separado.{" "}
-        Tocá un día para cargar o editar su orden. Un día sin plan no se mide
+        Tocá un día para verlo arriba y cargar o editar su orden. Un día sin plan no se mide
         como incumplimiento: queda marcado como sin plan. En Horno se cargan
         las indicaciones para cargar y descargar, que el hornero ve arriba de
         su pantalla. En Carrusel, «moldes» marca los días con cambio de moldes

@@ -22,12 +22,15 @@ export function EditorNotasHorno({
   descarga: descargaInicial,
   semana,
   notasSemana,
+  incrustado = false,
 }: {
   fecha: string;
   carga: string | null;
   descarga: string | null;
   semana: string[];
   notasSemana: NotasDia[];
+  /** Adentro de la seccion del horno en la vista del dia: sin tarjeta propia. */
+  incrustado?: boolean;
 }) {
   const router = useRouter();
   const { ejecutar, enviando, error, setError } = useAccion();
@@ -64,8 +67,8 @@ export function EditorNotasHorno({
   }
 
   return (
-    <section className="tarjeta p-4">
-      <h2 className="mb-3 text-base font-bold text-slate-900">
+    <section className={incrustado ? "" : "tarjeta p-4"}>
+      <h2 className={`mb-3 text-base font-bold text-slate-900 ${incrustado ? "sr-only" : ""}`}>
         Horno · {etiquetaDia(fecha)}
       </h2>
 
