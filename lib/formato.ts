@@ -49,6 +49,15 @@ export function minutosDesde(desde: Date): number {
 export const numero = (n: number) => n.toLocaleString("es-AR");
 
 /**
+ * Metros cuadrados para leer de un vistazo: sin decimales desde 100 m2 -en un
+ * total de miles, los decimales no dicen nada- y con uno por debajo.
+ */
+export const m2Numero = (n: number) =>
+  n.toLocaleString("es-AR", { maximumFractionDigits: Math.abs(n) >= 100 ? 0 : 1 });
+
+export const m2 = (n: number) => `${m2Numero(n)} m²`;
+
+/**
  * Como se nombra la capacidad de un tipo en los encabezados: "hasta 102 placas"
  * o, cuando no tiene tope fijo, "sin tope fijo". Vive aca para que las pantallas
  * digan todas lo mismo; que una sola muestre "hasta 0 placas" seria peor que no

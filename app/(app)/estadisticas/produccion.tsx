@@ -7,10 +7,17 @@ import {
 } from "@/lib/estadisticas";
 import { granularidad, nombreMes, type Periodo } from "@/lib/periodos";
 import { etiquetaDia } from "@/lib/rangos";
-import { numero } from "@/lib/formato";
+import { m2, m2Numero, numero } from "@/lib/formato";
 import { Indicador, Opciones, Panel, SinDatos, Tabla } from "./piezas";
 
-export type Unidad = "placas" | "secaderos";
+export type Unidad = "placas" | "m2" | "secaderos";
+
+/** Como se nombra cada unidad en los titulos. */
+const NOMBRE_UNIDAD: Record<Unidad, string> = {
+  placas: "placas",
+  m2: "m²",
+  secaderos: "secaderos",
+};
 
 /**
  * Cuanto movio cada puesto en el periodo: lo que cargo el carrusel, lo que
@@ -43,10 +50,15 @@ export async function Produccion({
   );
 
   const valor = (c: Cuenta) => c[unidad];
+  // Los m2 traen decimales: se muestran redondeados, el resto como enteros.
+  const fmt = (n: number) => (unidad === "m2" ? m2Numero(n) : numero(n));
+  const celda = (n: number) => (n === 0 ? "—" : fmt(n));
   const otra = (c: Cuenta) =>
     unidad === "placas"
-      ? `${numero(c.secaderos)} ${c.secaderos === 1 ? "secadero" : "secaderos"}`
-      : `${numero(c.placas)} placas`;
+      ? `${numero(c.secaderos)} ${c.secaderos === 1 ? "secadero" : "secaderos"} · ${m2(c.m2)}`
+      : unidad === "m2"
+        ? `${numero(c.placas)} placas`
+        : `${numero(c.placas)} placas · ${m2(c.m2)}`;
 
   const hayDatos = PUESTOS.some((p) => prod.totales[p.clave].secaderos > 0);
 
@@ -60,6 +72,7 @@ export async function Produccion({
           chica
           opciones={[
             { href: hrefUnidad("placas"), etiqueta: "Placas", activa: unidad === "placas" },
+            { href: hrefUnidad("m2"), etiqueta: "m²", activa: unidad === "m2" },
             {
               href: hrefUnidad("secaderos"),
               etiqueta: "Secaderos",
@@ -88,7 +101,7 @@ export async function Produccion({
               <Indicador
                 key={p.clave}
                 rotulo={p.etiqueta}
-                valor={numero(valor(prod.totales[p.clave]))}
+                valor={fmt(valor(prod.totales[p.clave]))}
                 detalle={`${p.detalle}: ${otra(prod.totales[p.clave])}`}
                 tono="neutro"
               />
@@ -96,11 +109,13 @@ export async function Produccion({
           </div>
 
           <Panel
-            titulo={`Por tipo de secadero y modelo, en ${unidad}`}
+            titulo={`Por tipo de secadero y modelo, en ${NOMBRE_UNIDAD[unidad]}`}
             detalle={
               unidad === "secaderos"
                 ? "Un secadero con dos modelos cuenta en los dos, pero una sola vez en el total"
-                : "Placas que entraron al secadero, al horno o a producto terminado, sin las rotas en ese paso"
+                : unidad === "m2"
+                  ? "Metros cuadrados de las placas que pasaron, con la conversión de cada producto"
+                  : "Placas que entraron al secadero, al horno o a producto terminado, sin las rotas en ese paso"
             }
           >
             <Tabla
@@ -116,13 +131,17 @@ export async function Produccion({
                   ...puestos.map((p) => celda(valor(g.subtotal[p.clave]))),
                 ],
               }))}
-              pie={["Total", ...puestos.map((p) => numero(valor(prod.totales[p.clave])))]}
+              pie={["Total", ...puestos.map((p) => fmt(valor(prod.totales[p.clave])))]}
             />
           </Panel>
 
           {paso && enElTiempo.length > 0 && (
             <Panel
-              titulo={paso === "dia" ? `Por día, en ${unidad}` : `Por mes, en ${unidad}`}
+              titulo={
+                paso === "dia"
+                  ? `Por día, en ${NOMBRE_UNIDAD[unidad]}`
+                  : `Por mes, en ${NOMBRE_UNIDAD[unidad]}`
+              }
               detalle="Todos los modelos juntos"
             >
               <Tabla
@@ -131,7 +150,7 @@ export async function Produccion({
                   paso === "dia" ? etiquetaDia(f.clave) : nombreMes(f.clave),
                   ...puestos.map((p) => celda(valor(f.puestos[p.clave]))),
                 ])}
-                pie={["Total", ...puestos.map((p) => numero(valor(prod.totales[p.clave])))]}
+                pie={["Total", ...puestos.map((p) => fmt(valor(prod.totales[p.clave])))]}
               />
             </Panel>
           )}
@@ -149,5 +168,3 @@ export async function Produccion({
   );
 }
 
-/** Los ceros van como guion para que la tabla se lea de un vistazo. */
-const celda = (n: number) => (n === 0 ? "—" : numero(n));

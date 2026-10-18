@@ -173,6 +173,13 @@ const esquemaProducto = z.object({
   id: z.number().int().positive().optional(),
   nombre: z.string().trim().min(1, "El producto necesita un nombre.").max(80),
   tipoId: z.number().int().positive("Elegí el tipo de secadero del producto."),
+  /** m2 de una placa. null = todavia sin cargar. */
+  m2PorPlaca: z
+    .number()
+    .positive("Los m² por placa tienen que ser mayores que cero.")
+    .max(100, "Revisá los m² por placa: más de 100 m² no es una placa.")
+    .nullable()
+    .optional(),
 });
 
 export async function guardarProducto(
@@ -206,12 +213,21 @@ export async function guardarProducto(
 
       await db
         .update(productos)
-        .set({ nombre: datos.nombre, tipoId: datos.tipoId })
+        .set({
+          nombre: datos.nombre,
+          tipoId: datos.tipoId,
+          // undefined deja el valor como estaba; null lo borra.
+          ...(datos.m2PorPlaca !== undefined && {
+            m2PorPlaca: datos.m2PorPlaca === null ? null : String(datos.m2PorPlaca),
+          }),
+        })
         .where(eq(productos.id, datos.id));
     } else {
-      await db
-        .insert(productos)
-        .values({ nombre: datos.nombre, tipoId: datos.tipoId });
+      await db.insert(productos).values({
+        nombre: datos.nombre,
+        tipoId: datos.tipoId,
+        m2PorPlaca: datos.m2PorPlaca == null ? null : String(datos.m2PorPlaca),
+      });
     }
 
     revalidar();

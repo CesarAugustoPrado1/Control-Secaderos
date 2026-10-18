@@ -36,12 +36,14 @@ export async function GET() {
       { encabezado: "Tipo de secadero", ancho: 20 },
       { encabezado: "Activo", ancho: 10 },
       { encabezado: "Placas que entran", ancho: 18 },
+      { encabezado: "m² por placa", ancho: 14 },
     ],
     filas.map((p) => [
       p.nombre,
       p.tipoNombre,
       p.activo ? "SI" : "NO",
       capacidadPorTipo.get(p.tipoId) ?? null,
+      p.m2PorPlaca,
     ]),
   );
 

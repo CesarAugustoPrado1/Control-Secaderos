@@ -288,8 +288,12 @@ entre otras cosas:
   colas.
 - Desperdicio por motivo, por etapa del proceso, por modelo y por operario.
 - Producción diaria de placas terminadas.
-- Cuánto cargó el carrusel, entró al horno y se paletizó, en placas o en
+- Cuánto cargó el carrusel, entró al horno y se paletizó, en placas, **m²** o
   secaderos, por tipo de secadero y modelo.
+- Los totales en placas también en **m²**: cada producto tiene sus **m² por
+  placa** (Administración → Productos, a mano o por la planilla de Excel). Si a
+  algún producto activo le falta el dato, Estadísticas avisa que los m² están
+  incompletos.
 
 En **Administración → Plan** se arma la hoja de producción de cada día: la
 fecha arriba (con flechas al día anterior y al siguiente), la **meta del día en

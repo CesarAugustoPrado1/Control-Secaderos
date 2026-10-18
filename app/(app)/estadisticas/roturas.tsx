@@ -11,7 +11,7 @@ import {
   type Rango,
 } from "@/lib/estadisticas";
 import { ETIQUETA_MOVIMIENTO } from "@/lib/estados";
-import { numero, porcentaje } from "@/lib/formato";
+import { m2, numero, porcentaje } from "@/lib/formato";
 import { Barras, Indicador, Panel, SinDatos, Tabla } from "./piezas";
 
 /** Cuanto se rompe, donde, por que y de que modelo. */
@@ -54,7 +54,7 @@ export async function Roturas({ rango }: { rango: Rango }) {
         <Indicador
           rotulo="Desperdicio"
           valor={numero(tot.rotas)}
-          detalle={`${porcentaje(tot.rotas, tot.cargadas)} de lo producido`}
+          detalle={`${m2(tot.m2.rotas)} · ${porcentaje(tot.rotas, tot.cargadas)} de lo producido`}
           tono="malo"
         />
         <Indicador

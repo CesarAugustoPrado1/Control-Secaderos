@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { db } from "../db";
 import { productos, secaderoContenido, secaderos, tipos } from "../db/schema";
 import { autorizar } from "../auth";
@@ -299,13 +299,40 @@ export async function importarProductos(
   return ejecutar(() => procesarProductos(fd, true));
 }
 
+type CambiosProducto = {
+  nombre?: string;
+  tipoId?: number;
+  activo?: boolean;
+  m2PorPlaca?: string;
+};
+
 type PlanProducto =
-  | { tipo: "crear"; nombre: string; tipoId: number; activo: boolean }
   | {
-      tipo: "actualizar";
-      id: number;
-      cambios: { nombre?: string; tipoId?: number; activo?: boolean };
+      tipo: "crear";
+      nombre: string;
+      tipoId: number;
+      activo: boolean;
+      m2PorPlaca: string | null;
+    }
+  | { tipo: "actualizar"; id: number; cambios: CambiosProducto };
+
+/**
+ * Los m2 por placa de una celda: acepta coma o punto decimal. Celda vacia es
+ * "no tocar" (null); un valor que no es un numero razonable es un error.
+ */
+function leerM2(texto: string): { valor: number | null } | { error: string } {
+  const t = texto.trim().replace(/\s/g, "");
+  if (t === "") return { valor: null };
+  const n = Number(t.replace(",", "."));
+  if (!Number.isFinite(n) || n <= 0 || n > 100) {
+    return {
+      error: `Los m² por placa tienen que ser un número entre 0 y 100, como 2,88 (dice "${texto.trim()}").`,
     };
+  }
+  return { valor: Math.round(n * 10000) / 10000 };
+}
+
+const m2Texto = (n: number) => n.toLocaleString("es-AR", { maximumFractionDigits: 4 });
 
 async function procesarProductos(
   fd: FormData,
@@ -323,6 +350,7 @@ async function procesarProductos(
         nombre: productos.nombre,
         tipoId: productos.tipoId,
         activo: productos.activo,
+        m2PorPlaca: sql<number | null>`${productos.m2PorPlaca}::float8`,
       })
       .from(productos),
   ]);
@@ -429,9 +457,22 @@ async function procesarProductos(
       continue;
     }
 
+    // Columna opcional: si no viene, o la celda esta vacia, no se toca.
+    const m2 = leerM2(datos.m2porplaca ?? "");
+    if ("error" in m2) {
+      error(m2.error);
+      continue;
+    }
+
     if (!actual) {
       marca = { tipoId: tipo.id, tipoNombre: tipo.nombre };
-      plan.push({ tipo: "crear", nombre, tipoId: tipo.id, activo });
+      plan.push({
+        tipo: "crear",
+        nombre,
+        tipoId: tipo.id,
+        activo,
+        m2PorPlaca: m2.valor === null ? null : String(m2.valor),
+      });
       filas.push({
         fila,
         etiqueta,
@@ -442,7 +483,7 @@ async function procesarProductos(
       continue;
     }
 
-    const cambios: { nombre?: string; tipoId?: number; activo?: boolean } = {};
+    const cambios: CambiosProducto = {};
     const detalles: string[] = [];
 
     if (actual.nombre !== nombre) {
@@ -467,6 +508,15 @@ async function procesarProductos(
     if (actual.activo !== activo) {
       cambios.activo = activo;
       detalles.push(activo ? "se reactiva" : "se suspende");
+    }
+
+    if (m2.valor !== null && m2.valor !== actual.m2PorPlaca) {
+      cambios.m2PorPlaca = String(m2.valor);
+      detalles.push(
+        actual.m2PorPlaca === null
+          ? `se cargan ${m2Texto(m2.valor)} m² por placa`
+          : `m² por placa ${m2Texto(actual.m2PorPlaca)} → ${m2Texto(m2.valor)}`,
+      );
     }
 
     if (detalles.length === 0) {
@@ -504,6 +554,7 @@ async function procesarProductos(
           nombre: n.nombre,
           tipoId: n.tipoId,
           activo: n.activo,
+          m2PorPlaca: n.m2PorPlaca,
         })),
       );
     }

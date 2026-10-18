@@ -4,6 +4,7 @@ import {
   date,
   index,
   integer,
+  numeric,
   pgEnum,
   pgTable,
   serial,
@@ -196,6 +197,15 @@ export const productos = pgTable("productos", {
    * inventar un numero.
    */
   moldes: integer("moldes").notNull().default(0),
+  /**
+   * Metros cuadrados de una placa de este modelo (ej. 2,88 para una de
+   * 1,20 x 2,40). Convierte placas a m2 en las estadisticas.
+   *
+   * Nace en null para todo lo que ya existia: sin el dato no se inventa una
+   * conversion, y las estadisticas avisan que productos faltan cargar. Se
+   * carga desde Administracion -> Productos.
+   */
+  m2PorPlaca: numeric("m2_por_placa", { precision: 7, scale: 4 }),
   activo: boolean("activo").notNull().default(true),
   creadoEn: timestamp("creado_en", { withTimezone: true })
     .notNull()

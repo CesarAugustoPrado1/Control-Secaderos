@@ -52,6 +52,14 @@ const ALIAS: Record<string, string> = {
   nombreproducto: "nombre",
   producto: "nombre",
 
+  // "m² por placa": el ² no es letra ni numero y se pierde al normalizar.
+  m2: "m2porplaca",
+  m2placa: "m2porplaca",
+  mporplaca: "m2porplaca",
+  metroscuadrados: "m2porplaca",
+  metroscuadradosporplaca: "m2porplaca",
+  superficie: "m2porplaca",
+
   activa: "activo",
   alta: "activo",
   habilitado: "activo",
