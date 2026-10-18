@@ -151,4 +151,11 @@ export const HITOS: Hito[] = [
     detalle:
       "Esta sección: el propósito, los objetivos y el glosario editables, y la historia de la app.",
   },
+  {
+    fecha: "2026-10-18",
+    area: "Plan",
+    titulo: "Plan como hoja del día, con meta",
+    detalle:
+      "La fecha arriba, la meta de secaderos por día y debajo carrusel, horno y paletizado, como en Control de Estanterías.",
+  },
 ];

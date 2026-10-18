@@ -291,7 +291,11 @@ entre otras cosas:
 - Cuánto cargó el carrusel, entró al horno y se paletizó, en placas o en
   secaderos, por tipo de secadero y modelo.
 
-En **Administración → Plan**, cada día con plan se dibuja lleno hasta el
+En **Administración → Plan** se arma la hoja de producción de cada día: la
+fecha arriba (con flechas al día anterior y al siguiente), la **meta del día en
+secaderos** para carrusel y paletizado (si un día no tiene, propone la última
+usada), y debajo carrusel, horno y paletizado con lo pedido por modelo. Al pie,
+la semana: cada día con plan se dibuja lleno hasta el
 porcentaje cumplido. Paletizado va partido en dos, secaderos y palets, que se
 miden por separado.
 

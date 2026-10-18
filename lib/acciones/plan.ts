@@ -5,6 +5,7 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db";
 import {
+  config,
   motivosDesvio,
   notasHorno,
   paletsArmados,
@@ -16,6 +17,7 @@ import {
   type Sector,
 } from "../db/schema";
 import { leerConfig } from "../consultas";
+import { claveMeta, parsearMetas } from "../metas";
 import { fechaLocal } from "../rangos";
 import { autorizar } from "../auth";
 import { ejecutar, fallar, type Resultado } from "./comun";
@@ -738,5 +740,48 @@ export async function repetirDia(
 
     revalidar();
     return { dias: destinos.length, omitidos: [...omitidos].sort() };
+  });
+}
+
+/* -------------------------------------------------------------------------- */
+/* Meta del dia                                                               */
+/* -------------------------------------------------------------------------- */
+
+const esquemaMeta = z.object({
+  fecha: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  sector: z.enum(["carrusel", "paletizado"]),
+  /** null borra la meta de ese sector para ese dia. */
+  meta: z.number().int().min(1, "La meta tiene que ser al menos 1.").max(1000).nullable(),
+});
+
+/** Fija (o borra) la meta de secaderos de un sector para un dia. */
+export async function guardarMeta(
+  entrada: z.input<typeof esquemaMeta>,
+): Promise<Resultado> {
+  return ejecutar(async () => {
+    await autorizar("admin");
+    const datos = esquemaMeta.parse(entrada);
+    const clave = claveMeta(datos.fecha);
+
+    await db.transaction(async (tx) => {
+      const [fila] = await tx
+        .select({ valor: config.valor })
+        .from(config)
+        .where(eq(config.clave, clave))
+        .limit(1);
+      const metas = { ...parsearMetas(fila?.valor), [datos.sector]: datos.meta };
+
+      if (metas.carrusel === null && metas.paletizado === null) {
+        await tx.delete(config).where(eq(config.clave, clave));
+        return;
+      }
+      const valor = JSON.stringify(metas);
+      await tx
+        .insert(config)
+        .values({ clave, valor })
+        .onConflictDoUpdate({ target: config.clave, set: { valor } });
+    });
+
+    revalidatePath("/admin/plan");
   });
 }

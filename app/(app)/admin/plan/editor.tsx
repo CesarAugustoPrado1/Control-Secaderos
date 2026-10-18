@@ -78,6 +78,7 @@ export function EditorPlan({
   semana,
   lineasSemana,
   moldes: datosMoldes,
+  incrustado = false,
 }: {
   fecha: string;
   sector: Sector;
@@ -88,6 +89,11 @@ export function EditorPlan({
   semana: string[];
   /** Lo pedido en cada dia de la semana, para poder copiar de un toque. */
   lineasSemana: Record<string, Record<number, PedidoDeDia>>;
+  /**
+   * Va adentro de la seccion del sector en la vista del dia: sin tarjeta ni
+   * titulo propios, que ya los pone la seccion.
+   */
+  incrustado?: boolean;
 }) {
   const router = useRouter();
   const { ejecutar, enviando, error, setError } = useAccion();
@@ -193,11 +199,15 @@ export function EditorPlan({
   }
 
   return (
-    <section className="tarjeta p-4">
+    <section className={incrustado ? "" : "tarjeta p-4"}>
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-base font-bold text-slate-900">
-          {ETIQUETA_SECTOR[sector]} · {etiquetaDia(fecha)}
-        </h2>
+        {incrustado ? (
+          <h3 className="text-sm font-bold text-slate-700">Lo pedido por modelo</h3>
+        ) : (
+          <h2 className="text-base font-bold text-slate-900">
+            {ETIQUETA_SECTOR[sector]} · {etiquetaDia(fecha)}
+          </h2>
+        )}
         <span className="text-sm font-bold tabular-nums text-slate-700">
           {numero(total)} secaderos
           {conDestino && totalPalets > 0 && ` · ${numero(totalPalets)} palets`}
