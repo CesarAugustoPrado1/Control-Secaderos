@@ -1,5 +1,6 @@
 import { requerirRol } from "@/lib/auth";
-import { leerConfig } from "@/lib/consultas";
+import Link from "next/link";
+import { leerConfig, productosSinM2 } from "@/lib/consultas";
 import { leerPeriodo } from "@/lib/periodos";
 import { fechaLocal } from "@/lib/rangos";
 import { Titulo } from "@/components/ui";
@@ -37,14 +38,15 @@ export default async function PaginaEstadisticas({
     unidad?: string;
   }>;
 }) {
-  await requerirRol("admin", "auditor");
-  const params = await searchParams;
+  const sesion = await requerirRol("admin", "auditor");
+  const [params, sinM2] = await Promise.all([searchParams, productosSinM2()]);
 
   const hoy = fechaLocal();
   const periodo = leerPeriodo(params.periodo, params.fecha, hoy);
   const cat: Categoria =
     CATEGORIAS.find((c) => c.clave === params.cat)?.clave ?? "produccion";
-  const unidad: Unidad = params.unidad === "secaderos" ? "secaderos" : "placas";
+  const unidad: Unidad =
+    params.unidad === "secaderos" || params.unidad === "m2" ? params.unidad : "placas";
 
   // Cada link cambia una sola cosa y conserva el resto de lo que se esta
   // mirando: cambiar de categoria no vuelve al mes actual.
@@ -86,6 +88,24 @@ export default async function PaginaEstadisticas({
           consulta={consultaSinPeriodo}
         />
       </div>
+
+      {/* Sin la conversion de algun producto, los totales en m2 quedan cortos:
+          mejor decirlo que mostrar un numero que parece completo y no lo es. */}
+      {sinM2.length > 0 && (
+        <p className="mb-6 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-900 ring-1 ring-amber-200">
+          <strong>Los m² están incompletos:</strong>{" "}
+          faltan los m² por placa de{" "}
+          {sinM2.map((p) => p.nombre).join(", ")}. Sus placas no suman en los
+          totales en m².{" "}
+          {sesion.rol === "admin" ? (
+            <Link href="/admin/productos" className="font-bold underline underline-offset-2">
+              Cargarlos en Productos
+            </Link>
+          ) : (
+            "Los carga el administrador en Productos."
+          )}
+        </p>
+      )}
 
       {cat === "produccion" && (
         <Produccion

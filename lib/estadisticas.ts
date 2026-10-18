@@ -18,6 +18,7 @@ import { db } from "./db";
 import {
   movimientoLineas,
   movimientos,
+  productos,
   roturasCarrusel,
   tipos,
   type TipoMovimiento,
@@ -164,6 +165,8 @@ export type Totales = {
   cargadas: number;
   terminadas: number;
   rotas: number;
+  /** Lo mismo en m2, con la conversion de cada producto. */
+  m2: { cargadas: number; terminadas: number; rotas: number };
 };
 
 /**
@@ -177,6 +180,9 @@ export type Totales = {
  * (roturas_carrusel).
  */
 export async function totales(rango: Rango): Promise<Totales> {
+  // m2 de cada placa, del producto de la linea. Sin conversion cargada cuenta
+  // 0: el aviso de productos sin m2 dice que el total en m2 esta incompleto.
+  const m2 = sql`coalesce(${productos.m2PorPlaca}, 0)`;
   const [[fila], [antes]] = await Promise.all([
     db
       .select({
@@ -185,22 +191,38 @@ export async function totales(rango: Rango): Promise<Totales> {
         terminadas: sql<string>`coalesce(sum(case when ${movimientos.tipo} = 'descarga'
           then ${movimientoLineas.cantidad} else 0 end), 0)`,
         rotas: sql<string>`coalesce(sum(${movimientoLineas.desperdicio}), 0)`,
+        m2Cargadas: sql<string>`coalesce(sum(case when ${movimientos.tipo} = 'carga'
+          then (${movimientoLineas.cantidad} + ${movimientoLineas.desperdicio}) * ${m2} else 0 end), 0)`,
+        m2Terminadas: sql<string>`coalesce(sum(case when ${movimientos.tipo} = 'descarga'
+          then ${movimientoLineas.cantidad} * ${m2} else 0 end), 0)`,
+        m2Rotas: sql<string>`coalesce(sum(${movimientoLineas.desperdicio} * ${m2}), 0)`,
       })
       .from(movimientoLineas)
       .innerJoin(movimientos, eq(movimientos.id, movimientoLineas.movimientoId))
+      .leftJoin(productos, eq(productos.id, movimientoLineas.productoId))
       .where(enRango(rango)),
     db
-      .select({ placas: sum(roturasCarrusel.cantidad) })
+      .select({
+        placas: sum(roturasCarrusel.cantidad),
+        m2: sql<string>`coalesce(sum(${roturasCarrusel.cantidad} * ${m2}), 0)`,
+      })
       .from(roturasCarrusel)
+      .leftJoin(productos, eq(productos.id, roturasCarrusel.productoId))
       .where(enRangoCarrusel(rango)),
   ]);
 
   const rotasAntes = aNumero(antes?.placas ?? 0);
+  const m2Antes = aNumero(antes?.m2 ?? 0);
 
   return {
     cargadas: aNumero(fila?.cargadas ?? 0) + rotasAntes,
     terminadas: aNumero(fila?.terminadas ?? 0),
     rotas: aNumero(fila?.rotas ?? 0) + rotasAntes,
+    m2: {
+      cargadas: aNumero(fila?.m2Cargadas ?? 0) + m2Antes,
+      terminadas: aNumero(fila?.m2Terminadas ?? 0),
+      rotas: aNumero(fila?.m2Rotas ?? 0) + m2Antes,
+    },
   };
 }
 
@@ -284,6 +306,8 @@ export type FilaModelo = {
   cargadas: number;
   terminadas: number;
   rotas: number;
+  /** m2 terminados, con la conversion del producto. null si no la tiene. */
+  m2Terminados: number | null;
 };
 
 /**
@@ -301,9 +325,14 @@ export async function resumenPorModelo(rango: Rango): Promise<FilaModelo[]> {
         terminadas: sql<string>`coalesce(sum(case when ${movimientos.tipo} = 'descarga'
           then ${movimientoLineas.cantidad} else 0 end), 0)`,
         rotas: sql<string>`coalesce(sum(${movimientoLineas.desperdicio}), 0)`,
+        // null cuando el producto no tiene conversion: no es lo mismo que 0 m2.
+        m2Terminados: sql<string | null>`sum(case when ${movimientos.tipo} = 'descarga'
+          then ${movimientoLineas.cantidad} * ${productos.m2PorPlaca} end)`,
+        sinM2: sql<boolean>`bool_or(${productos.m2PorPlaca} is null)`,
       })
       .from(movimientoLineas)
       .innerJoin(movimientos, eq(movimientos.id, movimientoLineas.movimientoId))
+      .leftJoin(productos, eq(productos.id, movimientoLineas.productoId))
       .where(enRango(rango))
       .groupBy(movimientoLineas.productoNombre),
     db
@@ -320,7 +349,7 @@ export async function resumenPorModelo(rango: Rango): Promise<FilaModelo[]> {
   const asegurar = (modelo: string) => {
     let fila = porModelo.get(modelo);
     if (!fila) {
-      fila = { modelo, cargadas: 0, terminadas: 0, rotas: 0 };
+      fila = { modelo, cargadas: 0, terminadas: 0, rotas: 0, m2Terminados: null };
       porModelo.set(modelo, fila);
     }
     return fila;
@@ -331,6 +360,9 @@ export async function resumenPorModelo(rango: Rango): Promise<FilaModelo[]> {
     fila.cargadas += aNumero(f.cargadas);
     fila.terminadas += aNumero(f.terminadas);
     fila.rotas += aNumero(f.rotas);
+    fila.m2Terminados = f.sinM2
+      ? null
+      : (fila.m2Terminados ?? 0) + aNumero(f.m2Terminados);
   }
   // Rota antes de entrar cuenta como producida y como rota, igual que en el
   // total general: si no, el producto que mas se rompe en la linea aparece con
@@ -938,7 +970,7 @@ export const PUESTOS = [
 
 export type Puesto = (typeof PUESTOS)[number]["clave"];
 
-export type Cuenta = { placas: number; secaderos: number };
+export type Cuenta = { placas: number; secaderos: number; m2: number };
 
 export type FilaProduccion = { modelo: string; puestos: Record<Puesto, Cuenta> };
 
@@ -958,7 +990,7 @@ export type ProduccionPorPuesto = {
 
 const vacias = (): Record<Puesto, Cuenta> =>
   Object.fromEntries(
-    PUESTOS.map((p) => [p.clave, { placas: 0, secaderos: 0 }]),
+    PUESTOS.map((p) => [p.clave, { placas: 0, secaderos: 0, m2: 0 }]),
   ) as Record<Puesto, Cuenta>;
 
 /**
@@ -987,6 +1019,7 @@ const DESDE_PRODUCCION = (r: Rango) => sql`
   from movimientos m
   join movimiento_lineas l on l.movimiento_id = m.id
   left join tipos t on t.id = m.secadero_tipo_id
+  left join productos p on p.id = l.producto_id
   where m.tipo in ('carga', 'entrada_horno', 'descarga')
     -- Vigentes solamente: ver lib/vigencia.ts.
     and m.anulado_en is null
@@ -1013,7 +1046,7 @@ const ORDEN_TIPO_SQL = sql.raw(`coalesce(t.orden, 2147483647)`);
 export async function produccionPorPuesto(
   rango: Rango,
 ): Promise<ProduccionPorPuesto> {
-  type FilaCuenta = { puesto: Puesto; placas: string; secaderos: string };
+  type FilaCuenta = { puesto: Puesto; placas: string; secaderos: string; m2: string };
   const [porModelo, porTipo, porPuesto] = await Promise.all([
     db.execute<FilaCuenta & { tipo: string; orden: number; modelo: string }>(sql`
       select ${PUESTO_SQL} as puesto,
@@ -1021,6 +1054,7 @@ export async function produccionPorPuesto(
              ${ORDEN_TIPO_SQL} as orden,
              l.producto_nombre as modelo,
              coalesce(sum(l.cantidad), 0)::text as placas,
+           coalesce(sum(l.cantidad * coalesce(p.m2_por_placa, 0)), 0)::text as m2,
              (count(distinct m.id) filter (where l.cantidad > 0))::text as secaderos
       ${DESDE_PRODUCCION(rango)}
       group by 1, 2, 3, 4
@@ -1029,6 +1063,7 @@ export async function produccionPorPuesto(
       select ${PUESTO_SQL} as puesto,
              ${TIPO_SQL} as tipo,
              coalesce(sum(l.cantidad), 0)::text as placas,
+           coalesce(sum(l.cantidad * coalesce(p.m2_por_placa, 0)), 0)::text as m2,
              count(distinct m.id)::text as secaderos
       ${DESDE_PRODUCCION(rango)}
       group by 1, 2
@@ -1036,6 +1071,7 @@ export async function produccionPorPuesto(
     db.execute<FilaCuenta>(sql`
       select ${PUESTO_SQL} as puesto,
              coalesce(sum(l.cantidad), 0)::text as placas,
+           coalesce(sum(l.cantidad * coalesce(p.m2_por_placa, 0)), 0)::text as m2,
              count(distinct m.id)::text as secaderos
       ${DESDE_PRODUCCION(rango)}
       group by 1
@@ -1045,6 +1081,7 @@ export async function produccionPorPuesto(
   const cuenta = (f: FilaCuenta): Cuenta => ({
     placas: aNumero(f.placas),
     secaderos: aNumero(f.secaderos),
+    m2: aNumero(f.m2),
   });
 
   const totales = vacias();
@@ -1115,10 +1152,12 @@ export async function produccionPorPuestoEnElTiempo(
     puesto: Puesto;
     placas: string;
     secaderos: string;
+    m2: string;
   }>(sql`
     select to_char(m.creado_en at time zone ${ZONA_SQL}, ${formato}) as clave,
            ${PUESTO_SQL} as puesto,
            coalesce(sum(l.cantidad), 0)::text as placas,
+           coalesce(sum(l.cantidad * coalesce(p.m2_por_placa, 0)), 0)::text as m2,
            count(distinct m.id)::text as secaderos
     ${DESDE_PRODUCCION(rango)}
     group by 1, 2
@@ -1135,6 +1174,7 @@ export async function produccionPorPuestoEnElTiempo(
     fila[f.puesto] = {
       placas: aNumero(f.placas),
       secaderos: aNumero(f.secaderos),
+      m2: aNumero(f.m2),
     };
   }
   return [...porClave.entries()].map(([clave, puestos]) => ({ clave, puestos }));

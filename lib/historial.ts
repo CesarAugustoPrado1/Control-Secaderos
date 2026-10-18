@@ -158,4 +158,11 @@ export const HITOS: Hito[] = [
     detalle:
       "La fecha arriba, la meta de secaderos por día y debajo carrusel, horno y paletizado, como en Control de Estanterías.",
   },
+  {
+    fecha: "2026-10-18",
+    area: "Estadísticas",
+    titulo: "Estadísticas en metros cuadrados",
+    detalle:
+      "Cada producto lleva sus m² por placa, y las estadísticas muestran producción, terminado y roturas también en m².",
+  },
 ];

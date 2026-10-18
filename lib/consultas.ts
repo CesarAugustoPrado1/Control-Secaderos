@@ -1,7 +1,7 @@
 import "server-only";
 import { CLAVE_FONDO, esFondo, FONDO_POR_DEFECTO, type Fondo } from "./apariencia";
 import { CLAVE_RUMBO, parsearRumbo, type Rumbo } from "./rumbo";
-import { and, asc, desc, eq, inArray, gte, lte, max, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, gte, lte, max, sql } from "drizzle-orm";
 import { db } from "./db";
 import {
   CONFIG_POR_DEFECTO,
@@ -238,10 +238,21 @@ export async function todosLosProductos() {
       tipoId: productos.tipoId,
       tipoNombre: tipos.nombre,
       activo: productos.activo,
+      // numeric llega como texto: se pasa a numero aca, una sola vez.
+      m2PorPlaca: sql<number | null>`${productos.m2PorPlaca}::float8`,
     })
     .from(productos)
     .innerJoin(tipos, eq(tipos.id, productos.tipoId))
     .orderBy(asc(tipos.orden), asc(tipos.nombre), asc(productos.nombre));
+}
+
+/** Productos activos que todavia no tienen cargados los m2 por placa. */
+export async function productosSinM2() {
+  return db
+    .select({ id: productos.id, nombre: productos.nombre })
+    .from(productos)
+    .where(and(eq(productos.activo, true), isNull(productos.m2PorPlaca)))
+    .orderBy(asc(productos.nombre));
 }
 
 export async function tiposActivos() {
