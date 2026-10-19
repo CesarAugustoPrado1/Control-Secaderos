@@ -326,7 +326,7 @@ function leerM2(texto: string): { valor: number | null } | { error: string } {
   const n = Number(t.replace(",", "."));
   if (!Number.isFinite(n) || n <= 0 || n > 100) {
     return {
-      error: `Los m² por placa tienen que ser un número entre 0 y 100, como 2,88 (dice "${texto.trim()}").`,
+      error: `La medida por placa tiene que ser un número entre 0 y 100, como 2,88 (dice "${texto.trim()}").`,
     };
   }
   return { valor: Math.round(n * 10000) / 10000 };
@@ -511,11 +511,13 @@ async function procesarProductos(
     }
 
     if (m2.valor !== null && m2.valor !== actual.m2PorPlaca) {
+      // Las guardas (tipos de llenado manual) se miden en metros lineales.
+      const unidad = tipo.llenadoManual ? "ml" : "m²";
       cambios.m2PorPlaca = String(m2.valor);
       detalles.push(
         actual.m2PorPlaca === null
-          ? `se cargan ${m2Texto(m2.valor)} m² por placa`
-          : `m² por placa ${m2Texto(actual.m2PorPlaca)} → ${m2Texto(m2.valor)}`,
+          ? `se cargan ${m2Texto(m2.valor)} ${unidad} por placa`
+          : `${unidad} por placa ${m2Texto(actual.m2PorPlaca)} → ${m2Texto(m2.valor)}`,
       );
     }
 

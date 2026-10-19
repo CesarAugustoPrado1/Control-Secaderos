@@ -240,17 +240,24 @@ export async function todosLosProductos() {
       activo: productos.activo,
       // numeric llega como texto: se pasa a numero aca, una sola vez.
       m2PorPlaca: sql<number | null>`${productos.m2PorPlaca}::float8`,
+      // Las guardas (tipos de llenado manual) se miden en metros lineales:
+      // para ellas el mismo dato es ml por placa, no m2.
+      lineal: tipos.llenadoManual,
     })
     .from(productos)
     .innerJoin(tipos, eq(tipos.id, productos.tipoId))
     .orderBy(asc(tipos.orden), asc(tipos.nombre), asc(productos.nombre));
 }
 
-/** Productos activos que todavia no tienen cargados los m2 por placa. */
+/**
+ * Productos activos que todavia no tienen cargada su medida por placa: m2, o
+ * metros lineales si son guardas.
+ */
 export async function productosSinM2() {
   return db
-    .select({ id: productos.id, nombre: productos.nombre })
+    .select({ id: productos.id, nombre: productos.nombre, lineal: tipos.llenadoManual })
     .from(productos)
+    .innerJoin(tipos, eq(tipos.id, productos.tipoId))
     .where(and(eq(productos.activo, true), isNull(productos.m2PorPlaca)))
     .orderBy(asc(productos.nombre));
 }

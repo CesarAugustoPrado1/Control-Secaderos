@@ -36,7 +36,8 @@ export async function GET() {
       { encabezado: "Tipo de secadero", ancho: 20 },
       { encabezado: "Activo", ancho: 10 },
       { encabezado: "Placas que entran", ancho: 18 },
-      { encabezado: "m² por placa", ancho: 14 },
+      { encabezado: "Medida por placa", ancho: 16 },
+      { encabezado: "Unidad", ancho: 10 },
     ],
     filas.map((p) => [
       p.nombre,
@@ -44,6 +45,8 @@ export async function GET() {
       p.activo ? "SI" : "NO",
       capacidadPorTipo.get(p.tipoId) ?? null,
       p.m2PorPlaca,
+      // Informativa, se ignora al subir: la unidad sale del tipo.
+      p.lineal ? "ml" : "m²",
     ]),
   );
 

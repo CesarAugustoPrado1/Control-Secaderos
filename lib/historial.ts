@@ -163,6 +163,6 @@ export const HITOS: Hito[] = [
     area: "Estadísticas",
     titulo: "Estadísticas en metros cuadrados",
     detalle:
-      "Cada producto lleva sus m² por placa, y las estadísticas muestran producción, terminado y roturas también en m².",
+      "Cada producto lleva su medida por placa, y las estadísticas muestran producción, terminado y roturas en m² (las guardas, en metros lineales).",
   },
 ];

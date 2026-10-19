@@ -176,8 +176,8 @@ const esquemaProducto = z.object({
   /** m2 de una placa. null = todavia sin cargar. */
   m2PorPlaca: z
     .number()
-    .positive("Los m² por placa tienen que ser mayores que cero.")
-    .max(100, "Revisá los m² por placa: más de 100 m² no es una placa.")
+    .positive("La medida por placa tiene que ser mayor que cero.")
+    .max(100, "Revisá la medida por placa: más de 100 no es una placa.")
     .nullable()
     .optional(),
 });
