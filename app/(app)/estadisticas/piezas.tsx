@@ -199,41 +199,6 @@ export function Barras({
   );
 }
 
-export function GraficoDiario({
-  datos,
-}: {
-  datos: { dia: string; terminadas: number; rotas: number }[];
-}) {
-  const maximo = Math.max(...datos.map((d) => d.terminadas), 1);
-  // Con muchos dias las barras no entran: mostramos la cola reciente.
-  const visibles = datos.slice(-60);
-
-  return (
-    <div className="-mx-4 overflow-x-auto px-4 pb-1">
-      <div className="flex min-w-full items-end gap-1" style={{ height: 140 }}>
-        {visibles.map((d) => (
-          <div
-            key={d.dia}
-            className="group relative flex min-w-2 flex-1 flex-col justify-end"
-            title={`${d.dia}: ${numero(d.terminadas)} terminadas, ${numero(d.rotas)} rotas`}
-          >
-            <div
-              className="w-full rounded-t bg-emerald-500 transition group-hover:bg-emerald-600"
-              style={{
-                height: `${Math.max(2, (d.terminadas / maximo) * 130)}px`,
-              }}
-            />
-          </div>
-        ))}
-      </div>
-      <div className="mt-2 flex justify-between text-[11px] text-slate-400">
-        <span>{visibles[0]?.dia}</span>
-        <span>{visibles[visibles.length - 1]?.dia}</span>
-      </div>
-    </div>
-  );
-}
-
 /** Fila de opciones excluyentes, cada una un link. La activa va en oscuro. */
 export function Opciones({
   opciones,

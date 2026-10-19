@@ -50,17 +50,26 @@ export function GraficoColumnas({
   datos,
   unidad,
   alto = 170,
+  valoresEnTodas = false,
 }: {
   datos: PuntoColumna[];
   /** En plural: "secaderos". */
   unidad: string;
   alto?: number;
+  /**
+   * El numero arriba de cada columna, no solo del maximo. Con muchas columnas
+   * va de costado para que entre.
+   */
+  valoresEnTodas?: boolean;
 }) {
   const [activo, setActivo] = useState<number | null>(null);
   if (datos.length === 0) return null;
 
   const max = Math.max(...datos.map((d) => d.valor));
-  const tope = topeRedondo(max);
+  const deCostado = valoresEnTodas && datos.length > 12;
+  // Con numeros en todas las columnas se deja aire arriba para que el de la
+  // mas alta no se salga del grafico.
+  const tope = topeRedondo(max * (valoresEnTodas ? (deCostado ? 1.35 : 1.15) : 1));
   const conValor = datos.filter((d) => d.valor > 0);
   const promedio =
     conValor.length > 0
@@ -114,9 +123,13 @@ export function GraficoColumnas({
                 className="pointer-events-none absolute inset-x-0 z-10 h-px bg-slate-500"
                 style={{ bottom: `${pct(promedio)}%` }}
               >
-                <span className="absolute -top-4 right-0 rounded bg-white/90 px-1 text-[10px] font-semibold text-slate-600">
-                  promedio {fmt(Math.round(promedio * 10) / 10)}
-                </span>
+                {/* Con numeros en todas las columnas la etiqueta se pisaria con
+                    ellos: queda la linea y el promedio se dice debajo. */}
+                {!valoresEnTodas && (
+                  <span className="absolute -top-4 right-0 rounded bg-white/90 px-1 text-[10px] font-semibold text-slate-600">
+                    promedio {fmt(Math.round(promedio * 10) / 10)}
+                  </span>
+                )}
               </div>
             )}
 
@@ -133,9 +146,11 @@ export function GraficoColumnas({
                   aria-label={`${d.titulo}: ${fmt(d.valor)} ${unidad}`}
                   className="group relative flex h-full flex-1 items-end justify-center outline-none"
                 >
-                  {i === iMax && max > 0 && (
+                  {(valoresEnTodas ? d.valor > 0 : i === iMax && max > 0) && (
                     <span
-                      className="absolute z-10 text-[11px] font-bold text-slate-800"
+                      className={`absolute z-10 font-bold whitespace-nowrap text-slate-800 tabular-nums ${
+                        deCostado ? "rotate-180 text-[10px] [writing-mode:vertical-rl]" : "text-[11px]"
+                      }`}
                       style={{ bottom: `calc(${pct(d.valor)}% + 2px)` }}
                     >
                       {fmt(d.valor)}

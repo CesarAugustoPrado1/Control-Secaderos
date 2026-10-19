@@ -7,7 +7,9 @@ import {
   type Rango,
 } from "@/lib/estadisticas";
 import { duracion, fechaHora, m2, medida, ml, numero, porcentaje } from "@/lib/formato";
-import { GraficoDiario, Indicador, Panel, SinDatos, Tabla } from "./piezas";
+import { etiquetaDia } from "@/lib/rangos";
+import { GraficoColumnas, type PuntoColumna } from "@/components/graficos";
+import { Indicador, Panel, SinDatos, Tabla } from "./piezas";
 
 /**
  * Cuanto de lo que se produce llega a producto terminado, cuanto tarda y si se
@@ -21,6 +23,34 @@ export async function Rendimiento({ rango }: { rango: Rango }) {
     adherenciaAlFlujo(rango),
     resumenPorModelo(rango),
   ]);
+
+  // Produccion por dia en m2: lo que se termino (paletizo) cada dia. Con
+  // muchos dias las columnas no entran: se muestra la cola reciente.
+  const dias = diaria.slice(-60);
+  const serie: PuntoColumna[] = dias.map((d) => ({
+    clave: d.dia,
+    etiqueta:
+      dias.length <= 12
+        ? `${etiquetaDia(d.dia).split(" ")[0]} ${Number(d.dia.slice(8))}`
+        : String(Number(d.dia.slice(8))),
+    titulo: etiquetaDia(d.dia),
+    // Redondeado como se muestran los m2: sin decimales desde 100.
+    valor:
+      Math.abs(d.m2Terminadas) >= 100
+        ? Math.round(d.m2Terminadas)
+        : Math.round(d.m2Terminadas * 10) / 10,
+    detalle: [
+      `${numero(d.terminadas)} placas`,
+      ...(d.mlTerminadas > 0 ? [`${ml(d.mlTerminadas)} de guardas`] : []),
+      ...(d.rotas > 0 ? [`${numero(d.rotas)} rotas`] : []),
+    ],
+  }));
+  // El promedio es de los dias en que se termino algo: un feriado o un dia
+  // sin paletizado no tira el promedio para abajo.
+  const conProduccion = diaria.filter((d) => d.terminadas > 0);
+  const nDias = conProduccion.length;
+  const prom = (f: (d: (typeof diaria)[number]) => number) =>
+    nDias ? conProduccion.reduce((a, d) => a + f(d), 0) / nDias : 0;
 
   if (tot.cargadas === 0 && tot.terminadas === 0 && tot.rotas === 0) {
     return (
@@ -63,8 +93,26 @@ export async function Rendimiento({ rango }: { rango: Rango }) {
 
           {/* --------------------------- Produccion --------------------------- */}
           {diaria.length > 1 && (
-            <Panel titulo="Producción por día">
-              <GraficoDiario datos={diaria} />
+            <Panel
+              titulo="Producción por día, en m²"
+              detalle={`Lo terminado (paletizado) cada día${
+                diaria.length > dias.length ? `, los últimos ${dias.length} días con movimiento` : ""
+              }. Tocá una columna para ver las placas`}
+            >
+              <GraficoColumnas datos={serie} unidad="m²" valoresEnTodas />
+              {nDias > 0 && (
+                <p className="mt-4 border-t border-slate-100 pt-3 text-sm text-slate-600">
+                  <span
+                    aria-hidden
+                    className="mr-2 inline-block h-px w-5 bg-slate-500 align-middle"
+                  />
+                  <strong className="text-slate-900">
+                    Promedio diario: {medida(prom((d) => d.m2Terminadas), prom((d) => d.mlTerminadas))}
+                  </strong>{" "}
+                  · {numero(Math.round(prom((d) => d.terminadas)))} placas · en {numero(nDias)}{" "}
+                  {nDias === 1 ? "día" : "días"} con producción
+                </p>
+              )}
             </Panel>
           )}
             <Panel

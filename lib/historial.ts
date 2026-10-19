@@ -165,4 +165,11 @@ export const HITOS: Hito[] = [
     detalle:
       "Cada producto lleva su medida por placa, y las estadísticas muestran producción, terminado y roturas en m² (las guardas, en metros lineales).",
   },
+  {
+    fecha: "2026-10-19",
+    area: "Estadísticas",
+    titulo: "Producción por día en m² y promedio diario",
+    detalle:
+      "El gráfico de producción por día muestra los m² terminados en cada columna y, debajo, el promedio diario.",
+  },
 ];
