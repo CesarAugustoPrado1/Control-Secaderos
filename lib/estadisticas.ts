@@ -896,7 +896,7 @@ export async function resumenDevoluciones(
   };
 }
 
-/** Placas terminadas por dia, para el grafico de barras. */
+/** Lo terminado (paletizado) cada dia, en placas, m2 y ml, para el grafico de barras. */
 export async function produccionDiaria(rango: Rango) {
   const filas = await db
     .select({
@@ -904,9 +904,15 @@ export async function produccionDiaria(rango: Rango) {
       terminadas: sql<string>`coalesce(sum(case when ${movimientos.tipo} = 'descarga'
         then ${movimientoLineas.cantidad} else 0 end), 0)`,
       rotas: sql<string>`coalesce(sum(${movimientoLineas.desperdicio}), 0)`,
+      m2Terminadas: sql<string>`coalesce(sum(case when ${movimientos.tipo} = 'descarga'
+        then ${enM2(movimientoLineas.cantidad)} else 0 end), 0)`,
+      mlTerminadas: sql<string>`coalesce(sum(case when ${movimientos.tipo} = 'descarga'
+        then ${enMl(movimientoLineas.cantidad)} else 0 end), 0)`,
     })
     .from(movimientoLineas)
     .innerJoin(movimientos, eq(movimientos.id, movimientoLineas.movimientoId))
+    .leftJoin(productos, eq(productos.id, movimientoLineas.productoId))
+    .leftJoin(tipoProducto, eq(tipoProducto.id, productos.tipoId))
     .where(enRango(rango))
     .groupBy(
       sql`to_char(${movimientos.creadoEn} at time zone 'America/Argentina/Buenos_Aires', 'YYYY-MM-DD')`,
@@ -919,6 +925,8 @@ export async function produccionDiaria(rango: Rango) {
     dia: f.dia,
     terminadas: aNumero(f.terminadas),
     rotas: aNumero(f.rotas),
+    m2Terminadas: aNumero(f.m2Terminadas),
+    mlTerminadas: aNumero(f.mlTerminadas),
   }));
 }
 
