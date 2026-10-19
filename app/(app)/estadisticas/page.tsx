@@ -45,8 +45,9 @@ export default async function PaginaEstadisticas({
   const periodo = leerPeriodo(params.periodo, params.fecha, hoy);
   const cat: Categoria =
     CATEGORIAS.find((c) => c.clave === params.cat)?.clave ?? "produccion";
-  const unidad: Unidad =
-    params.unidad === "secaderos" || params.unidad === "m2" ? params.unidad : "placas";
+  // En m2 salvo que se pidan secaderos. Un link viejo con "placas" cae en m2:
+  // contar placas mezcla una grande con una chica como si fueran lo mismo.
+  const unidad: Unidad = params.unidad === "secaderos" ? "secaderos" : "m2";
 
   // Cada link cambia una sola cosa y conserva el resto de lo que se esta
   // mirando: cambiar de categoria no vuelve al mes actual.
@@ -96,7 +97,7 @@ export default async function PaginaEstadisticas({
           <strong>Las medidas están incompletas:</strong> falta la medida por
           placa de{" "}
           {sinM2.map((p) => `${p.nombre} (${p.lineal ? "ml" : "m²"})`).join(", ")}.
-          Sus placas no suman en los totales en m² y metros lineales.{" "}
+          Lo que se hizo de esos productos no suma en los totales.{" "}
           {sesion.rol === "admin" ? (
             <Link href="/admin/productos" className="font-bold underline underline-offset-2">
               Cargarlos en Productos

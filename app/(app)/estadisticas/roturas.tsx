@@ -11,8 +11,9 @@ import {
   type Rango,
 } from "@/lib/estadisticas";
 import { ETIQUETA_MOVIMIENTO } from "@/lib/estados";
-import { medida, numero, porcentaje } from "@/lib/formato";
-import { Barras, Indicador, Panel, SinDatos, Tabla } from "./piezas";
+import { medida, numero, porcentajeRotura } from "@/lib/formato";
+import type { Medida, PromedioRotura } from "@/lib/estadisticas";
+import { BarrasMedida, Indicador, Panel, SinDatos, Tabla } from "./piezas";
 
 /** Cuanto se rompe, donde, por que y de que modelo. */
 export async function Roturas({ rango }: { rango: Rango }) {
@@ -46,26 +47,42 @@ export async function Roturas({ rango }: { rango: Rango }) {
     );
   }
 
+  // Todo en m2 (y las guardas en metros lineales): contar placas mezcla una
+  // placa grande con una chica como si fueran lo mismo.
+  const sumar = (filas: Medida[]): Medida =>
+    filas.reduce((a, r) => ({ m2: a.m2 + r.m2, ml: a.ml + r.ml }), { m2: 0, ml: 0 });
+  const rotas: Medida = { m2: tot.m2.rotas, ml: tot.ml.rotas };
+  const cargado: Medida = { m2: tot.m2.cargadas, ml: tot.ml.cargadas };
+  const antes = sumar(carruselProducto);
+  const adentro: Medida = { m2: rotas.m2 - antes.m2, ml: rotas.ml - antes.ml };
+  const hayRotas = (m: Medida) => m.m2 + m.ml > 0.0001;
   const rotasEnCarrusel = carruselProducto.reduce((a, r) => a + r.placas, 0);
+  const filasPromedio = (filas: PromedioRotura[], clave: (c: string) => string) =>
+    filas.map((f) => [
+      clave(f.clave),
+      numero(f.secaderos),
+      medida(f.rotas.m2, f.rotas.ml),
+      medida(f.promedio.m2, f.promedio.ml),
+    ]);
 
   return (
     <div className="space-y-6">
       <div className="grid gap-3 sm:grid-cols-3">
         <Indicador
           rotulo="Desperdicio"
-          valor={numero(tot.rotas)}
-          detalle={`${medida(tot.m2.rotas, tot.ml.rotas)} · ${porcentaje(tot.rotas, tot.cargadas)} de lo producido`}
+          valor={medida(rotas.m2, rotas.ml)}
+          detalle={porcentajeRotura(rotas, cargado)}
           tono="malo"
         />
         <Indicador
           rotulo="Dentro del circuito"
-          valor={numero(tot.rotas - rotasEnCarrusel)}
+          valor={medida(adentro.m2, adentro.ml)}
           detalle="Con la placa ya en un secadero"
-          tono={tot.rotas - rotasEnCarrusel > 0 ? "malo" : "bueno"}
+          tono={hayRotas(adentro) ? "malo" : "bueno"}
         />
         <Indicador
           rotulo="Antes del secadero"
-          valor={numero(rotasEnCarrusel)}
+          valor={medida(antes.m2, antes.ml)}
           detalle="En la línea del carrusel"
           tono={rotasEnCarrusel > 0 ? "malo" : "bueno"}
         />
@@ -77,12 +94,9 @@ export async function Roturas({ rango }: { rango: Rango }) {
               {porMotivo.length === 0 ? (
                 <SinDatos texto="No se registraron roturas. 👏" />
               ) : (
-                <Barras
-                  datos={porMotivo.map((m) => ({
-                    etiqueta: m.motivo,
-                    valor: m.placas,
-                  }))}
-                  total={tot.rotas}
+                <BarrasMedida
+                  datos={porMotivo.map((m) => ({ etiqueta: m.motivo, m2: m.m2, ml: m.ml }))}
+                  total={rotas}
                 />
               )}
             </Panel>
@@ -91,12 +105,9 @@ export async function Roturas({ rango }: { rango: Rango }) {
               {porEtapa.length === 0 ? (
                 <SinDatos texto="No se registraron roturas. 👏" />
               ) : (
-                <Barras
-                  datos={porEtapa.map((e) => ({
-                    etiqueta: e.etapa,
-                    valor: e.placas,
-                  }))}
-                  total={tot.rotas}
+                <BarrasMedida
+                  datos={porEtapa.map((e) => ({ etiqueta: e.etapa, m2: e.m2, ml: e.ml }))}
+                  total={rotas}
                 />
               )}
             </Panel>
@@ -107,24 +118,18 @@ export async function Roturas({ rango }: { rango: Rango }) {
             <div className="grid gap-4 lg:grid-cols-2">
               <Panel
                 titulo="Roturas antes del secadero, por producto"
-                detalle={`${numero(rotasEnCarrusel)} placas rotas en la línea del carrusel, sin llegar a entrar a un secadero`}
+                detalle={`${medida(antes.m2, antes.ml)} rotos en la línea del carrusel, sin llegar a entrar a un secadero`}
               >
-                <Barras
-                  datos={carruselProducto.map((r) => ({
-                    etiqueta: r.producto,
-                    valor: r.placas,
-                  }))}
-                  total={rotasEnCarrusel}
+                <BarrasMedida
+                  datos={carruselProducto.map((r) => ({ etiqueta: r.producto, m2: r.m2, ml: r.ml }))}
+                  total={antes}
                 />
               </Panel>
 
               <Panel titulo="Roturas antes del secadero, por motivo">
-                <Barras
-                  datos={carruselMotivo.map((r) => ({
-                    etiqueta: r.motivo,
-                    valor: r.placas,
-                  }))}
-                  total={rotasEnCarrusel}
+                <BarrasMedida
+                  datos={carruselMotivo.map((r) => ({ etiqueta: r.motivo, m2: r.m2, ml: r.ml }))}
+                  total={antes}
                 />
               </Panel>
             </div>
@@ -133,44 +138,31 @@ export async function Roturas({ rango }: { rango: Rango }) {
           <div className="grid gap-4 lg:grid-cols-2">
             <Panel
               titulo="Roturas promedio por secadero"
-              detalle="Según el tipo de secadero, sobre las cargas del período"
+              detalle="Cuánto se rompe por secadero cargado, según el tipo de secadero"
             >
               {porTipoSec.length === 0 ? (
                 <SinDatos />
               ) : (
                 <Tabla
-                  encabezados={["Tipo", "Secaderos", "Rotas", "Promedio"]}
-                  filas={porTipoSec.map((f) => [
-                    f.clave,
-                    numero(f.secaderos),
-                    numero(f.rotas),
-                    f.promedio.toLocaleString("es-AR", {
-                      minimumFractionDigits: 1,
-                      maximumFractionDigits: 1,
-                    }),
-                  ])}
+                  encabezados={["Tipo", "Secaderos", "Roto", "Promedio"]}
+                  filas={filasPromedio(porTipoSec, (c) => c)}
                 />
               )}
             </Panel>
 
             <Panel
               titulo="Roturas promedio por etapa"
-              detalle="Cuántas placas se rompen por secadero en cada paso"
+              detalle="Cuánto se rompe por secadero en cada paso"
             >
               {promEtapa.length === 0 ? (
                 <SinDatos />
               ) : (
                 <Tabla
-                  encabezados={["Etapa", "Secaderos", "Rotas", "Promedio"]}
-                  filas={promEtapa.map((f) => [
-                    ETIQUETA_MOVIMIENTO[f.clave as keyof typeof ETIQUETA_MOVIMIENTO],
-                    numero(f.secaderos),
-                    numero(f.rotas),
-                    f.promedio.toLocaleString("es-AR", {
-                      minimumFractionDigits: 1,
-                      maximumFractionDigits: 1,
-                    }),
-                  ])}
+                  encabezados={["Etapa", "Secaderos", "Roto", "Promedio"]}
+                  filas={filasPromedio(
+                    promEtapa,
+                    (c) => ETIQUETA_MOVIMIENTO[c as keyof typeof ETIQUETA_MOVIMIENTO],
+                  )}
                 />
               )}
             </Panel>
@@ -184,16 +176,8 @@ export async function Roturas({ rango }: { rango: Rango }) {
               <SinDatos texto="No se registraron roturas. 👏" />
             ) : (
               <Tabla
-                encabezados={["Producto", "Secaderos", "Rotas", "Promedio"]}
-                filas={promProducto.map((f) => [
-                  f.clave,
-                  numero(f.secaderos),
-                  numero(f.rotas),
-                  f.promedio.toLocaleString("es-AR", {
-                    minimumFractionDigits: 1,
-                    maximumFractionDigits: 1,
-                  }),
-                ])}
+                encabezados={["Producto", "Secaderos", "Roto", "Promedio"]}
+                filas={filasPromedio(promProducto, (c) => c)}
               />
             )}
           </Panel>
@@ -204,10 +188,10 @@ export async function Roturas({ rango }: { rango: Rango }) {
               detalle="Quién cargó la rotura, no necesariamente quién la causó"
             >
               <Tabla
-                encabezados={["Usuario", "Placas rotas", "Movimientos con rotura"]}
+                encabezados={["Usuario", "Roto", "Movimientos con rotura"]}
                 filas={porUsuario.map((u) => [
                   u.usuario,
-                  numero(u.placas),
+                  medida(u.m2, u.ml),
                   numero(u.movimientos),
                 ])}
               />
