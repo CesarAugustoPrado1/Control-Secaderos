@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { numero, porcentaje } from "@/lib/formato";
+import { medida, numero, porcentaje, porcentajeMedida, proporcion } from "@/lib/formato";
 
 /*
  * Piezas de presentacion compartidas por todas las categorias de estadisticas.
@@ -44,7 +44,7 @@ export function Panel({
   children: React.ReactNode;
 }) {
   return (
-    <section className="tarjeta p-4">
+    <section className="tarjeta min-w-0 p-4">
       <h2 className="text-sm font-bold text-slate-900">{titulo}</h2>
       {detalle && <p className="mt-0.5 mb-3 text-xs text-slate-500">{detalle}</p>}
       <div className={detalle ? "" : "mt-3"}>{children}</div>
@@ -165,6 +165,7 @@ function FilaTabla({ fila, sangria }: { fila: string[]; sangria?: boolean }) {
   );
 }
 
+/** Barras horizontales de una cantidad, con su parte del total. */
 export function Barras({
   datos,
   total,
@@ -191,6 +192,45 @@ export function Barras({
             <div
               className="h-full rounded-full bg-red-400"
               style={{ width: `${(d.valor / maximo) * 100}%` }}
+            />
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/**
+ * Barras horizontales de una medida (m2 y ml de guardas). El largo y el
+ * porcentaje son la parte del total en su unidad: los m2 contra los m2 y las
+ * guardas contra las guardas.
+ */
+export function BarrasMedida({
+  datos,
+  total,
+}: {
+  datos: { etiqueta: string; m2: number; ml: number }[];
+  total: { m2: number; ml: number };
+}) {
+  const maximo = Math.max(...datos.map((d) => proporcion(d, total)), 0.0001);
+
+  return (
+    <ul className="space-y-3">
+      {datos.map((d) => (
+        <li key={d.etiqueta}>
+          <div className="mb-1 flex items-baseline justify-between gap-3 text-sm">
+            <span className="min-w-0 truncate font-medium text-slate-700">
+              {d.etiqueta}
+            </span>
+            <span className="shrink-0 tabular-nums text-slate-500">
+              <strong className="text-slate-900">{medida(d.m2, d.ml)}</strong>
+              {` · ${porcentajeMedida(d, total)}`}
+            </span>
+          </div>
+          <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+            <div
+              className="h-full rounded-full bg-red-400"
+              style={{ width: `${(proporcion(d, total) / maximo) * 100}%` }}
             />
           </div>
         </li>

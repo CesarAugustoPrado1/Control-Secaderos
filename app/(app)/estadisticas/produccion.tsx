@@ -10,18 +10,17 @@ import { etiquetaDia } from "@/lib/rangos";
 import { medida, m2Numero, numero } from "@/lib/formato";
 import { Indicador, Opciones, Panel, SinDatos, Tabla } from "./piezas";
 
-export type Unidad = "placas" | "m2" | "secaderos";
+export type Unidad = "m2" | "secaderos";
 
 /** Como se nombra cada unidad en los titulos. */
 const NOMBRE_UNIDAD: Record<Unidad, string> = {
-  placas: "placas",
   m2: "m²",
   secaderos: "secaderos",
 };
 
 /**
  * Cuanto movio cada puesto en el periodo: lo que cargo el carrusel, lo que
- * paso por el horno y lo que se paletizo, en placas o en secaderos, por modelo
+ * paso por el horno y lo que se paletizo, en m2 o en secaderos, por modelo
  * y en total.
  */
 export async function Produccion({
@@ -51,24 +50,22 @@ export async function Produccion({
 
   // En m2, las guardas van en metros lineales: no se suman a los m2, van al
   // lado con su unidad ("40.536 + 2.016 ml"). Los m2 traen decimales y se
-  // muestran redondeados; placas y secaderos son enteros.
+  // muestran redondeados; los secaderos son enteros.
   const fmtCuenta = (c: Cuenta) => {
-    if (unidad !== "m2") return numero(c[unidad]);
+    if (unidad === "secaderos") return numero(c.secaderos);
     const partes = [
       c.m2 > 0 ? m2Numero(c.m2) : null,
       c.ml > 0 ? `${m2Numero(c.ml)} ml` : null,
     ].filter(Boolean);
     return partes.length ? partes.join(" + ") : "0";
   };
-  const vacia = (c: Cuenta) => (unidad === "m2" ? c.m2 + c.ml === 0 : c[unidad] === 0);
+  const vacia = (c: Cuenta) => (unidad === "m2" ? c.m2 + c.ml === 0 : c.secaderos === 0);
   const celda = (c: Cuenta) => (vacia(c) ? "—" : fmtCuenta(c));
   const hayMl = PUESTOS.some((p) => prod.totales[p.clave].ml > 0);
   const otra = (c: Cuenta) =>
-    unidad === "placas"
-      ? `${numero(c.secaderos)} ${c.secaderos === 1 ? "secadero" : "secaderos"} · ${medida(c.m2, c.ml)}`
-      : unidad === "m2"
-        ? `${numero(c.placas)} placas`
-        : `${numero(c.placas)} placas · ${medida(c.m2, c.ml)}`;
+    unidad === "m2"
+      ? `${numero(c.secaderos)} ${c.secaderos === 1 ? "secadero" : "secaderos"}`
+      : medida(c.m2, c.ml);
   // "en m² y ml" solo si en el periodo hubo guardas.
   const nombreUnidad = unidad === "m2" && hayMl ? "m² y ml" : NOMBRE_UNIDAD[unidad];
 
@@ -83,7 +80,6 @@ export async function Produccion({
         <Opciones
           chica
           opciones={[
-            { href: hrefUnidad("placas"), etiqueta: "Placas", activa: unidad === "placas" },
             { href: hrefUnidad("m2"), etiqueta: "m²", activa: unidad === "m2" },
             {
               href: hrefUnidad("secaderos"),
@@ -125,11 +121,9 @@ export async function Produccion({
             detalle={
               unidad === "secaderos"
                 ? "Un secadero con dos modelos cuenta en los dos, pero una sola vez en el total"
-                : unidad === "m2"
-                  ? hayMl
-                    ? "Metros cuadrados de las placas, con la conversión de cada producto. Las guardas van en metros lineales (ml) y no se suman a los m²"
-                    : "Metros cuadrados de las placas que pasaron, con la conversión de cada producto"
-                  : "Placas que entraron al secadero, al horno o a producto terminado, sin las rotas en ese paso"
+                : hayMl
+                  ? "Metros cuadrados, con la conversión de cada producto y sin lo roto en ese paso. Las guardas van en metros lineales (ml) y no se suman a los m²"
+                  : "Metros cuadrados, con la conversión de cada producto y sin lo roto en ese paso"
             }
           >
             <Tabla

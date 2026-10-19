@@ -180,10 +180,24 @@ export type Totales = {
 const tipoProducto = alias(tipos, "tipo_producto");
 const esLineal = sql`coalesce(${tipoProducto.llenadoManual}, false)`;
 /** m2 o ml de `cantidad` placas, segun sea placa comun o guarda. */
+// `cantidad` va entre parentesis: puede ser una suma ("cantidad + desperdicio")
+// y sin ellos solo se multiplicaria el ultimo termino.
 const enM2 = (cantidad: unknown) =>
-  sql`case when ${esLineal} then 0 else ${cantidad} * coalesce(${productos.m2PorPlaca}, 0) end`;
+  sql`case when ${esLineal} then 0 else (${cantidad}) * coalesce(${productos.m2PorPlaca}, 0) end`;
 const enMl = (cantidad: unknown) =>
-  sql`case when ${esLineal} then ${cantidad} * coalesce(${productos.m2PorPlaca}, 0) else 0 end`;
+  sql`case when ${esLineal} then (${cantidad}) * coalesce(${productos.m2PorPlaca}, 0) else 0 end`;
+
+/** Una medida con sus dos partes: m2 de las placas y ml de las guardas. */
+export type Medida = { m2: number; ml: number };
+
+const medidaDe = (f: { m2: string | number | null; ml: string | number | null }): Medida => ({
+  m2: aNumero(f.m2),
+  ml: aNumero(f.ml),
+});
+const sumaM2 = (cantidad: unknown) => sql<string>`coalesce(sum(${enM2(cantidad)}), 0)`;
+const sumaMl = (cantidad: unknown) => sql<string>`coalesce(sum(${enMl(cantidad)}), 0)`;
+/** Para ordenar de mayor a menor sin mezclar unidades: primero m2, despues ml. */
+const porMedida = (a: Medida, b: Medida) => b.m2 - a.m2 || b.ml - a.ml;
 
 /**
  * `cargadas` es todo lo que el carrusel produjo: lo que entro a un secadero mas
@@ -265,30 +279,38 @@ export async function desperdicioPorMotivo(rango: Rango) {
     db
       .select({
         motivo: sql<string>`coalesce(${movimientoLineas.motivoNombre}, 'Sin motivo')`,
-        placas: sum(movimientoLineas.desperdicio),
+        m2: sumaM2(movimientoLineas.desperdicio),
+        ml: sumaMl(movimientoLineas.desperdicio),
       })
       .from(movimientoLineas)
       .innerJoin(movimientos, eq(movimientos.id, movimientoLineas.movimientoId))
+      .leftJoin(productos, eq(productos.id, movimientoLineas.productoId))
+      .leftJoin(tipoProducto, eq(tipoProducto.id, productos.tipoId))
       .where(and(enRango(rango), sql`${movimientoLineas.desperdicio} > 0`))
       .groupBy(sql`coalesce(${movimientoLineas.motivoNombre}, 'Sin motivo')`),
     db
       .select({
         motivo: sql<string>`coalesce(${roturasCarrusel.motivoNombre}, 'Sin motivo')`,
-        placas: sum(roturasCarrusel.cantidad),
+        m2: sumaM2(roturasCarrusel.cantidad),
+        ml: sumaMl(roturasCarrusel.cantidad),
       })
       .from(roturasCarrusel)
+      .leftJoin(productos, eq(productos.id, roturasCarrusel.productoId))
+      .leftJoin(tipoProducto, eq(tipoProducto.id, productos.tipoId))
       .where(enRangoCarrusel(rango))
       .groupBy(sql`coalesce(${roturasCarrusel.motivoNombre}, 'Sin motivo')`),
   ]);
 
-  const total = new Map<string, number>();
+  const total = new Map<string, Medida>();
   for (const f of [...enCircuito, ...antes]) {
-    total.set(f.motivo, (total.get(f.motivo) ?? 0) + aNumero(f.placas));
+    const previa = total.get(f.motivo) ?? { m2: 0, ml: 0 };
+    const esta = medidaDe(f);
+    total.set(f.motivo, { m2: previa.m2 + esta.m2, ml: previa.ml + esta.ml });
   }
 
   return [...total.entries()]
-    .map(([motivo, placas]) => ({ motivo, placas }))
-    .sort((a, b) => b.placas - a.placas);
+    .map(([motivo, medida]) => ({ motivo, ...medida }))
+    .sort(porMedida);
 }
 
 /**
@@ -303,41 +325,51 @@ export async function desperdicioPorEtapa(rango: Rango) {
     db
       .select({
         tipo: movimientos.tipo,
-        placas: sum(movimientoLineas.desperdicio),
+        m2: sumaM2(movimientoLineas.desperdicio),
+        ml: sumaMl(movimientoLineas.desperdicio),
       })
       .from(movimientoLineas)
       .innerJoin(movimientos, eq(movimientos.id, movimientoLineas.movimientoId))
+      .leftJoin(productos, eq(productos.id, movimientoLineas.productoId))
+      .leftJoin(tipoProducto, eq(tipoProducto.id, productos.tipoId))
       .where(and(enRango(rango), sql`${movimientoLineas.desperdicio} > 0`))
       .groupBy(movimientos.tipo),
     db
-      .select({ placas: sum(roturasCarrusel.cantidad) })
+      .select({
+        placas: sum(roturasCarrusel.cantidad),
+        m2: sumaM2(roturasCarrusel.cantidad),
+        ml: sumaMl(roturasCarrusel.cantidad),
+      })
       .from(roturasCarrusel)
+      .leftJoin(productos, eq(productos.id, roturasCarrusel.productoId))
+      .leftJoin(tipoProducto, eq(tipoProducto.id, productos.tipoId))
       .where(enRangoCarrusel(rango)),
   ]);
 
   const filas = enCircuito.map((f) => ({
     etapa: ETIQUETA_MOVIMIENTO[f.tipo],
-    placas: aNumero(f.placas),
+    ...medidaDe(f),
   }));
 
-  const rotasAntes = aNumero(antes?.placas ?? 0);
-  if (rotasAntes > 0) {
-    filas.push({ etapa: ETAPA_ANTES_DEL_SECADERO, placas: rotasAntes });
+  if (aNumero(antes?.placas ?? 0) > 0) {
+    filas.push({ etapa: ETAPA_ANTES_DEL_SECADERO, ...medidaDe(antes!) });
   }
 
-  return filas.sort((a, b) => b.placas - a.placas);
+  return filas.sort(porMedida);
 }
 
 export type FilaModelo = {
   modelo: string;
-  cargadas: number;
-  terminadas: number;
-  rotas: number;
   /**
-   * Medida terminada con la conversion del producto: m2, o metros lineales si
-   * es una guarda (`lineal`). null si el producto no tiene la conversion.
+   * Medidas con la conversion del producto: m2, o metros lineales si es una
+   * guarda (`lineal`). Un producto tiene una sola unidad, asi que van en un
+   * solo numero.
    */
-  m2Terminados: number | null;
+  cargado: number;
+  terminado: number;
+  roto: number;
+  /** El producto no tiene la conversion cargada: sus medidas no dicen nada. */
+  sinMedida: boolean;
   lineal: boolean;
 };
 
@@ -351,14 +383,12 @@ export async function resumenPorModelo(rango: Rango): Promise<FilaModelo[]> {
     db
       .select({
         modelo: movimientoLineas.productoNombre,
-        cargadas: sql<string>`coalesce(sum(case when ${movimientos.tipo} = 'carga'
-          then ${movimientoLineas.cantidad} + ${movimientoLineas.desperdicio} else 0 end), 0)`,
-        terminadas: sql<string>`coalesce(sum(case when ${movimientos.tipo} = 'descarga'
-          then ${movimientoLineas.cantidad} else 0 end), 0)`,
-        rotas: sql<string>`coalesce(sum(${movimientoLineas.desperdicio}), 0)`,
-        // null cuando el producto no tiene conversion: no es lo mismo que 0 m2.
-        m2Terminados: sql<string | null>`sum(case when ${movimientos.tipo} = 'descarga'
-          then ${movimientoLineas.cantidad} * ${productos.m2PorPlaca} end)`,
+        cargado: sql<string>`coalesce(sum(case when ${movimientos.tipo} = 'carga'
+          then (${movimientoLineas.cantidad} + ${movimientoLineas.desperdicio}) * ${productos.m2PorPlaca}
+          else 0 end), 0)`,
+        terminado: sql<string>`coalesce(sum(case when ${movimientos.tipo} = 'descarga'
+          then ${movimientoLineas.cantidad} * ${productos.m2PorPlaca} else 0 end), 0)`,
+        roto: sql<string>`coalesce(sum(${movimientoLineas.desperdicio} * ${productos.m2PorPlaca}), 0)`,
         sinM2: sql<boolean>`bool_or(${productos.m2PorPlaca} is null)`,
         lineal: sql<boolean>`bool_or(${esLineal})`,
       })
@@ -371,9 +401,13 @@ export async function resumenPorModelo(rango: Rango): Promise<FilaModelo[]> {
     db
       .select({
         modelo: roturasCarrusel.productoNombre,
-        placas: sum(roturasCarrusel.cantidad),
+        roto: sql<string>`coalesce(sum(${roturasCarrusel.cantidad} * ${productos.m2PorPlaca}), 0)`,
+        sinM2: sql<boolean>`bool_or(${productos.m2PorPlaca} is null)`,
+        lineal: sql<boolean>`bool_or(${esLineal})`,
       })
       .from(roturasCarrusel)
+      .leftJoin(productos, eq(productos.id, roturasCarrusel.productoId))
+      .leftJoin(tipoProducto, eq(tipoProducto.id, productos.tipoId))
       .where(enRangoCarrusel(rango))
       .groupBy(roturasCarrusel.productoNombre),
   ]);
@@ -382,7 +416,7 @@ export async function resumenPorModelo(rango: Rango): Promise<FilaModelo[]> {
   const asegurar = (modelo: string) => {
     let fila = porModelo.get(modelo);
     if (!fila) {
-      fila = { modelo, cargadas: 0, terminadas: 0, rotas: 0, m2Terminados: null, lineal: false };
+      fila = { modelo, cargado: 0, terminado: 0, roto: 0, sinMedida: false, lineal: false };
       porModelo.set(modelo, fila);
     }
     return fila;
@@ -390,25 +424,29 @@ export async function resumenPorModelo(rango: Rango): Promise<FilaModelo[]> {
 
   for (const f of enCircuito) {
     const fila = asegurar(f.modelo);
-    fila.cargadas += aNumero(f.cargadas);
-    fila.terminadas += aNumero(f.terminadas);
-    fila.rotas += aNumero(f.rotas);
+    fila.cargado += aNumero(f.cargado);
+    fila.terminado += aNumero(f.terminado);
+    fila.roto += aNumero(f.roto);
     fila.lineal = !!f.lineal;
-    fila.m2Terminados = f.sinM2
-      ? null
-      : (fila.m2Terminados ?? 0) + aNumero(f.m2Terminados);
+    fila.sinMedida ||= !!f.sinM2;
   }
   // Rota antes de entrar cuenta como producida y como rota, igual que en el
   // total general: si no, el producto que mas se rompe en la linea aparece con
   // menos rotura que el que se rompe adentro.
   for (const f of antes) {
     const fila = asegurar(f.modelo);
-    const placas = aNumero(f.placas);
-    fila.cargadas += placas;
-    fila.rotas += placas;
+    const roto = aNumero(f.roto);
+    fila.cargado += roto;
+    fila.roto += roto;
+    fila.lineal ||= !!f.lineal;
+    fila.sinMedida ||= !!f.sinM2;
   }
 
-  return [...porModelo.values()].sort((a, b) => b.cargadas - a.cargadas);
+  // Primero las placas en m2 y despues las guardas: un m2 y un metro lineal
+  // no se comparan.
+  return [...porModelo.values()].sort(
+    (a, b) => Number(a.lineal) - Number(b.lineal) || b.cargado - a.cargado,
+  );
 }
 
 /** Roturas atribuidas a cada operario, para detectar donde reforzar. */
@@ -416,20 +454,24 @@ export async function desperdicioPorUsuario(rango: Rango) {
   const filas = await db
     .select({
       usuario: movimientos.usuarioNombre,
-      placas: sum(movimientoLineas.desperdicio),
+      m2: sumaM2(movimientoLineas.desperdicio),
+      ml: sumaMl(movimientoLineas.desperdicio),
       movimientos: sql<string>`count(distinct ${movimientos.id})`,
     })
     .from(movimientoLineas)
     .innerJoin(movimientos, eq(movimientos.id, movimientoLineas.movimientoId))
+    .leftJoin(productos, eq(productos.id, movimientoLineas.productoId))
+    .leftJoin(tipoProducto, eq(tipoProducto.id, productos.tipoId))
     .where(and(enRango(rango), sql`${movimientoLineas.desperdicio} > 0`))
-    .groupBy(movimientos.usuarioNombre)
-    .orderBy(desc(sum(movimientoLineas.desperdicio)));
+    .groupBy(movimientos.usuarioNombre);
 
-  return filas.map((f) => ({
-    usuario: f.usuario,
-    placas: aNumero(f.placas),
-    movimientos: aNumero(f.movimientos),
-  }));
+  return filas
+    .map((f) => ({
+      usuario: f.usuario,
+      ...medidaDe(f),
+      movimientos: aNumero(f.movimientos),
+    }))
+    .sort(porMedida);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -546,23 +588,29 @@ export async function adherenciaAlFlujo(rango: Rango): Promise<Adherencia> {
 export type PromedioRotura = {
   clave: string;
   secaderos: number;
-  rotas: number;
-  promedio: number;
+  rotas: Medida;
+  promedio: Medida;
 };
 
 const armarPromedio = (
-  filas: { clave: string; secaderos: string | number; rotas: string | number }[],
+  filas: {
+    clave: string;
+    secaderos: string | number;
+    m2: string | number | null;
+    ml: string | number | null;
+  }[],
 ): PromedioRotura[] =>
   filas.map((f) => {
     const secaderos = aNumero(f.secaderos);
-    const rotas = aNumero(f.rotas);
+    const rotas = medidaDe(f);
     return {
       clave: f.clave,
       secaderos,
       rotas,
-      // Promedio por secadero movido, no por placa: es la unidad con la que se
-      // trabaja en planta ("cuantas se rompen por secadero").
-      promedio: secaderos > 0 ? rotas / secaderos : 0,
+      // Promedio por secadero movido: es la unidad con la que se trabaja en
+      // planta ("cuanto se rompe por secadero").
+      promedio:
+        secaderos > 0 ? { m2: rotas.m2 / secaderos, ml: rotas.ml / secaderos } : { m2: 0, ml: 0 },
     };
   });
 
@@ -574,14 +622,17 @@ export async function roturasPorTipoSecadero(
     .select({
       clave: movimientos.secaderoTipoNombre,
       secaderos: sql<string>`count(distinct ${movimientos.id})`,
-      rotas: sql<string>`coalesce(sum(${movimientoLineas.desperdicio}), 0)`,
+      m2: sumaM2(movimientoLineas.desperdicio),
+      ml: sumaMl(movimientoLineas.desperdicio),
     })
     .from(movimientos)
     .leftJoin(movimientoLineas, eq(movimientoLineas.movimientoId, movimientos.id))
+    .leftJoin(productos, eq(productos.id, movimientoLineas.productoId))
+    .leftJoin(tipoProducto, eq(tipoProducto.id, productos.tipoId))
     .where(and(enRango(rango), eq(movimientos.tipo, "carga")))
     .groupBy(movimientos.secaderoTipoNombre);
 
-  return armarPromedio(filas).sort((a, b) => b.promedio - a.promedio);
+  return armarPromedio(filas).sort((a, b) => porMedida(a.promedio, b.promedio));
 }
 
 /** Roturas promedio por secadero movido, abiertas por etapa del proceso. */
@@ -590,14 +641,17 @@ export async function roturasPorEtapa(rango: Rango): Promise<PromedioRotura[]> {
     .select({
       clave: movimientos.tipo,
       secaderos: sql<string>`count(distinct ${movimientos.id})`,
-      rotas: sql<string>`coalesce(sum(${movimientoLineas.desperdicio}), 0)`,
+      m2: sumaM2(movimientoLineas.desperdicio),
+      ml: sumaMl(movimientoLineas.desperdicio),
     })
     .from(movimientos)
     .leftJoin(movimientoLineas, eq(movimientoLineas.movimientoId, movimientos.id))
+    .leftJoin(productos, eq(productos.id, movimientoLineas.productoId))
+    .leftJoin(tipoProducto, eq(tipoProducto.id, productos.tipoId))
     .where(enRango(rango))
     .groupBy(movimientos.tipo);
 
-  return armarPromedio(filas).sort((a, b) => b.promedio - a.promedio);
+  return armarPromedio(filas).sort((a, b) => porMedida(a.promedio, b.promedio));
 }
 
 /** Roturas promedio por secadero cargado, abiertas por producto. */
@@ -608,16 +662,19 @@ export async function roturasPorProducto(
     .select({
       clave: movimientoLineas.productoNombre,
       secaderos: sql<string>`count(distinct ${movimientos.id})`,
-      rotas: sql<string>`coalesce(sum(${movimientoLineas.desperdicio}), 0)`,
+      m2: sumaM2(movimientoLineas.desperdicio),
+      ml: sumaMl(movimientoLineas.desperdicio),
     })
     .from(movimientoLineas)
     .innerJoin(movimientos, eq(movimientos.id, movimientoLineas.movimientoId))
+    .leftJoin(productos, eq(productos.id, movimientoLineas.productoId))
+    .leftJoin(tipoProducto, eq(tipoProducto.id, productos.tipoId))
     .where(enRango(rango))
     .groupBy(movimientoLineas.productoNombre);
 
   return armarPromedio(filas)
-    .filter((f) => f.rotas > 0)
-    .sort((a, b) => b.promedio - a.promedio);
+    .filter((f) => f.rotas.m2 + f.rotas.ml > 0)
+    .sort((a, b) => porMedida(a.promedio, b.promedio));
 }
 
 /* -------------------------------------------------------------------------- */
@@ -908,6 +965,9 @@ export async function produccionDiaria(rango: Rango) {
         then ${enM2(movimientoLineas.cantidad)} else 0 end), 0)`,
       mlTerminadas: sql<string>`coalesce(sum(case when ${movimientos.tipo} = 'descarga'
         then ${enMl(movimientoLineas.cantidad)} else 0 end), 0)`,
+
+      m2Rotas: sumaM2(movimientoLineas.desperdicio),
+      mlRotas: sumaMl(movimientoLineas.desperdicio),
     })
     .from(movimientoLineas)
     .innerJoin(movimientos, eq(movimientos.id, movimientoLineas.movimientoId))
@@ -927,6 +987,8 @@ export async function produccionDiaria(rango: Rango) {
     rotas: aNumero(f.rotas),
     m2Terminadas: aNumero(f.m2Terminadas),
     mlTerminadas: aNumero(f.mlTerminadas),
+    m2Rotas: aNumero(f.m2Rotas),
+    mlRotas: aNumero(f.mlRotas),
   }));
 }
 
@@ -946,9 +1008,13 @@ export async function roturasCarruselPorProducto(rango: Rango) {
     .select({
       producto: roturasCarrusel.productoNombre,
       placas: sum(roturasCarrusel.cantidad),
+      m2: sumaM2(roturasCarrusel.cantidad),
+      ml: sumaMl(roturasCarrusel.cantidad),
       reportes: count(),
     })
     .from(roturasCarrusel)
+    .leftJoin(productos, eq(productos.id, roturasCarrusel.productoId))
+    .leftJoin(tipoProducto, eq(tipoProducto.id, productos.tipoId))
     .where(
       and(
         gte(roturasCarrusel.creadoEn, rango.desde),
@@ -961,6 +1027,7 @@ export async function roturasCarruselPorProducto(rango: Rango) {
   return filas.map((f) => ({
     producto: f.producto,
     placas: aNumero(f.placas),
+    ...medidaDe(f),
     reportes: Number(f.reportes),
   }));
 }
@@ -971,9 +1038,13 @@ export async function roturasCarruselPorMotivo(rango: Rango) {
     .select({
       motivo: roturasCarrusel.motivoNombre,
       placas: sum(roturasCarrusel.cantidad),
+      m2: sumaM2(roturasCarrusel.cantidad),
+      ml: sumaMl(roturasCarrusel.cantidad),
       reportes: count(),
     })
     .from(roturasCarrusel)
+    .leftJoin(productos, eq(productos.id, roturasCarrusel.productoId))
+    .leftJoin(tipoProducto, eq(tipoProducto.id, productos.tipoId))
     .where(
       and(
         gte(roturasCarrusel.creadoEn, rango.desde),
@@ -986,6 +1057,7 @@ export async function roturasCarruselPorMotivo(rango: Rango) {
   return filas.map((f) => ({
     motivo: f.motivo ?? "Sin motivo",
     placas: aNumero(f.placas),
+    ...medidaDe(f),
     reportes: Number(f.reportes),
   }));
 }

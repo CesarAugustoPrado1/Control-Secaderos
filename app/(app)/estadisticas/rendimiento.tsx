@@ -6,7 +6,16 @@ import {
   totales,
   type Rango,
 } from "@/lib/estadisticas";
-import { duracion, fechaHora, m2, medida, ml, numero, porcentaje } from "@/lib/formato";
+import {
+  duracion,
+  fechaHora,
+  m2,
+  medida,
+  ml,
+  numero,
+  porcentaje,
+  porcentajeRotura,
+} from "@/lib/formato";
 import { etiquetaDia } from "@/lib/rangos";
 import { GraficoColumnas, type PuntoColumna } from "@/components/graficos";
 import { Indicador, Panel, SinDatos, Tabla } from "./piezas";
@@ -40,9 +49,8 @@ export async function Rendimiento({ rango }: { rango: Rango }) {
         ? Math.round(d.m2Terminadas)
         : Math.round(d.m2Terminadas * 10) / 10,
     detalle: [
-      `${numero(d.terminadas)} placas`,
       ...(d.mlTerminadas > 0 ? [`${ml(d.mlTerminadas)} de guardas`] : []),
-      ...(d.rotas > 0 ? [`${numero(d.rotas)} rotas`] : []),
+      ...(d.rotas > 0 ? [`Roto: ${medida(d.m2Rotas, d.mlRotas)}`] : []),
     ],
   }));
   // El promedio es de los dias en que se termino algo: un feriado o un dia
@@ -66,21 +74,24 @@ export async function Rendimiento({ rango }: { rango: Rango }) {
     <div className="space-y-6">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <Indicador
-              rotulo="Placas cargadas"
-              valor={numero(tot.cargadas)}
-              detalle={medida(tot.m2.cargadas, tot.ml.cargadas)}
+              rotulo="Producido"
+              valor={medida(tot.m2.cargadas, tot.ml.cargadas)}
+              detalle="Lo que hizo el carrusel y el llenado manual"
               tono="neutro"
             />
             <Indicador
               rotulo="A producto terminado"
-              valor={numero(tot.terminadas)}
-              detalle={medida(tot.m2.terminadas, tot.ml.terminadas)}
+              valor={medida(tot.m2.terminadas, tot.ml.terminadas)}
+              detalle="Lo que se paletizó en el período"
               tono="bueno"
             />
             <Indicador
               rotulo="Desperdicio"
-              valor={numero(tot.rotas)}
-              detalle={`${medida(tot.m2.rotas, tot.ml.rotas)} · ${porcentaje(tot.rotas, tot.cargadas)} de lo cargado`}
+              valor={medida(tot.m2.rotas, tot.ml.rotas)}
+              detalle={porcentajeRotura(
+                { m2: tot.m2.rotas, ml: tot.ml.rotas },
+                { m2: tot.m2.cargadas, ml: tot.ml.cargadas },
+              )}
               tono="malo"
             />
             <Indicador
@@ -97,7 +108,7 @@ export async function Rendimiento({ rango }: { rango: Rango }) {
               titulo="Producción por día, en m²"
               detalle={`Lo terminado (paletizado) cada día${
                 diaria.length > dias.length ? `, los últimos ${dias.length} días con movimiento` : ""
-              }. Tocá una columna para ver las placas`}
+              }. Tocá una columna para ver el detalle`}
             >
               <GraficoColumnas datos={serie} unidad="m²" valoresEnTodas />
               {nDias > 0 && (
@@ -109,7 +120,7 @@ export async function Rendimiento({ rango }: { rango: Rango }) {
                   <strong className="text-slate-900">
                     Promedio diario: {medida(prom((d) => d.m2Terminadas), prom((d) => d.mlTerminadas))}
                   </strong>{" "}
-                  · {numero(Math.round(prom((d) => d.terminadas)))} placas · en {numero(nDias)}{" "}
+                  · en {numero(nDias)}{" "}
                   {nDias === 1 ? "día" : "días"} con producción
                 </p>
               )}
@@ -181,7 +192,7 @@ export async function Rendimiento({ rango }: { rango: Rango }) {
                         "Fecha",
                         "Secadero",
                         "Tipo",
-                        "Placas",
+                        "Llenado",
                         "Productos",
                         "Operario",
                       ]}
@@ -189,7 +200,7 @@ export async function Rendimiento({ rango }: { rango: Rango }) {
                         fechaHora(d.creadoEn),
                         String(d.secaderoNumero),
                         d.tipo,
-                        `${numero(d.placas)} / ${numero(d.capacidad)}`,
+                        porcentaje(d.placas, d.capacidad),
                         String(d.productos),
                         d.usuarioNombre,
                       ])}
@@ -215,21 +226,19 @@ export async function Rendimiento({ rango }: { rango: Rango }) {
               <SinDatos />
             ) : (
               <Tabla
-                encabezados={["Producto", "Cargadas", "Terminadas", "Medida terminada", "Rotas", "% rotura"]}
-                filas={porModelo.map((m) => [
-                  m.modelo,
-                  numero(m.cargadas),
-                  numero(m.terminadas),
-                  m.m2Terminados === null
-                    ? m.lineal
-                      ? "sin ml"
-                      : "sin m²"
-                    : m.lineal
-                      ? ml(m.m2Terminados)
-                      : m2(m.m2Terminados),
-                  numero(m.rotas),
-                  m.cargadas > 0 ? porcentaje(m.rotas, m.cargadas) : "—",
-                ])}
+                encabezados={["Producto", "Producido", "Terminado", "Roto", "% rotura"]}
+                filas={porModelo.map((m) => {
+                  // Cada producto en su unidad: m2, o metros lineales las guardas.
+                  const en = m.lineal ? ml : m2;
+                  if (m.sinMedida) return [m.modelo, "sin medida", "—", "—", "—"];
+                  return [
+                    m.modelo,
+                    en(m.cargado),
+                    en(m.terminado),
+                    en(m.roto),
+                    m.cargado > 0 ? porcentaje(m.roto, m.cargado) : "—",
+                  ];
+                })}
               />
             )}
           </Panel>

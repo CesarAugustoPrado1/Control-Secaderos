@@ -101,3 +101,37 @@ export function porcentaje(parte: number, total: number): string {
     maximumFractionDigits: 1,
   })}%`;
 }
+
+/**
+ * Que parte de `total` es `parte`, sin mezclar unidades: en m2 si la parte
+ * tiene m2, y en metros lineales si es solo de guardas.
+ */
+export function proporcion(
+  parte: { m2: number; ml: number },
+  total: { m2: number; ml: number },
+): number {
+  if (parte.m2 > 0 && total.m2 > 0) return parte.m2 / total.m2;
+  if (parte.ml > 0 && total.ml > 0) return parte.ml / total.ml;
+  return 0;
+}
+
+/** `proporcion` como porcentaje: "12,5%". */
+export const porcentajeMedida = (
+  parte: { m2: number; ml: number },
+  total: { m2: number; ml: number },
+) => porcentaje(proporcion(parte, total), 1);
+
+/**
+ * Porcentaje de rotura: el de las placas en m2 y, si hubo, aparte el de las
+ * guardas en metros lineales. "3,2% de lo producido · guardas 1,8%".
+ */
+export function porcentajeRotura(
+  rotas: { m2: number; ml: number },
+  cargado: { m2: number; ml: number },
+): string {
+  if (cargado.m2 <= 0) return `${porcentaje(rotas.ml, cargado.ml)} de lo producido`;
+  const placas = `${porcentaje(rotas.m2, cargado.m2)} de lo producido`;
+  return rotas.ml > 0 && cargado.ml > 0
+    ? `${placas} · guardas ${porcentaje(rotas.ml, cargado.ml)}`
+    : placas;
+}
