@@ -57,6 +57,20 @@ export const m2Numero = (n: number) =>
 
 export const m2 = (n: number) => `${m2Numero(n)} m²`;
 
+/** Metros lineales, con el mismo redondeo que los m2 (las guardas). */
+export const ml = (n: number) => `${m2Numero(n)} ml`;
+
+/**
+ * Una medida que puede tener las dos partes: m2 de las placas y metros
+ * lineales de las guardas. No se suman entre si: van una al lado de la otra.
+ */
+export function medida(m2Valor: number, mlValor: number): string {
+  const partes = [m2Valor > 0 ? m2(m2Valor) : null, mlValor > 0 ? ml(mlValor) : null].filter(
+    Boolean,
+  );
+  return partes.length ? partes.join(" + ") : m2(0);
+}
+
 /**
  * Como se nombra la capacidad de un tipo en los encabezados: "hasta 102 placas"
  * o, cuando no tiene tope fijo, "sin tope fijo". Vive aca para que las pantallas

@@ -59,6 +59,12 @@ const ALIAS: Record<string, string> = {
   metroscuadrados: "m2porplaca",
   metroscuadradosporplaca: "m2porplaca",
   superficie: "m2porplaca",
+  medida: "m2porplaca",
+  medidaporplaca: "m2porplaca",
+  metroslineales: "m2porplaca",
+  metroslinealesporplaca: "m2porplaca",
+  ml: "m2porplaca",
+  mlporplaca: "m2porplaca",
 
   activa: "activo",
   alta: "activo",

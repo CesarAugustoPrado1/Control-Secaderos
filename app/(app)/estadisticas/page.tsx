@@ -93,10 +93,10 @@ export default async function PaginaEstadisticas({
           mejor decirlo que mostrar un numero que parece completo y no lo es. */}
       {sinM2.length > 0 && (
         <p className="mb-6 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-900 ring-1 ring-amber-200">
-          <strong>Los m² están incompletos:</strong>{" "}
-          faltan los m² por placa de{" "}
-          {sinM2.map((p) => p.nombre).join(", ")}. Sus placas no suman en los
-          totales en m².{" "}
+          <strong>Las medidas están incompletas:</strong> falta la medida por
+          placa de{" "}
+          {sinM2.map((p) => `${p.nombre} (${p.lineal ? "ml" : "m²"})`).join(", ")}.
+          Sus placas no suman en los totales en m² y metros lineales.{" "}
           {sesion.rol === "admin" ? (
             <Link href="/admin/productos" className="font-bold underline underline-offset-2">
               Cargarlos en Productos

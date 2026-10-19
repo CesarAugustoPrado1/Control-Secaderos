@@ -21,7 +21,8 @@ import {
   FormularioAbm,
 } from "@/components/admin/comunes";
 
-type TipoOpcion = { id: number; nombre: string };
+/** `lineal`: tipo de guardas, que se miden en metros lineales y no en m2. */
+type TipoOpcion = { id: number; nombre: string; lineal: boolean };
 
 type Fila = {
   id: number;
@@ -30,6 +31,7 @@ type Fila = {
   tipoNombre: string;
   activo: boolean;
   m2PorPlaca: number | null;
+  lineal: boolean;
 };
 
 /** "2,88" con coma, como se escribe en la planta. */
@@ -74,7 +76,7 @@ export function ListaProductos({
         hrefExportar="/admin/productos/exportar"
         analizar={analizarProductos}
         importar={importarProductos}
-        columnas="Nombre, Tipo de secadero, Activo, m² por placa"
+        columnas="Nombre, Tipo de secadero, Activo, Medida por placa"
         ayuda={
           <>
             Los productos se identifican por <strong>nombre</strong>: los que ya
@@ -88,8 +90,9 @@ export function ListaProductos({
             como está en la pestaña Tipos — es en qué secadero entra el
             producto, o sea si es de placa grande o chica. La columna “Placas
             que entran” que trae la descarga es informativa y se ignora al
-            subir. En <strong>m² por placa</strong> va el área de una placa,
-            como 2,88: si la celda queda vacía, ese dato no se toca.
+            subir. En <strong>Medida por placa</strong> van los m² de una
+            placa, como 2,88, o los metros lineales si es una guarda, como 2,40:
+            si la celda queda vacía, ese dato no se toca.
           </>
         }
       />
@@ -128,11 +131,11 @@ export function ListaProductos({
                       <ChipTipo id={p.tipoId} nombre={p.tipoNombre} />
                       {p.m2PorPlaca !== null ? (
                         <span className="chip bg-slate-100 text-slate-700">
-                          {m2Texto(p.m2PorPlaca)} m²/placa
+                          {m2Texto(p.m2PorPlaca)} {p.lineal ? "ml" : "m²"}/placa
                         </span>
                       ) : (
                         <span className="chip bg-amber-100 text-amber-900">
-                          Falta m²/placa
+                          Falta {p.lineal ? "ml" : "m²"}/placa
                         </span>
                       )}
                       {!p.activo && (
@@ -180,9 +183,10 @@ export function ListaProductos({
         si el producto nunca se usó, por ejemplo si lo cargaste con un error;
         una vez que tiene movimientos, borrarlo dejaría el historial
         inconsistente. El tipo determina en qué secaderos se puede cargar cada
-        producto. Los <strong>m² por placa</strong> convierten las placas a
-        metros cuadrados en Estadísticas: por ejemplo 2,88 para una placa de
-        1,20 × 2,40.
+        producto. La <strong>medida por placa</strong> convierte las placas en
+        Estadísticas: en m² para las placas (por ejemplo 2,88 para una de
+        1,20 × 2,40) y en metros lineales para las guardas (por ejemplo 2,40),
+        que son los productos de tipos de llenado manual.
       </p>
     </>
   );
@@ -205,6 +209,8 @@ function FormularioProducto({
 
   // Se acepta coma o punto decimal; vacio es "todavia sin cargar".
   const m2Numero = m2.trim() === "" ? null : Number(m2.replace(",", "."));
+  // Las guardas se miden en metros lineales: el mismo campo, otra unidad.
+  const lineal = tipos.find((t) => t.id === tipoId)?.lineal ?? false;
 
   return (
     <FormularioAbm
@@ -244,17 +250,19 @@ function FormularioProducto({
           </select>
         </Campo>
 
-        <Campo etiqueta="m² por placa">
+        <Campo etiqueta={lineal ? "Metros lineales por placa" : "m² por placa"}>
           <input
             className="campo"
             value={m2}
             onChange={(e) => setM2(e.target.value.replace(/[^\d.,]/g, ""))}
             inputMode="decimal"
-            placeholder="ej: 2,88"
+            placeholder={lineal ? "ej: 2,40" : "ej: 2,88"}
             aria-describedby="ayuda-m2"
           />
           <span id="ayuda-m2" className="mt-1 block text-xs text-slate-500">
-            Ancho × largo de una placa, en metros.
+            {lineal
+              ? "Largo de una guarda, en metros."
+              : "Ancho × largo de una placa, en metros."}
           </span>
         </Campo>
       </div>

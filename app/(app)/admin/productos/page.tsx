@@ -13,7 +13,7 @@ export default async function PaginaAdminProductos() {
   return (
     <ListaProductos
       productos={productos}
-      tipos={tipos.map((t) => ({ id: t.id, nombre: t.nombre }))}
+      tipos={tipos.map((t) => ({ id: t.id, nombre: t.nombre, lineal: t.llenadoManual }))}
     />
   );
 }

@@ -6,7 +6,7 @@ import {
   totales,
   type Rango,
 } from "@/lib/estadisticas";
-import { duracion, fechaHora, m2, numero, porcentaje } from "@/lib/formato";
+import { duracion, fechaHora, m2, medida, ml, numero, porcentaje } from "@/lib/formato";
 import { GraficoDiario, Indicador, Panel, SinDatos, Tabla } from "./piezas";
 
 /**
@@ -38,19 +38,19 @@ export async function Rendimiento({ rango }: { rango: Rango }) {
             <Indicador
               rotulo="Placas cargadas"
               valor={numero(tot.cargadas)}
-              detalle={m2(tot.m2.cargadas)}
+              detalle={medida(tot.m2.cargadas, tot.ml.cargadas)}
               tono="neutro"
             />
             <Indicador
               rotulo="A producto terminado"
               valor={numero(tot.terminadas)}
-              detalle={m2(tot.m2.terminadas)}
+              detalle={medida(tot.m2.terminadas, tot.ml.terminadas)}
               tono="bueno"
             />
             <Indicador
               rotulo="Desperdicio"
               valor={numero(tot.rotas)}
-              detalle={`${m2(tot.m2.rotas)} · ${porcentaje(tot.rotas, tot.cargadas)} de lo cargado`}
+              detalle={`${medida(tot.m2.rotas, tot.ml.rotas)} · ${porcentaje(tot.rotas, tot.cargadas)} de lo cargado`}
               tono="malo"
             />
             <Indicador
@@ -167,12 +167,18 @@ export async function Rendimiento({ rango }: { rango: Rango }) {
               <SinDatos />
             ) : (
               <Tabla
-                encabezados={["Producto", "Cargadas", "Terminadas", "m² terminados", "Rotas", "% rotura"]}
+                encabezados={["Producto", "Cargadas", "Terminadas", "Medida terminada", "Rotas", "% rotura"]}
                 filas={porModelo.map((m) => [
                   m.modelo,
                   numero(m.cargadas),
                   numero(m.terminadas),
-                  m.m2Terminados === null ? "sin m²" : m2(m.m2Terminados),
+                  m.m2Terminados === null
+                    ? m.lineal
+                      ? "sin ml"
+                      : "sin m²"
+                    : m.lineal
+                      ? ml(m.m2Terminados)
+                      : m2(m.m2Terminados),
                   numero(m.rotas),
                   m.cargadas > 0 ? porcentaje(m.rotas, m.cargadas) : "—",
                 ])}
