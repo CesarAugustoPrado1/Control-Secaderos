@@ -33,7 +33,7 @@ export const dynamic = "force-dynamic";
 /** En el orden en que pasa el material por la fabrica. */
 const SECCIONES: { sector: Sector; titulo: string; detalle: string }[] = [
   { sector: "carrusel", titulo: "Carrusel · llenado", detalle: "Secaderos a cargar" },
-  { sector: "paletizado", titulo: "Paletizado · descarga", detalle: "Secaderos a descargar y palets" },
+  { sector: "paletizado", titulo: "Paletizado · descarga", detalle: "Palets a armar y secaderos a descargar" },
 ];
 
 /**
@@ -182,7 +182,7 @@ export default async function PaginaAdminPlan({
               sector={sector}
               meta={metas[sector]}
               sugerida={sugeridas[sector]}
-              programados={comparacion[sector].totalPedido}
+              programados={comparacion[sector].totalProgramado}
               hechos={hechos[sector]}
               esFuturo={esFuturo}
             />
@@ -276,7 +276,13 @@ function ResumenDia({
     meta: metas[sector],
     hechos: hechos[sector],
   }));
-  const nada = filas.every((f) => f.c.totalPedido === 0 && f.meta === null);
+  const paletsDe = (c: ComparacionPlan) => ({
+    pedidos: c.palets.estandar.pedidos + c.palets.optimizado.pedidos,
+    hechos: c.palets.estandar.hechos + c.palets.optimizado.hechos,
+  });
+  const nada = filas.every(
+    (f) => f.c.totalProgramado === 0 && paletsDe(f.c).pedidos === 0 && f.meta === null,
+  );
 
   return (
     <section className="tarjeta p-4">
@@ -313,7 +319,9 @@ function ResumenDia({
                 <p className="text-sm text-slate-600">
                   Programa{" "}
                   {esFuturo ? (
-                    <strong className="text-slate-900">{numero(f.c.totalPedido)} secaderos</strong>
+                    <strong className="text-slate-900">
+                      {numero(f.c.totalPedido)} secaderos
+                    </strong>
                   ) : (
                     <>
                       <strong className="text-slate-900">
@@ -324,7 +332,28 @@ function ResumenDia({
                   )}
                 </p>
               )}
-              {f.meta === null && f.c.totalPedido === 0 && (
+              {paletsDe(f.c).pedidos > 0 && (
+                <p className="text-sm text-slate-600">
+                  Palets{" "}
+                  {esFuturo ? (
+                    <strong className="text-slate-900">{numero(paletsDe(f.c).pedidos)} pedidos</strong>
+                  ) : (
+                    <>
+                      <strong className="text-slate-900">
+                        {porcentaje(paletsDe(f.c).hechos, paletsDe(f.c).pedidos)}
+                      </strong>{" "}
+                      · {numero(paletsDe(f.c).hechos)} de {numero(paletsDe(f.c).pedidos)}
+                    </>
+                  )}
+                </p>
+              )}
+              {f.c.sugeridos.pedidos > 0 && (
+                <p className="text-xs text-slate-500">
+                  Secaderos sugeridos para palets: {numero(f.c.sugeridos.pedidos)}
+                  {!esFuturo && ` · usados ${numero(f.c.sugeridos.hechos)}`}
+                </p>
+              )}
+              {f.meta === null && f.c.totalProgramado === 0 && paletsDe(f.c).pedidos === 0 && (
                 <p className="mt-1 text-sm text-slate-400">Sin plan ni meta</p>
               )}
             </div>
@@ -352,7 +381,9 @@ function ResumenSector({
   esFuturo: boolean;
   detalle: string;
 }) {
-  const programados = comparacion.totalPedido;
+  // Contra la meta va todo lo programado, pedido o sugerido: la meta sigue
+  // en secaderos aunque la orden de paletizado sea en palets.
+  const programados = comparacion.totalProgramado;
   const estado =
     meta === null
       ? null

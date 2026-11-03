@@ -120,12 +120,12 @@ export function EditorPlan({
   /** null = sin cambios de moldes ese dia. */
   const [moldes, setMoldes] = useState<Record<number, number> | null>(() =>
     datosMoldes?.pedido
-      ? Object.fromEntries(datosMoldes.pedido.map((l) => [l.productoId, l.cantidad]))
+      ? Object.fromEntries(
+          datosMoldes.pedido.map((l) => [l.productoId, l.cantidad]),
+        )
       : null,
   );
   const [aviso, setAviso] = useState<string | null>(null);
-  /** Filas abiertas para pedir palets sin secaderos. */
-  const [soloPalets, setSoloPalets] = useState<Set<number>>(new Set());
 
   const total = useMemo(
     () => Object.values(pedidos).reduce((a, p) => a + (p.secaderos || 0), 0),
@@ -140,6 +140,16 @@ export function EditorPlan({
     [pedidos],
   );
   const hayLineas = total > 0 || totalPalets > 0;
+  /** Secaderos de las lineas que piden palets: ahi son sugerencia. */
+  const totalSugeridos = useMemo(
+    () =>
+      Object.values(pedidos).reduce(
+        (a, p) =>
+          a + (p.paletsEstandar + p.paletsOptimizados > 0 ? p.secaderos : 0),
+        0,
+      ),
+    [pedidos],
+  );
 
   /** Lo hecho por producto, para mostrarlo al lado de lo pedido. */
   const hechoPorProducto = useMemo(() => {
@@ -191,7 +201,9 @@ export function EditorPlan({
         }),
       () => {
         setAviso(
-          !hayLineas && !moldes ? "Se borró el plan de ese día." : "Plan guardado.",
+          !hayLineas && !moldes
+            ? "Se borró el plan de ese día."
+            : "Plan guardado.",
         );
         router.refresh();
       },
@@ -202,15 +214,30 @@ export function EditorPlan({
     <section className={incrustado ? "" : "tarjeta p-4"}>
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
         {incrustado ? (
-          <h3 className="text-sm font-bold text-slate-700">Lo pedido por modelo</h3>
+          <h3 className="text-sm font-bold text-slate-700">
+            Lo pedido por modelo
+          </h3>
         ) : (
           <h2 className="text-base font-bold text-slate-900">
             {ETIQUETA_SECTOR[sector]} · {etiquetaDia(fecha)}
           </h2>
         )}
         <span className="text-sm font-bold tabular-nums text-slate-700">
-          {numero(total)} secaderos
-          {conDestino && totalPalets > 0 && ` · ${numero(totalPalets)} palets`}
+          {conDestino && totalPalets > 0 ? (
+            <>
+              {numero(totalPalets)} palets
+              {total - totalSugeridos > 0 &&
+                ` · ${numero(total - totalSugeridos)} secaderos a sueltas`}
+              {totalSugeridos > 0 && (
+                <span className="font-medium text-slate-500">
+                  {" "}
+                  · ~{numero(totalSugeridos)} sec. sugeridos
+                </span>
+              )}
+            </>
+          ) : (
+            `${numero(total)} secaderos`
+          )}
         </span>
       </div>
 
@@ -238,7 +265,8 @@ export function EditorPlan({
           const cantidad = pedido?.secaderos ?? 0;
           const hecho = hechoPorProducto.get(p.id) ?? 0;
           const activo = !!pedido && pedidoActivo(pedido);
-          const verInstruccion = conDestino && (activo || soloPalets.has(p.id));
+          const conPalets =
+            !!pedido && pedido.paletsEstandar + pedido.paletsOptimizados > 0;
           return (
             <div
               key={p.id}
@@ -259,55 +287,54 @@ export function EditorPlan({
                     </span>
                   )}
                 </span>
-                <button
-                  type="button"
-                  disabled={enviando || cantidad === 0}
-                  onClick={() => actualizar(p.id, { secaderos: cantidad - 1 })}
-                  className="h-11 w-11 shrink-0 rounded-lg bg-white text-xl font-bold text-slate-700 ring-1 ring-slate-300 disabled:opacity-30"
-                >
-                  −
-                </button>
-                <input
-                  type="number"
-                  inputMode="numeric"
-                  min={0}
-                  value={cantidad === 0 ? "" : cantidad}
-                  placeholder="0"
-                  disabled={enviando}
-                  onChange={(e) =>
-                    actualizar(p.id, { secaderos: Number(e.target.value) })
-                  }
-                  className="h-11 w-16 rounded-lg border-0 bg-white text-center text-base font-bold tabular-nums ring-1 ring-slate-300 focus:ring-2 focus:ring-slate-900"
-                  aria-label={`Secaderos de ${p.nombre}`}
-                />
-                <button
-                  type="button"
-                  disabled={enviando}
-                  onClick={() => actualizar(p.id, { secaderos: cantidad + 1 })}
-                  className="h-11 w-11 shrink-0 rounded-lg bg-white text-xl font-bold text-slate-700 ring-1 ring-slate-300"
-                >
-                  +
-                </button>
+                {!conDestino && (
+                  <>
+                    <button
+                      type="button"
+                      disabled={enviando || cantidad === 0}
+                      onClick={() =>
+                        actualizar(p.id, { secaderos: cantidad - 1 })
+                      }
+                      className="h-11 w-11 shrink-0 rounded-lg bg-white text-xl font-bold text-slate-700 ring-1 ring-slate-300 disabled:opacity-30"
+                    >
+                      −
+                    </button>
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      min={0}
+                      value={cantidad === 0 ? "" : cantidad}
+                      placeholder="0"
+                      disabled={enviando}
+                      onChange={(e) =>
+                        actualizar(p.id, { secaderos: Number(e.target.value) })
+                      }
+                      className="h-11 w-16 rounded-lg border-0 bg-white text-center text-base font-bold tabular-nums ring-1 ring-slate-300 focus:ring-2 focus:ring-slate-900"
+                      aria-label={`Secaderos de ${p.nombre}`}
+                    />
+                    <button
+                      type="button"
+                      disabled={enviando}
+                      onClick={() =>
+                        actualizar(p.id, { secaderos: cantidad + 1 })
+                      }
+                      className="h-11 w-11 shrink-0 rounded-lg bg-white text-xl font-bold text-slate-700 ring-1 ring-slate-300"
+                    >
+                      +
+                    </button>
+                  </>
+                )}
               </div>
 
-              {verInstruccion ? (
+              {conDestino && (
                 <Instruccion
                   producto={p.nombre}
                   pedido={pedido ?? PEDIDO_VACIO}
+                  activo={activo}
+                  conPalets={conPalets}
                   deshabilitado={enviando}
                   alCambiar={(cambios) => actualizar(p.id, cambios)}
                 />
-              ) : (
-                conDestino && (
-                  <button
-                    type="button"
-                    disabled={enviando}
-                    onClick={() => setSoloPalets((s) => new Set(s).add(p.id))}
-                    className="mt-1.5 text-xs font-semibold text-slate-500 underline"
-                  >
-                    Pedir palets sin bajar secaderos
-                  </button>
-                )
               )}
             </div>
           );
@@ -369,7 +396,7 @@ export function EditorPlan({
             ? "Guardar (deja el día sin plan)"
             : !hayLineas
               ? "Guardar moldes (sin secaderos)"
-              : total === 0
+              : totalPalets > 0
                 ? `Guardar plan de ${numero(totalPalets)} palets`
                 : `Guardar plan de ${numero(total)} secaderos`}
       </button>
@@ -378,26 +405,32 @@ export function EditorPlan({
 }
 
 /**
- * Que armar con ese modelo y para que cliente.
+ * Lo que se le pide a paletizado de ese modelo: palets primero, porque son la
+ * orden, y despues los secaderos.
  *
  * Se piden palets por cantidad y por tipo, porque es algo que paletizado
- * puede confirmar y se puede medir: "1 palet estandar" se cumple o no, "va a
- * palet estandar" no. Lo que sobra de armar los palets va a placas sueltas,
- * que es una regla fija del oficio.
+ * puede confirmar y se puede medir. Las placas por palet son fijas por modelo,
+ * pero lo que trae un secadero no: por eso, si hay palets, los secaderos son
+ * una sugerencia (borde punteado) y no se miden como cumplimiento. Sin palets,
+ * el mismo numero es la orden: secaderos a bajar a sueltas.
  */
 function Instruccion({
   producto,
   pedido,
+  activo,
+  conPalets,
   deshabilitado,
   alCambiar,
 }: {
   producto: string;
   pedido: Pedido;
+  activo: boolean;
+  conPalets: boolean;
   deshabilitado: boolean;
   alCambiar: (cambios: Partial<Pedido>) => void;
 }) {
   return (
-    <div className="mt-2.5 space-y-2 border-t border-blue-200 pt-2.5">
+    <div className="mt-2 space-y-2">
       <div className="grid gap-2 sm:grid-cols-2">
         <ContadorPalets
           etiqueta="Palets estándar"
@@ -413,11 +446,21 @@ function Instruccion({
         />
       </div>
 
-      <p className="text-xs text-slate-500">
-        {pedido.paletsEstandar + pedido.paletsOptimizados > 0
-          ? "Lo que sobre después de armar los palets va a placas sueltas."
-          : "Sin palets pedidos: todo va a placas sueltas."}
-      </p>
+      <ContadorPalets
+        etiqueta={conPalets ? "Secaderos (sugerencia)" : "Secaderos a bajar"}
+        punteado={conPalets}
+        valor={pedido.secaderos}
+        deshabilitado={deshabilitado}
+        alCambiar={(n) => alCambiar({ secaderos: n })}
+      />
+
+      {activo && (
+        <p className="text-xs text-slate-500">
+          {conPalets
+            ? "Se mide por palets. Lo que sobre después de armarlos va a placas sueltas."
+            : "Sin palets pedidos: todo va a placas sueltas."}
+        </p>
+      )}
 
       {/* Planes de antes de pedir palets por cantidad: se muestra para que no
           se pierda al editar, y se puede sacar. */}
@@ -438,15 +481,17 @@ function Instruccion({
         </p>
       )}
 
-      <input
-        className="campo py-2.5"
-        value={pedido.cliente}
-        maxLength={80}
-        disabled={deshabilitado}
-        onChange={(e) => alCambiar({ cliente: e.target.value })}
-        placeholder="Cliente para rotular (opcional)"
-        aria-label={`Cliente de ${producto}`}
-      />
+      {activo && (
+        <input
+          className="campo py-2.5"
+          value={pedido.cliente}
+          maxLength={80}
+          disabled={deshabilitado}
+          onChange={(e) => alCambiar({ cliente: e.target.value })}
+          placeholder="Cliente para rotular (opcional)"
+          aria-label={`Cliente de ${producto}`}
+        />
+      )}
     </div>
   );
 }
@@ -456,14 +501,23 @@ function ContadorPalets({
   valor,
   deshabilitado,
   alCambiar,
+  punteado = false,
 }: {
   etiqueta: string;
   valor: number;
   deshabilitado: boolean;
   alCambiar: (n: number) => void;
+  /** Para un valor que es sugerencia y no orden. */
+  punteado?: boolean;
 }) {
   return (
-    <div className="flex items-center gap-1.5 rounded-lg bg-white p-1.5 ring-1 ring-slate-200">
+    <div
+      className={`flex items-center gap-1.5 rounded-lg p-1.5 ${
+        punteado
+          ? "border border-dashed border-slate-300 bg-slate-50"
+          : "bg-white ring-1 ring-slate-200"
+      }`}
+    >
       <span className="min-w-0 flex-1 text-xs font-semibold text-slate-700">
         {etiqueta}
       </span>
@@ -591,7 +645,9 @@ function SeccionMoldes({
   const sinCambios =
     !pedido || (referencia !== null && mismosMoldes(referencia, pedido));
   const cambio =
-    pedido && referencia && !sinCambios ? diferenciaMoldes(referencia, pedido) : null;
+    pedido && referencia && !sinCambios
+      ? diferenciaMoldes(referencia, pedido)
+      : null;
 
   function poner(id: number, valor: number, tope: number) {
     const n = Math.min(tope, Math.max(0, Math.floor(valor) || 0));
@@ -611,7 +667,8 @@ function SeccionMoldes({
         {pedido && ` · ${numero(total)} / ${numero(lugares)}`}
       </span>
       <span className="mt-0.5 block truncate text-xs text-slate-500">
-        {listaMoldes(pedido ?? referencia ?? []) || "Todavía no se cargaron moldes montados"}
+        {listaMoldes(pedido ?? referencia ?? []) ||
+          "Todavía no se cargaron moldes montados"}
       </span>
     </>
   );
@@ -624,7 +681,9 @@ function SeccionMoldes({
             Sin cambios: siguen los mismos moldes que ayer.
           </p>
           {referencia && referencia.length > 0 && (
-            <p className="mt-1 text-xs text-slate-500">{listaMoldes(referencia)}</p>
+            <p className="mt-1 text-xs text-slate-500">
+              {listaMoldes(referencia)}
+            </p>
           )}
           <button
             type="button"
@@ -665,7 +724,9 @@ function SeccionMoldes({
                 <li
                   key={p.id}
                   className={`flex items-center gap-2 rounded-lg p-2 ring-1 ${
-                    n > 0 ? "bg-blue-50 ring-blue-200" : "bg-slate-50 ring-slate-200"
+                    n > 0
+                      ? "bg-blue-50 ring-blue-200"
+                      : "bg-slate-50 ring-slate-200"
                   }`}
                 >
                   <span className="min-w-0 flex-1">
@@ -692,7 +753,9 @@ function SeccionMoldes({
                     value={n === 0 ? "" : n}
                     placeholder="0"
                     disabled={deshabilitado || p.moldes === 0}
-                    onChange={(e) => poner(p.id, Number(e.target.value), p.moldes)}
+                    onChange={(e) =>
+                      poner(p.id, Number(e.target.value), p.moldes)
+                    }
                     className="h-10 w-14 rounded-lg border-0 bg-white text-center text-base font-bold tabular-nums ring-1 ring-slate-300 focus:ring-2 focus:ring-slate-900 disabled:opacity-40"
                     aria-label={`Moldes de ${p.nombre}`}
                   />
@@ -719,12 +782,14 @@ function SeccionMoldes({
             }`}
           >
             {numero(total)} / {numero(lugares)} moldes
-            {total < lugares && ` · quedarían ${numero(lugares - total)} lugares vacíos`}
+            {total < lugares &&
+              ` · quedarían ${numero(lugares - total)} lugares vacíos`}
             {total > lugares && ` · sobran ${numero(total - lugares)}`}
           </p>
           {inventario.every((p) => p.moldes === 0) && (
             <p className="mt-1 text-xs text-amber-800">
-              No hay inventario de moldes cargado. Cargalo en Administración → Moldes.
+              No hay inventario de moldes cargado. Cargalo en Administración →
+              Moldes.
             </p>
           )}
 

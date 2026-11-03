@@ -227,8 +227,10 @@ export function Semana({
       <p className="mt-3 text-xs text-slate-500">
         En los días que ya pasaron, cada cajita se llena hasta donde se cumplió
         lo pedido: verde completo, amarillo desde la mitad, rojo por debajo.
-        Paletizado va partido en dos: a la izquierda los secaderos y a la
-        derecha los palets, que se miden por separado.{" "}
+        Paletizado va partido en dos: a la izquierda los secaderos que se
+        pidieron bajar a sueltas y a la derecha los palets. Cuando un modelo
+        pide palets, se mide por palets y sus secaderos son sólo una
+        sugerencia.{" "}
         Tocá un día para verlo arriba y cargar o editar su orden. Un día sin plan no se mide
         como incumplimiento: queda marcado como sin plan. En Horno se cargan
         las indicaciones para cargar y descargar, que el hornero ve arriba de
@@ -306,11 +308,23 @@ function ResumenSemana({ cumplimiento }: { cumplimiento: Cumplimiento[] }) {
 
   const items = [
     { etiqueta: "Carrusel · secaderos", avance: sumar("carrusel", "secaderos") },
-    { etiqueta: "Paletizado · secaderos", avance: sumar("paletizado", "secaderos") },
+    { etiqueta: "Paletizado · secaderos a sueltas", avance: sumar("paletizado", "secaderos") },
     { etiqueta: "Paletizado · palets", avance: sumar("paletizado", "palets") },
   ].filter((i) => i.avance.pedidos > 0);
 
   if (items.length === 0) return null;
+
+  // Indicador, no cumplimiento: secaderos usados contra sugeridos en los
+  // modelos que se piden por palets.
+  const sugeridos = cumplimiento
+    .filter((c) => c.sector === "paletizado")
+    .reduce(
+      (a, c) => ({
+        pedidos: a.pedidos + c.sugeridos.pedidos,
+        hechos: a.hechos + c.sugeridos.hechos,
+      }),
+      { pedidos: 0, hechos: 0 },
+    );
 
   return (
     <div className="mt-4 grid gap-2 sm:grid-cols-3">
@@ -340,6 +354,11 @@ function ResumenSemana({ cumplimiento }: { cumplimiento: Cumplimiento[] }) {
       <p className="text-xs text-slate-500 sm:col-span-3">
         Cumplimiento de la semana, sumando sólo los días con plan que ya
         empezaron.
+        {sugeridos.pedidos > 0 &&
+          ` Para los palets se usaron ${sugeridos.hechos} secaderos de ${sugeridos.pedidos} sugeridos` +
+            (sugeridos.hechos > sugeridos.pedidos
+              ? ": más de lo calculado, puede ser placa rota."
+              : ".")}
       </p>
     </div>
   );

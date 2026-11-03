@@ -34,8 +34,18 @@ export type LineaPlan = {
   tipoNombre: string;
   /** null = el tipo no tiene tope fijo. */
   capacidad: number | null;
+  /**
+   * Los secaderos de la linea. Si la linea pide palets (`porPalets`) son solo
+   * una sugerencia: las placas por palet son fijas por modelo, pero lo que da
+   * un secadero no, asi que lo que se pide y se mide son los palets.
+   */
   pedidos: number;
   hechos: number;
+  /**
+   * La linea pide palets: mandan los palets y los secaderos son sugerencia.
+   * Sin palets (todo a sueltas) los secaderos siguen siendo la orden.
+   */
+  porPalets: boolean;
   placas: number;
   /**
    * Cuantas placas deberian salir de los secaderos pedidos. Es null cuando el
@@ -71,8 +81,20 @@ export type ComparacionPlan = {
     placas: number;
     palets: Record<TipoPalet, number>;
   }[];
+  /** Secaderos pedidos como orden: no cuenta las lineas que piden palets. */
   totalPedido: number;
   totalHecho: number;
+  /**
+   * Todos los secaderos programados, pedidos o sugeridos. Es lo que se compara
+   * contra la meta del sector, que sigue en secaderos.
+   */
+  totalProgramado: number;
+  /**
+   * En las lineas por palets: secaderos sugeridos contra usados. No es
+   * cumplimiento sino un indicador: si los palets llevan mas secaderos de lo
+   * calculado, suele ser placa rota.
+   */
+  sugeridos: Avance;
   /**
    * Palets de todo el dia, por tipo. Lo hecho suma sin tope: si se pidieron 7
    * y se armaron 9, es 9/7 y tiene que verse asi.
@@ -224,6 +246,9 @@ export async function compararPlan(
       porProducto.delete(l.productoId);
       return {
         ...l,
+        porPalets:
+          sector === "paletizado" &&
+          (paletsEstandar ?? 0) + (paletsOptimizados ?? 0) > 0,
         hechos: real?.hechos ?? 0,
         placas: real?.placas ?? 0,
         placasEsperadas: l.capacidad === null ? null : l.pedidos * l.capacidad,
@@ -252,6 +277,9 @@ export async function compararPlan(
       fueraDePlan.reduce((a, f) => a + f.palets[tipo], 0),
   });
 
+  const deOrden = lineas.filter((l) => !l.porPalets);
+  const sugeridas = lineas.filter((l) => l.porPalets);
+
   return {
     fecha,
     sector,
@@ -260,8 +288,13 @@ export async function compararPlan(
     nota: plan?.nota ?? null,
     lineas,
     fueraDePlan,
-    totalPedido: lineas.reduce((a, l) => a + l.pedidos, 0),
-    totalHecho: lineas.reduce((a, l) => a + Math.min(l.hechos, l.pedidos), 0),
+    totalPedido: deOrden.reduce((a, l) => a + l.pedidos, 0),
+    totalHecho: deOrden.reduce((a, l) => a + Math.min(l.hechos, l.pedidos), 0),
+    totalProgramado: lineas.reduce((a, l) => a + l.pedidos, 0),
+    sugeridos: {
+      pedidos: sugeridas.reduce((a, l) => a + l.pedidos, 0),
+      hechos: sugeridas.reduce((a, l) => a + l.hechos, 0),
+    },
     palets: { estandar: sumaPalets("estandar"), optimizado: sumaPalets("optimizado") },
   };
 }
@@ -416,15 +449,17 @@ export type Avance = { pedidos: number; hechos: number };
 
 /**
  * Cumplimiento de un dia y un sector, ya reducido a los numeros que se
- * dibujan: secaderos y palets por separado, porque se miden por separado.
- * Un paletizado puede descargar todos sus secaderos y no armar ningun palet,
- * y promediarlos esconderia justo eso.
+ * dibujan. En paletizado, las lineas que piden palets se miden por palets y
+ * las que no, por secaderos: `secaderos` cuenta solo estas ultimas.
+ * `sugeridos` va aparte y no es cumplimiento: usados contra sugeridos en las
+ * lineas por palets.
  */
 export type Cumplimiento = {
   fecha: string;
   sector: Sector;
   secaderos: Avance;
   palets: Avance;
+  sugeridos: Avance;
 };
 
 /**
@@ -456,5 +491,6 @@ export async function cumplimientoDeFechas(
       pedidos: c.palets.estandar.pedidos + c.palets.optimizado.pedidos,
       hechos: c.palets.estandar.hechos + c.palets.optimizado.hechos,
     },
+    sugeridos: c.sugeridos,
   }));
 }

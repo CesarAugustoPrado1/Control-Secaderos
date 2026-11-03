@@ -48,14 +48,28 @@ export async function informeDelDia(fecha: string): Promise<string | null> {
     "",
     "<b>Plan del día</b>",
     renglon("Carrusel · secaderos", car?.secaderos),
-    renglon("Paletizado · secaderos", pal?.secaderos),
     renglon("Paletizado · palets", pal?.palets),
+  ];
+  // Las lineas sin palets se siguen midiendo por secaderos. Si no hubo
+  // ninguna, no se agrega un "sin plan" que confunda.
+  if (pal && pal.secaderos.pedidos > 0) {
+    lineas.push(renglon("Paletizado · secaderos a sueltas", pal.secaderos));
+  }
+  // No es cumplimiento: los secaderos de un pedido de palets son sugerencia.
+  // Usar de mas suele ser placa rota, y vale la pena que se vea.
+  if (pal && pal.sugeridos.pedidos > 0) {
+    lineas.push(
+      `▫️ Secaderos para palets: ${pal.sugeridos.hechos} usados de ${pal.sugeridos.pedidos} sugeridos` +
+        (pal.sugeridos.hechos > pal.sugeridos.pedidos ? " (más de lo calculado)" : ""),
+    );
+  }
+  lineas.push(
     "",
     "<b>Producción</b>",
     `Carrusel: ${t.carrusel.secaderos} secaderos (${miles(t.carrusel.placas)} placas)`,
     `Horno: ${t.horno.secaderos} secaderos (${miles(t.horno.placas)} placas)`,
     `Paletizado: ${t.paletizado.secaderos} secaderos (${miles(t.paletizado.placas)} placas)`,
-  ];
+  );
   if (t.manual_carga.secaderos > 0 || t.manual_descarga.secaderos > 0) {
     lineas.push(
       `Llenado manual: ${t.manual_carga.secaderos} cargados, ${t.manual_descarga.secaderos} descargados`,
