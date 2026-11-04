@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { productosActivos, secaderoPorId } from "@/lib/consultas";
+import { montadoEn } from "@/lib/moldes";
 import { capacidadTexto } from "@/lib/formato";
 import { Aviso } from "@/components/ui";
 import { FormularioCarga } from "@/components/formulario-carga";
@@ -17,14 +18,26 @@ import { FormularioCarga } from "@/components/formulario-carga";
 export async function PantallaCargar({
   id,
   volverA,
+  conMoldes = false,
 }: {
   id: string;
   volverA: string;
+  /**
+   * Solo el carrusel: muestra primero los modelos del set de moldes montado.
+   * El llenado manual no usa los moldes del carrusel.
+   */
+  conMoldes?: boolean;
 }) {
   const secadero = await secaderoPorId(Number(id));
   if (!secadero) notFound();
 
-  const modelos = await productosActivos(secadero.tipoId);
+  const [modelos, montado] = await Promise.all([
+    productosActivos(secadero.tipoId),
+    conMoldes ? montadoEn() : null,
+  ]);
+  const delSet = montado?.set
+    .filter((l) => l.cantidad > 0)
+    .map((l) => l.productoId);
 
   return (
     <div className="mx-auto max-w-lg">
@@ -60,6 +73,7 @@ export async function PantallaCargar({
           secaderoNumero={secadero.numero}
           capacidad={secadero.capacidad}
           modelos={modelos.map((m) => ({ id: m.id, nombre: m.nombre }))}
+          delSet={delSet}
           volverA={volverA}
         />
       )}
