@@ -15,6 +15,7 @@ export function FormularioCarga({
   secaderoNumero,
   capacidad,
   modelos,
+  delSet,
   volverA,
   correccion,
 }: {
@@ -23,6 +24,13 @@ export function FormularioCarga({
   /** null = el tipo no tiene tope fijo: se carga a mano y sin controles. */
   capacidad: number | null;
   modelos: Producto[];
+  /**
+   * Solo carrusel: los productos del set de moldes montado. Van arriba, y el
+   * resto queda plegado en "Más modelos": casi siempre se carga lo que esta
+   * en los moldes, y a veces placas remanentes de dias anteriores. Sin set
+   * cargado (o si ninguno del set aplica a este tipo) se ven todos.
+   */
+  delSet?: number[];
   /**
    * La pantalla desde la que se entro. El mismo formulario lo usan el carrusel
    * y el llenado manual, y cada operario tiene que volver a la suya.
@@ -77,11 +85,37 @@ export function FormularioCarga({
   const restante = capacidad === null ? 0 : capacidad - total;
   const incompleta = capacidad !== null && total > 0 && total < capacidad;
 
-  const visibles = useMemo(() => {
+  /** "Más modelos" abierto. Arranca cerrado en cada carga. */
+  const [verOtros, setVerOtros] = useState(false);
+
+  const filtrados = useMemo(() => {
     const q = filtro.trim().toLowerCase();
     if (!q) return modelos;
     return modelos.filter((m) => m.nombre.toLowerCase().includes(q));
   }, [modelos, filtro]);
+
+  /**
+   * Los del set arriba y el resto aparte. Buscando se ve todo junto: si el
+   * operario escribe un nombre, es porque lo quiere encontrar.
+   */
+  const { principales, otros } = useMemo(() => {
+    const set = new Set(delSet ?? []);
+    const enSet = filtrados.filter((m) => set.has(m.id));
+    if (
+      filtro.trim() ||
+      enSet.length === 0 ||
+      enSet.length === filtrados.length
+    ) {
+      return { principales: filtrados, otros: [] as Producto[] };
+    }
+    return {
+      principales: enSet,
+      otros: filtrados.filter((m) => !set.has(m.id)),
+    };
+  }, [filtrados, delSet, filtro]);
+  // Un modelo de afuera que ya se eligio no se esconde.
+  const otrosAbiertos =
+    verOtros || otros.some((m) => (cantidades[m.id] ?? 0) > 0);
 
   /** En modo completo, tocar un producto le asigna toda la capacidad. */
   function elegirUnico(id: number) {
@@ -179,6 +213,85 @@ export function FormularioCarga({
     setConfirmando(false);
   }
 
+  /** Un producto de la lista: un toque en modo completo, cantidad a mano si no. */
+  const fila = (producto: Producto) => {
+    const cantidad = cantidades[producto.id] ?? 0;
+    const elegido = cantidad > 0;
+
+    if (completo) {
+      return (
+        <button
+          key={producto.id}
+          type="button"
+          onClick={() => elegirUnico(producto.id)}
+          disabled={enviando}
+          className={`flex w-full items-center gap-3 rounded-xl p-3.5 text-left ring-1 transition active:scale-[0.99] ${
+            elegido ? "bg-blue-50 ring-blue-300" : "bg-slate-50 ring-slate-200"
+          }`}
+        >
+          <span
+            className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ring-2 ${
+              elegido
+                ? "bg-slate-900 text-white ring-slate-900"
+                : "bg-white text-transparent ring-slate-300"
+            }`}
+            aria-hidden
+          >
+            ✓
+          </span>
+          <span className="min-w-0 flex-1 truncate text-base font-semibold text-slate-800">
+            {producto.nombre}
+          </span>
+          {/* En modo completo la cantidad ES la capacidad entera. */}
+          {elegido && (
+            <span className="shrink-0 text-sm font-bold tabular-nums text-blue-700">
+              {numero(cantidad)}
+            </span>
+          )}
+        </button>
+      );
+    }
+
+    return (
+      <div
+        key={producto.id}
+        className={`flex items-center gap-2 rounded-xl p-2.5 ring-1 transition ${
+          elegido ? "bg-blue-50 ring-blue-200" : "bg-slate-50 ring-slate-200"
+        }`}
+      >
+        <p className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-800">
+          {producto.nombre}
+        </p>
+
+        <input
+          type="number"
+          inputMode="numeric"
+          min={0}
+          value={cantidad === 0 ? "" : cantidad}
+          placeholder="0"
+          disabled={enviando}
+          onChange={(e) => setCantidad(producto.id, Number(e.target.value))}
+          className="h-11 w-20 rounded-lg border-0 bg-white text-center text-base font-bold tabular-nums ring-1 ring-slate-300 focus:ring-2 focus:ring-slate-900"
+          aria-label={`Cantidad de ${producto.nombre}`}
+        />
+
+        {/* Completa lo que falta para llenar el secadero. Sin tope no
+                    hay "lo que falta", asi que el boton ni aparece. */}
+        {capacidad !== null && (
+          <button
+            type="button"
+            disabled={enviando || restante <= 0}
+            onClick={() => setCantidad(producto.id, cantidad + restante)}
+            className="h-11 shrink-0 rounded-lg bg-white px-3 text-xs font-bold text-slate-600 ring-1 ring-slate-300 transition active:scale-95 disabled:opacity-30"
+            title="Completar la capacidad del secadero con este producto"
+          >
+            +{restante > 0 ? restante : 0}
+          </button>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-4">
       <div className="tarjeta p-4">
@@ -260,91 +373,37 @@ export function FormularioCarga({
         )}
 
         <div className="space-y-2">
-          {visibles.map((producto) => {
-            const cantidad = cantidades[producto.id] ?? 0;
-            const elegido = cantidad > 0;
-
-            if (completo) {
-              return (
-                <button
-                  key={producto.id}
-                  type="button"
-                  onClick={() => elegirUnico(producto.id)}
-                  disabled={enviando}
-                  className={`flex w-full items-center gap-3 rounded-xl p-3.5 text-left ring-1 transition active:scale-[0.99] ${
-                    elegido
-                      ? "bg-blue-50 ring-blue-300"
-                      : "bg-slate-50 ring-slate-200"
-                  }`}
-                >
-                  <span
-                    className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ring-2 ${
-                      elegido
-                        ? "bg-slate-900 text-white ring-slate-900"
-                        : "bg-white text-transparent ring-slate-300"
-                    }`}
-                    aria-hidden
-                  >
-                    ✓
-                  </span>
-                  <span className="min-w-0 flex-1 truncate text-base font-semibold text-slate-800">
-                    {producto.nombre}
-                  </span>
-                  {/* En modo completo la cantidad ES la capacidad entera. */}
-                  {elegido && (
-                    <span className="shrink-0 text-sm font-bold tabular-nums text-blue-700">
-                      {numero(cantidad)}
-                    </span>
-                  )}
-                </button>
-              );
-            }
-
-            return (
-              <div
-                key={producto.id}
-                className={`flex items-center gap-2 rounded-xl p-2.5 ring-1 transition ${
-                  elegido ? "bg-blue-50 ring-blue-200" : "bg-slate-50 ring-slate-200"
-                }`}
-              >
-                <p className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-800">
-                  {producto.nombre}
-                </p>
-
-                <input
-                  type="number"
-                  inputMode="numeric"
-                  min={0}
-                  value={cantidad === 0 ? "" : cantidad}
-                  placeholder="0"
-                  disabled={enviando}
-                  onChange={(e) => setCantidad(producto.id, Number(e.target.value))}
-                  className="h-11 w-20 rounded-lg border-0 bg-white text-center text-base font-bold tabular-nums ring-1 ring-slate-300 focus:ring-2 focus:ring-slate-900"
-                  aria-label={`Cantidad de ${producto.nombre}`}
-                />
-
-                {/* Completa lo que falta para llenar el secadero. Sin tope no
-                    hay "lo que falta", asi que el boton ni aparece. */}
-                {capacidad !== null && (
-                  <button
-                    type="button"
-                    disabled={enviando || restante <= 0}
-                    onClick={() => setCantidad(producto.id, cantidad + restante)}
-                    className="h-11 shrink-0 rounded-lg bg-white px-3 text-xs font-bold text-slate-600 ring-1 ring-slate-300 transition active:scale-95 disabled:opacity-30"
-                    title="Completar la capacidad del secadero con este producto"
-                  >
-                    +{restante > 0 ? restante : 0}
-                  </button>
-                )}
-              </div>
-            );
-          })}
-          {visibles.length === 0 && (
+          {principales.map(fila)}
+          {filtrados.length === 0 && (
             <p className="py-4 text-center text-sm text-slate-400">
               Ningún producto coincide con “{filtro}”.
             </p>
           )}
         </div>
+
+        {otros.length > 0 && (
+          <div className="mt-3">
+            <button
+              type="button"
+              onClick={() => setVerOtros((v) => !v)}
+              aria-expanded={otrosAbiertos}
+              className="flex w-full items-center justify-between gap-2 rounded-xl bg-white px-3 py-3 text-left text-sm font-semibold text-slate-700 ring-1 ring-slate-300"
+            >
+              <span>
+                {otrosAbiertos ? "Ocultar otros modelos" : "Más modelos"}
+                <span className="block text-xs font-normal text-slate-500">
+                  {otros.length} que no están en los moldes del carrusel
+                </span>
+              </span>
+              <span aria-hidden className="text-slate-400">
+                {otrosAbiertos ? "▲" : "▼"}
+              </span>
+            </button>
+            {otrosAbiertos && (
+              <div className="mt-2 space-y-2">{otros.map(fila)}</div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Las roturas del carrusel no se cargan aca. El secadero siempre sale
@@ -471,7 +530,8 @@ function Confirmacion({
       <p className="text-center text-sm text-slate-600">
         en el secadero{" "}
         <strong className="text-base text-slate-900">{secaderoNumero}</strong>.
-        Queda incompleto. <strong className="text-slate-900">¿Es correcto?</strong>
+        Queda incompleto.{" "}
+        <strong className="text-slate-900">¿Es correcto?</strong>
       </p>
       <div className="flex gap-2">
         <button

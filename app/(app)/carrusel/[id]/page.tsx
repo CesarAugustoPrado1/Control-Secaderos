@@ -8,5 +8,5 @@ export default async function PaginaCargar({
 }) {
   await requerirRol("carrusel", "admin");
   const { id } = await params;
-  return <PantallaCargar id={id} volverA="/carrusel" />;
+  return <PantallaCargar id={id} volverA="/carrusel" conMoldes />;
 }
