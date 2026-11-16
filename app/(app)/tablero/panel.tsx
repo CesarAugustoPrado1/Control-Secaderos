@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import type { SecaderoVista } from "@/lib/consultas";
 import type { Estado } from "@/lib/db/schema";
 import {
@@ -161,10 +161,18 @@ export function PanelTablero({
   }, [secaderos, vista, estado, grupo, busqueda]);
 
   const hayFiltro = estado !== null || grupo !== null || busqueda.trim() !== "";
+  /**
+   * Con un modelo o tipo tocado (y sin buscar un numero), la lista va debajo
+   * de esa fila. Si se busca un numero, vuelve abajo, junto al buscador.
+   */
+  const enLinea =
+    vista !== "estado" && grupo !== null && busqueda.trim() === "";
 
   const grupos = vista === "tipo" ? porTipo : porModelo;
   const nombreGrupo =
-    grupo === null ? null : (grupos.find((g) => g.id === grupo)?.nombre ?? null);
+    grupo === null
+      ? null
+      : (grupos.find((g) => g.id === grupo)?.nombre ?? null);
 
   function cambiarVista(v: Vista) {
     setVista(v);
@@ -246,14 +254,45 @@ export function PanelTablero({
       ) : (
         <div className="space-y-2.5">
           {grupos.map((g) => (
-            <FilaGrupo
-              key={g.id}
-              grupo={g}
-              vista={vista}
-              seleccionado={grupo === g.id}
-              estadoSeleccionado={grupo === g.id ? estado : null}
-              alTocar={(e) => alternar(g.id, e)}
-            />
+            <Fragment key={g.id}>
+              <FilaGrupo
+                grupo={g}
+                vista={vista}
+                seleccionado={grupo === g.id}
+                estadoSeleccionado={grupo === g.id ? estado : null}
+                alTocar={(e) => alternar(g.id, e)}
+              />
+              {/* La lista se abre pegada al modelo tocado, no al pie. */}
+              {enLinea && grupo === g.id && (
+                <section className="tarjeta p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="min-w-0 truncate text-sm font-semibold text-slate-700">
+                      {[g.nombre, estado ? TITULO_ESTADO[estado] : null]
+                        .filter(Boolean)
+                        .join(" · ")}{" "}
+                      · {lista.length}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEstado(null);
+                        setGrupo(null);
+                      }}
+                      className="shrink-0 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-600 ring-1 ring-slate-300"
+                    >
+                      Cerrar
+                    </button>
+                  </div>
+                  {lista.length === 0 ? (
+                    <p className="py-4 text-center text-sm text-slate-400">
+                      No hay secaderos.
+                    </p>
+                  ) : (
+                    <ListaSecaderos lista={lista} estado={estado} />
+                  )}
+                </section>
+              )}
+            </Fragment>
           ))}
 
           {grupos.length === 0 && (
@@ -294,7 +333,7 @@ export function PanelTablero({
           className="campo py-3 tabular-nums"
         />
 
-        {(estado || grupo !== null) && (
+        {(estado || grupo !== null) && !enLinea && (
           <div className="mt-3 flex items-center justify-between gap-2">
             <p className="min-w-0 truncate text-sm font-semibold text-slate-700">
               {[nombreGrupo, estado ? TITULO_ESTADO[estado] : null]
@@ -315,7 +354,7 @@ export function PanelTablero({
           </div>
         )}
 
-        {!hayFiltro ? (
+        {enLinea ? null : !hayFiltro ? (
           <p className="py-8 text-center text-sm text-slate-400">
             Tocá un contador de arriba para ver qué secaderos lo componen, o
             escribí un número.
@@ -325,60 +364,7 @@ export function PanelTablero({
             Ningún secadero coincide con la búsqueda.
           </p>
         ) : (
-          <>
-            <ul className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              {lista.slice(0, 90).map((s) => (
-                <li
-                  key={s.id}
-                  className={`rounded-xl p-3 ring-1 ${COLOR_ESTADO[s.estado].fondo} ${COLOR_ESTADO[s.estado].borde}`}
-                >
-                  <div className="flex items-start gap-2.5">
-                    <span
-                      className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-base font-bold tabular-nums ${COLOR_ESTADO[s.estado].chip}`}
-                    >
-                      {s.numero}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      {/* Numero y modelo al mismo tamano; los chips, las
-                          placas y el tiempo son contexto. Un vacio no tiene
-                          modelo, asi que ahi el renglon grande dice eso. */}
-                      <Modelos
-                        nombres={s.contenido.map((c) => c.nombre)}
-                        vacio={s.estado === "vacio" ? "Vacío" : "Sin placas"}
-                      />
-                      <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                        {!estado && <ChipEstado estado={s.estado} />}
-                        <ChipTipo id={s.tipoId} nombre={s.tipoNombre} />
-                      </div>
-                      <p className="mt-1 text-xs text-slate-600">
-                        {s.total > 0
-                          ? `${numero(s.total)} placas`
-                          : "sin placas"}{" "}
-                        · hace {duracion(minutosDesde(s.estadoDesde))}
-                        {/* El desglose solo cuando hay mezcla: con un modelo
-                            solo repetiria el nombre de arriba. */}
-                        {s.contenido.length > 1 &&
-                          ` · ${s.contenido
-                            .map((c) => `${c.nombre} ${numero(c.cantidad)}`)
-                            .join(", ")}`}
-                      </p>
-                      <MarcasSecadero
-                        total={s.total}
-                        capacidad={s.capacidad}
-                        productos={s.contenido.length}
-                      />
-                    </div>
-                  </div>
-                </li>
-              ))}
-            </ul>
-            {lista.length > 90 && (
-              <p className="mt-3 text-center text-xs text-slate-400">
-                Mostrando los primeros 90 de {lista.length}. Afiná con el buscador
-                para ver el resto.
-              </p>
-            )}
-          </>
+          <ListaSecaderos lista={lista} estado={estado} />
         )}
       </section>
     </div>
@@ -479,5 +465,73 @@ function FilaGrupo({
         })}
       </div>
     </div>
+  );
+}
+
+/**
+ * Los secaderos que coinciden con el filtro. Se usa abajo, con el buscador, y
+ * tambien justo debajo del modelo o tipo tocado, para no tener que bajar
+ * hasta el final de la pagina a buscarla.
+ */
+function ListaSecaderos({
+  lista,
+  estado,
+}: {
+  lista: SecaderoVista[];
+  estado: Estado | null;
+}) {
+  return (
+    <>
+      <ul className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        {lista.slice(0, 90).map((s) => (
+          <li
+            key={s.id}
+            className={`rounded-xl p-3 ring-1 ${COLOR_ESTADO[s.estado].fondo} ${COLOR_ESTADO[s.estado].borde}`}
+          >
+            <div className="flex items-start gap-2.5">
+              <span
+                className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-base font-bold tabular-nums ${COLOR_ESTADO[s.estado].chip}`}
+              >
+                {s.numero}
+              </span>
+              <div className="min-w-0 flex-1">
+                {/* Numero y modelo al mismo tamano; los chips, las
+                    placas y el tiempo son contexto. Un vacio no tiene
+                    modelo, asi que ahi el renglon grande dice eso. */}
+                <Modelos
+                  nombres={s.contenido.map((c) => c.nombre)}
+                  vacio={s.estado === "vacio" ? "Vacío" : "Sin placas"}
+                />
+                <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                  {!estado && <ChipEstado estado={s.estado} />}
+                  <ChipTipo id={s.tipoId} nombre={s.tipoNombre} />
+                </div>
+                <p className="mt-1 text-xs text-slate-600">
+                  {s.total > 0 ? `${numero(s.total)} placas` : "sin placas"} ·
+                  hace {duracion(minutosDesde(s.estadoDesde))}
+                  {/* El desglose solo cuando hay mezcla: con un modelo
+                      solo repetiria el nombre de arriba. */}
+                  {s.contenido.length > 1 &&
+                    ` · ${s.contenido
+                      .map((c) => `${c.nombre} ${numero(c.cantidad)}`)
+                      .join(", ")}`}
+                </p>
+                <MarcasSecadero
+                  total={s.total}
+                  capacidad={s.capacidad}
+                  productos={s.contenido.length}
+                />
+              </div>
+            </div>
+          </li>
+        ))}
+      </ul>
+      {lista.length > 90 && (
+        <p className="mt-3 text-center text-xs text-slate-400">
+          Mostrando los primeros 90 de {lista.length}. Afiná con el buscador
+          para ver el resto.
+        </p>
+      )}
+    </>
   );
 }
